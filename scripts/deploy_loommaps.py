@@ -137,7 +137,7 @@ def main() -> int:
         "mkdir -p /var/www/loomweaver/scripts",
         "cp /tmp/render_3d_asset_thumbnails.py /var/www/loomweaver/scripts/render_3d_asset_thumbnails.py",
         "chmod +x /var/www/loomweaver/scripts/render_3d_asset_thumbnails.py",
-        "if [ -f /tmp/frontend_maps_deploy.tar.gz ]; then rm -rf /var/www/loomweaver/client/* && tar -xzf /tmp/frontend_maps_deploy.tar.gz -C /var/www/loomweaver/client; fi",
+        "if [ -f /tmp/frontend_maps_deploy.tar.gz ]; then rm -rf /var/www/loomweaver/client/* && tar -xzf /tmp/frontend_maps_deploy.tar.gz -C /var/www/loomweaver/client && ln -sfn /var/www/loomweaver/assets /var/www/loomweaver/client/assets; fi",
         "systemctl stop loom-weaver.service || true",
         "mkdir -p /var/www/loomweaver/server",
         "tar -xzf /tmp/backend_maps_deploy.tar.gz -C /var/www/loomweaver/server",

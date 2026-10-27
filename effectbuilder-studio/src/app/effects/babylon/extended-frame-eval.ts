@@ -1,4 +1,11 @@
-import { EffectLayer } from '../effect-definition';
+import {
+  EffectLayer,
+  parseSkyBeam,
+  parseSkyLightning,
+  parseSkyProjectile,
+  ProjectileCoreShape,
+  ProjectileElement,
+} from '../effect-definition';
 import { MaterialFrame } from '../arcane-motion';
 import { FxPoint, seeded } from '../fireball-motion';
 import { NativeField, NativeLayerFrame, NativePoint } from './native-frame';
@@ -69,6 +76,406 @@ export function evaluateExtendedLayer(
     });
 
   switch (l.kind) {
+    case 'sky_projectile': {
+      const sp = parseSkyProjectile(l.skyProjectile, l.variant, l.color);
+      const baseTarget =
+        l.anchor === 'caster'
+          ? offset(from)
+          : l.anchor === 'path'
+            ? offset({ x: (from.x + to.x) * 0.5, y: (from.y + to.y) * 0.5 })
+            : offset(to);
+      const hitX = baseTarget.x + sp.hitOffsetX * scale;
+      const hitY = baseTarget.y + sp.hitOffsetZ * scale;
+      const hitH = (sp.hitHeight + v * 1.2) * scale;
+      const skyX = hitX + (sp.skySlantX + (v - 2) * 7) * 1.8 * scale;
+      const skyY = hitY + (sp.skySlantZ + (v % 2 ? 5 : -5)) * 1.8 * scale;
+      const skyH = (sp.skyHeight * 2.2 + v * 12) * scale;
+      const dx = hitX - skyX;
+      const dy = hitY - skyY;
+      const skyAngle = Math.atan2(dy, dx);
+      const elemForVariant: ProjectileElement =
+        l.skyProjectile?.element && v === 0
+          ? sp.element
+          : v === 2
+            ? 'ice'
+            : v === 3
+              ? 'radiant'
+              : v === 4
+                ? 'shadow'
+                : sp.element;
+      const shapeForVariant: ProjectileCoreShape =
+        l.skyProjectile?.shape && v === 0
+          ? sp.shape
+          : v === 1
+            ? 'comet'
+            : v === 2
+              ? 'sphere'
+              : v === 3
+                ? 'star'
+                : v === 4
+                  ? 'prism'
+                  : sp.shape;
+
+      const sampleSky = (u: number): NativePoint => {
+        const uClamped = Math.max(0, Math.min(1, u));
+        const env = Math.sin(uClamped * Math.PI);
+        const curveLat = env * (sp.arc * 0.65 + (v - 2) * 4) * scale;
+        const turb =
+          Math.sin(uClamped * 9 + f.clock * 5 + v) * l.motion.turbulence * 0.28 * scale * env;
+        const lat = curveLat + turb;
+        const x = skyX + dx * uClamped - Math.sin(skyAngle) * lat;
+        const y = skyY + dy * uClamped + Math.cos(skyAngle) * lat;
+        const height =
+          skyH + (hitH - skyH) * (uClamped * (0.82 + 0.18 * uClamped)) + env * Math.abs(sp.arc) * 0.25 * scale;
+        return pt({ x, y }, Math.max(2 * scale, height));
+      };
+
+      const t = Math.max(0, Math.min(1, (p * Math.max(0.25, l.motion.speed) * 1.15) / (1 + l.motion.drag * p)));
+      const head = sampleSky(t);
+      const prev = sampleSky(Math.max(0, t - 0.045));
+
+      // Sky origin portal / cloud glow
+      field(
+        { x: skyX, y: skyY },
+        size * (2.6 + v * 0.2),
+        size * (2.6 + v * 0.2),
+        elemForVariant === 'fire' ? 'fire' : 'arcane',
+        4,
+        skyH,
+        f.clock * 1.5,
+        Math.min(1, p * 2)
+      );
+
+      // Projectile head volumetric glow
+      field(
+        { x: head.x, y: head.y },
+        size * 4.6 * sp.coronaSize,
+        size * 4.6 * sp.coronaSize,
+        elemForVariant === 'fire' ? 'fire' : 'arcane',
+        elemForVariant === 'fire' ? 1 : 2,
+        head.height,
+        skyAngle,
+        t
+      );
+
+      out.projectiles.push({
+        head,
+        prev,
+        radius: Math.max(9 * scale, size * (0.85 + v * 0.06)),
+        element: elemForVariant,
+        shape: shapeForVariant,
+        coreScale: sp.coreScale,
+        coronaSize: sp.coronaSize,
+        spinSpeed: sp.spinSpeed + v * 0.2,
+        orbitCount: sp.orbitCount,
+        clock: f.clock + v * 0.3,
+        progress: t,
+        color: l.color,
+        secondaryColor: l.secondaryColor,
+      });
+
+      const wakeLen = (0.14 + l.motion.trail * 0.26) * sp.wakeLength;
+      const coils = Math.max(1, Math.min(5, sp.wakeRibbons));
+      for (let c = 0; c < coils; c++) {
+        const coilPhase = (c * TAU) / coils + v * 0.5;
+        const pts = Array.from({ length: 26 }, (_, j) => {
+          const frac = j / 25;
+          const u = Math.max(0, t - (1 - frac) * wakeLen);
+          const centerPt = sampleSky(u);
+          if (c === 0) return centerPt;
+          const helixR = (1 - frac) * Math.max(3 * scale, size * (0.34 + v * 0.04));
+          const theta = frac * (10 + v) + f.clock * sp.spinSpeed * 4 + coilPhase;
+          return {
+            x: centerPt.x - Math.sin(skyAngle) * Math.cos(theta) * helixR,
+            y: centerPt.y + Math.cos(skyAngle) * Math.cos(theta) * helixR,
+            height: centerPt.height + Math.sin(theta) * helixR,
+          };
+        });
+        ribbon(pts, size * (c === 0 ? 0.78 : 0.38), c % 2 === 0 ? l.color : l.secondaryColor, true);
+      }
+
+      const pCount = Math.max(10, Math.min(48, l.count));
+      for (let k = 0; k < pCount; k++) {
+        const seedA = seeded(k + v * 31, l.motion.seed);
+        const seedB = seeded(k + 173 + v * 19, l.motion.seed);
+        const age = ((f.clock * 2.1 + seedA) % 1) * Math.min(1, t * 2);
+        const trailPt = sampleSky(Math.max(0, t - age * wakeLen * 1.15));
+        const theta = seedA * TAU + f.clock * 3;
+        const spreadR = (0.2 + age * (0.9 + seedB * 0.8)) * Math.max(3 * scale, size * 0.45);
+        particle(
+          {
+            x: trailPt.x + Math.cos(theta) * spreadR,
+            y: trailPt.y + Math.sin(theta) * spreadR,
+          },
+          (1.6 + seedB * 2.6 + v * 0.2) * scale * sp.coreScale,
+          (1 - age) ** 1.5 * 0.85,
+          elemForVariant === 'ice' ? 5 : 2,
+          trailPt.height + Math.sin(theta * 2) * spreadR * 0.5,
+          skyAngle,
+          1.8,
+          k % 2 === 0 ? l.secondaryColor : l.color
+        );
+      }
+
+      if (t >= 0.72) {
+        const impProg = (t - 0.72) / 0.28;
+        field(
+          { x: hitX, y: hitY },
+          size * (3.5 + impProg * 4.5),
+          size * (3.5 + impProg * 4.5),
+          elemForVariant === 'fire' ? 'fire' : 'arcane',
+          2,
+          hitH,
+          f.clock * 2,
+          impProg
+        );
+      }
+      return true;
+    }
+
+    case 'sky_beam': {
+      const sb = parseSkyBeam(l.skyBeam);
+      const baseTarget =
+        l.anchor === 'caster'
+          ? offset(from)
+          : l.anchor === 'path'
+            ? offset({ x: (from.x + to.x) * 0.5, y: (from.y + to.y) * 0.5 })
+            : offset(to);
+      const hitX = baseTarget.x + sb.hitOffsetX * scale;
+      const hitY = baseTarget.y + sb.hitOffsetZ * scale;
+      const hitH = sb.hitHeight * scale;
+      const skyX = hitX + (sb.skySlantX + (v - 2) * 3.5) * 1.8 * scale;
+      const skyY = hitY + sb.skySlantZ * 1.8 * scale;
+      const skyH = (sb.skyHeight * 2.2 + v * 10) * scale;
+      const descent = Math.min(1, p * 3.4 * Math.max(0.25, l.motion.speed));
+      const steps = 42;
+      const beamPts: NativePoint[] = [];
+      const waveAmp = (sb.waveAmp + l.motion.turbulence * 0.25 + (v === 1 ? 3 : 0)) * scale;
+      const waveFreq = sb.waveFreq + v;
+
+      for (let i = 0; i <= steps; i++) {
+        const u = (i / steps) * descent;
+        const env = Math.sin((i / steps) * Math.PI);
+        const wX = waveAmp > 0 ? Math.sin(u * waveFreq * TAU - f.clock * 10) * waveAmp * env : 0;
+        const wY = waveAmp > 0 ? Math.cos(u * waveFreq * TAU - f.clock * 10) * waveAmp * 0.6 * env : 0;
+        beamPts.push(
+          pt(
+            {
+              x: skyX + (hitX - skyX) * u + wX,
+              y: skyY + (hitY - skyY) * u + wY,
+            },
+            skyH + (hitH - skyH) * u
+          )
+        );
+      }
+
+      const haloW = Math.max(2 * scale, sb.haloWidth * scale * (0.9 + v * 0.08));
+      const coreW = Math.max(1.2 * scale, sb.coreWidth * scale * (0.9 + v * 0.05));
+      ribbon(beamPts, haloW, l.color, sb.taper !== 0);
+      ribbon(beamPts, coreW, l.secondaryColor, sb.taper > 0.2);
+
+      // Sky aperture halo ring at the top of the beam
+      if (sb.skyAperture > 0) {
+        const apR = sb.skyAperture * scale * (0.85 + v * 0.08);
+        const apPts = Array.from({ length: 37 }, (_, i) => {
+          const a = (i / 36) * TAU + f.clock * 1.2;
+          return pt({ x: skyX + Math.cos(a) * apR, y: skyY + Math.sin(a) * apR }, skyH);
+        });
+        ribbon(apPts, Math.max(1.4 * scale, coreW * 0.22), l.secondaryColor);
+        field({ x: skyX, y: skyY }, apR * 2.4, apR * 2.4, 'arcane', 4, skyH, f.clock);
+      }
+
+      // Descending pulse rings along the heavenly shaft
+      const ringCount = 2 + (v % 3);
+      for (let r = 0; r < ringCount; r++) {
+        const uRing = ((f.clock * 1.35 + r / ringCount) % 1) * descent;
+        const cx = skyX + (hitX - skyX) * uRing;
+        const cy = skyY + (hitY - skyY) * uRing;
+        const ch = skyH + (hitH - skyH) * uRing;
+        const rRad = haloW * (0.65 + 0.35 * uRing);
+        const ringPts = Array.from({ length: 25 }, (_, i) => {
+          const a = (i / 24) * TAU;
+          return pt({ x: cx + Math.cos(a) * rRad, y: cy + Math.sin(a) * rRad }, ch);
+        });
+        ribbon(ringPts, Math.max(1 * scale, coreW * 0.18), r % 2 ? l.color : l.secondaryColor);
+      }
+
+      // Target ground impact flare & vertical column glow
+      if (descent > 0.25 && sb.impactFlare > 0) {
+        const flareR = sb.impactFlare * scale * (0.8 + 0.3 * Math.sin(p * Math.PI) + v * 0.08);
+        field(
+          { x: hitX, y: hitY },
+          flareR * 2.6,
+          flareR * 2.6,
+          v === 1 ? 'fire' : 'arcane',
+          v === 4 ? 4 : 3,
+          hitH + 2 * scale,
+          f.clock * 1.6,
+          descent
+        );
+        const crownPts = Array.from({ length: 33 }, (_, i) => {
+          const a = (i / 32) * TAU - f.clock * 1.5;
+          return pt({ x: hitX + Math.cos(a) * flareR, y: hitY + Math.sin(a) * flareR }, hitH + 3 * scale);
+        });
+        ribbon(crownPts, Math.max(1.4 * scale, coreW * 0.24), l.secondaryColor);
+      }
+
+      const motes = Math.min(48, Math.max(12, l.count));
+      for (let i = 0; i < motes; i++) {
+        const sA = seeded(i + v * 23, l.motion.seed);
+        const sB = seeded(i + 109 + v * 17, l.motion.seed);
+        const uM = ((f.clock * 0.9 + sA) % 1) * descent;
+        const a = sB * TAU + f.clock * 2;
+        const rad = (0.3 + sA * 0.9) * haloW * 0.85;
+        particle(
+          {
+            x: skyX + (hitX - skyX) * uM + Math.cos(a) * rad,
+            y: skyY + (hitY - skyY) * uM + Math.sin(a) * rad,
+          },
+          (1.6 + sB * 2.4 + v * 0.25) * scale,
+          Math.sin(uM * Math.PI) * 0.9,
+          2,
+          skyH + (hitH - skyH) * uM,
+          a,
+          2.1,
+          i % 2 ? l.secondaryColor : l.color
+        );
+      }
+      return true;
+    }
+
+    case 'sky_lightning': {
+      const sl = parseSkyLightning(l.skyLightning);
+      const baseTarget =
+        l.anchor === 'caster'
+          ? offset(from)
+          : l.anchor === 'path'
+            ? offset({ x: (from.x + to.x) * 0.5, y: (from.y + to.y) * 0.5 })
+            : offset(to);
+      const hitX = baseTarget.x + sl.hitOffsetX * scale;
+      const hitY = baseTarget.y + sl.hitOffsetZ * scale;
+      const hitH = sl.hitHeight * scale;
+      const skyX = hitX + (sl.skySlantX + (v - 2) * 5) * 1.8 * scale;
+      const skyY = hitY + sl.skySlantZ * 1.8 * scale;
+      const skyH = (sl.skyHeight * 2.2 + v * 9) * scale;
+
+      const boltReach = Math.min(1, p * 4.5 * Math.max(0.25, l.motion.speed));
+      const flickerTick = Math.floor(f.clock * Math.max(1, sl.flickerRate));
+      const arcs = Math.max(1, Math.min(8, sl.arcCount + (v === 1 ? 1 : 0)));
+      const segs = Math.max(12, Math.min(80, sl.complexity));
+      const jagAmp = (sl.jaggedness * 0.58 + v * 3.5) * scale;
+      const glowW = Math.max(1.8 * scale, sl.glowWidth * scale * (0.9 + v * 0.06));
+      const coreW = Math.max(0.9 * scale, sl.coreWidth * scale);
+      const glowCol = v === 3 ? '#ffd978' : v === 4 ? '#b784ff' : sl.glowColor || l.color;
+      const coreCol = sl.coreColor || l.secondaryColor;
+      const emitCol = sl.emitterColor || glowCol;
+
+      let primaryBoltPts: NativePoint[] = [];
+
+      for (let aIdx = 0; aIdx < arcs; aIdx++) {
+        const pts: NativePoint[] = [];
+        const arcSpread = aIdx === 0 ? 0 : (aIdx % 2 ? 1 : -1) * Math.ceil(aIdx / 2) * 9 * scale;
+        for (let i = 0; i <= segs; i++) {
+          const u = (i / segs) * boltReach;
+          const env = Math.sin((i / segs) * Math.PI);
+          const coarseBucket = Math.floor((i / segs) * 6);
+          const coarseFrac = (i / segs) * 6 - coarseBucket;
+          const c0 = seeded(coarseBucket * 37 + aIdx * 113 + flickerTick * 71, l.motion.seed) - 0.5;
+          const c1 = seeded((coarseBucket + 1) * 37 + aIdx * 113 + flickerTick * 71, l.motion.seed) - 0.5;
+          const coarseX = (c0 + (c1 - c0) * coarseFrac) * jagAmp * 1.35;
+          const coarseY =
+            (seeded(coarseBucket * 53 + aIdx * 149 + flickerTick * 89, l.motion.seed) - 0.5) * jagAmp * 0.95;
+          const fineX = (seeded(i * 19 + aIdx * 211 + flickerTick * 131, l.motion.seed) - 0.5) * jagAmp * 0.55;
+          const fineY = (seeded(i * 29 + aIdx * 263 + flickerTick * 167, l.motion.seed) - 0.5) * jagAmp * 0.45;
+          const jx = (coarseX + fineX + arcSpread) * env;
+          const jy = (coarseY + fineY) * env;
+          pts.push(
+            pt(
+              {
+                x: skyX + (hitX - skyX) * u + jx,
+                y: skyY + (hitY - skyY) * u + jy,
+              },
+              skyH + (hitH - skyH) * u
+            )
+          );
+        }
+        if (aIdx === 0) primaryBoltPts = pts;
+        ribbon(pts, glowW * (aIdx === 0 ? 1 : 0.72), glowCol);
+        ribbon(pts, coreW * (aIdx === 0 ? 1 : 0.72), coreCol);
+      }
+
+      // Branching lightning forks splitting off along the bolt
+      const forks = Math.max(0, Math.min(24, sl.forkCount + (v === 1 ? 3 : 0)));
+      const spreadRad = (sl.forkSpread * Math.PI) / 180;
+      for (let fk = 0; fk < forks; fk++) {
+        if (primaryBoltPts.length < 4) break;
+        const uIdx = Math.min(
+          primaryBoltPts.length - 2,
+          Math.max(1, Math.floor((0.12 + 0.76 * seeded(fk * 41 + 7, l.motion.seed)) * (primaryBoltPts.length - 1)))
+        );
+        const root = primaryBoltPts[uIdx];
+        const sideSign = fk % 2 === 0 ? 1 : -1;
+        const baseAzimuth =
+          sideSign * (0.35 + seeded(fk * 59 + flickerTick * 23, l.motion.seed) * spreadRad) + fk * 0.9;
+        const reachDist = (35 + sl.skyHeight * 0.55) * sl.forkLength * scale * (0.65 + 0.5 * seeded(fk * 83, l.motion.seed));
+        const forkSteps = 7;
+        const fPts: NativePoint[] = [root];
+        for (let s = 1; s <= forkSteps; s++) {
+          const fu = s / forkSteps;
+          const fJag =
+            (seeded(fk * 97 + s * 31 + flickerTick * 61, l.motion.seed) - 0.5) * jagAmp * 0.48 * fu;
+          const fx = root.x + Math.cos(baseAzimuth) * reachDist * fu - Math.sin(baseAzimuth) * fJag;
+          const fy = root.y + Math.sin(baseAzimuth) * reachDist * fu + Math.cos(baseAzimuth) * fJag;
+          const fh = Math.max(hitH, root.height - reachDist * 0.65 * fu);
+          fPts.push(pt({ x: fx, y: fy }, fh));
+        }
+        ribbon(fPts, glowW * 0.46, glowCol, true);
+        ribbon(fPts, coreW * 0.48, coreCol, true);
+      }
+
+      // Sky cloud flash & target strike shock field
+      field({ x: skyX, y: skyY }, glowW * 3.4, glowW * 3.4, 'arcane', 2, skyH, f.clock * 4);
+      if (boltReach > 0.5) {
+        field(
+          { x: hitX, y: hitY },
+          glowW * (3.8 + v * 0.35),
+          glowW * (3.8 + v * 0.35),
+          'arcane',
+          2 + (v % 3),
+          hitH + 4 * scale,
+          f.clock * 6,
+          boltReach
+        );
+      }
+
+      // Outer electrical spark emitter along bolt & impact
+      const eCount = Math.max(0, Math.min(60, sl.emitterCount));
+      const eSpread = sl.emitterSpread * scale;
+      for (let k = 0; k < eCount; k++) {
+        const sA = seeded(k * 37 + flickerTick * 17, l.motion.seed);
+        const sB = seeded(k * 73 + 19, l.motion.seed);
+        const anchorPt =
+          primaryBoltPts[Math.min(primaryBoltPts.length - 1, Math.floor(sA * primaryBoltPts.length))] ??
+          pt({ x: hitX, y: hitY }, hitH);
+        const ang = sB * TAU + f.clock * 8;
+        const rad = (0.2 + seeded(k * 101 + flickerTick, l.motion.seed) * 0.95) * eSpread;
+        particle(
+          {
+            x: anchorPt.x + Math.cos(ang) * rad,
+            y: anchorPt.y + Math.sin(ang) * rad,
+          },
+          (1.5 + (k % 3) * 1.1 + v * 0.2) * scale,
+          0.55 + 0.4 * sB,
+          2,
+          anchorPt.height + (sA - 0.5) * eSpread * 0.7,
+          ang,
+          2.6,
+          k % 3 === 0 ? coreCol : emitCol
+        );
+      }
+      return true;
+    }
+
     case 'chain_lightning': {
       const chainNodes: FxPoint[] = [
         offset(from),

@@ -163,7 +163,10 @@ export class BabylonEffectRuntime {
     m.setFloat('uVariant', Math.max(0, ['straight', 'wave', 'ribbon', 'pulse', 'helix'].indexOf(l.variant)));
     m.setFloat('uStrength', 1);
     m.setFloat('uAlpha', 1);
-    m.setFloat('uTurbulence', fire?.turbulence ?? l.motion.turbulence / 30 + 0.2);
+    m.setFloat(
+      'uTurbulence',
+      fire?.turbulence ?? (l.kind === 'beam' || l.cinematic?.style === 'beam' ? l.motion.turbulence / 35 : l.motion.turbulence / 30 + 0.2)
+    );
     m.setFloat('uStyle', 0);
     m.setFloat(
       'uElement',

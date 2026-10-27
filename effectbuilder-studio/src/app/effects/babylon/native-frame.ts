@@ -341,7 +341,7 @@ export function evaluateNativeLayer(
 
   if (!l.cinematic && evaluateExtendedLayer(l, f, out, from, to, scale, targets, offset)) return out;
 
-  const path = l.kind === 'beam' || l.kind === 'lightning' || l.kind === 'tether';
+  const path = !l.cinematic && (l.kind === 'beam' || l.kind === 'lightning' || l.kind === 'tether');
   if (path) {
     const strands =
       l.kind === 'beam' ? (variant === 2 ? 3 : variant === 4 ? 2 : 1) : l.kind === 'lightning' ? (variant === 2 ? 5 : variant === 4 ? 3 : 1) : variant === 1 ? 3 : 2;
@@ -358,10 +358,11 @@ export function evaluateNativeLayer(
           bend = (seeded(i + strand * 81 + Math.floor(f.clock * 18) * 137, l.motion.seed) - 0.5) * l.spread * scale * (0.2 + variant * 0.18);
           height += (seeded(i + strand * 5, 92) - 0.5) * size * 2;
         } else if (l.kind === 'beam') {
+          const turbScale = l.motion.turbulence / 100;
           bend =
             (variant === 0
-              ? Math.sin(u * 65 - f.clock * 13) * 0.4
-              : Math.sin(u * (variant === 4 ? 25 : 14) - f.clock * 8 + (strand * TAU) / strands) * (variant === 1 ? 0.7 : 0.35)) *
+              ? Math.sin(u * 38 - f.clock * 11) * turbScale * 0.55
+              : Math.sin(u * (variant === 4 ? 25 : 14) - f.clock * 8 + (strand * TAU) / strands) * ((variant === 1 ? 0.65 : 0.32) + turbScale * 0.35)) *
             l.spread *
             scale *
             w;

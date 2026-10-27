@@ -5,9 +5,12 @@ export type WallDrawMode =
   | 'hexagon'
   | 'octagon'
   | 'l_shape'
+  | 't_shape'
+  | 'cross'
   | 'circle'
   | 'cave'
   | 'line'
+  | 'freehand'
   | 'triangle';
 
 export type CutawayPerspectiveMode = 'topdown' | 'auto' | 'heavy';
@@ -32,6 +35,14 @@ export type PathRibbonStyle =
   | 'water_stream'
   | 'waterfall';
 
+export type MapLightFixtureKind =
+  | 'torch'
+  | 'candle'
+  | 'lantern'
+  | 'spotlight'
+  | 'area'
+  | 'glow';
+
 export interface MapToolDefinition {
   readonly id: string;
   readonly label: string;
@@ -54,17 +65,25 @@ export interface MapStampNode {
   readonly modelUrl?: string;
   readonly albedoUrl?: string;
   readonly normalUrl?: string;
+  readonly thumbnailUrl?: string;
   readonly x: number;
   readonly z: number;
+  readonly offsetY?: number;
   readonly scale: number;
+  readonly scaleX?: number;
+  readonly scaleY?: number;
+  readonly scaleZ?: number;
   readonly rotationY: number;
+  readonly tiltX?: number;
   readonly colorHex: string;
+  readonly gmSecretOnly?: boolean;
 }
 
 export interface WaterSplineNode {
   readonly id: string;
   readonly name: string;
   readonly width: number;
+  readonly flowSpeed?: number;
   readonly colorHex: string;
   readonly points: readonly (readonly [number, number, number])[];
 }
@@ -72,19 +91,27 @@ export interface WaterSplineNode {
 export interface LightSourceNode {
   readonly id: string;
   readonly label: string;
+  readonly kind?: MapLightFixtureKind;
   readonly x: number;
   readonly y: number;
   readonly z: number;
   readonly range: number;
+  readonly widthMeters?: number;
   readonly intensity: number;
   readonly colorHex: string;
+  readonly flicker?: boolean;
+  readonly showFixture?: boolean;
 }
 
 export interface WallOpeningNode {
   readonly id: string;
   readonly type: WallOpeningType;
+  readonly name?: string;
+  readonly modelUrl?: string;
+  readonly thumbnailUrl?: string;
   readonly t: number;
   readonly widthMeters: number;
+  readonly heightMeters?: number;
   readonly isOpen: boolean;
   readonly isSecret: boolean;
   readonly isRevealedToPlayers: boolean;
@@ -96,6 +123,9 @@ export interface MapWallSegmentNode {
   readonly drawMode: WallDrawMode;
   readonly material: string;
   readonly modelUrl?: string;
+  readonly albedoUrl?: string;
+  readonly normalUrl?: string;
+  readonly thumbnailUrl?: string;
   readonly thicknessMeters: number;
   readonly heightMeters: number;
   readonly perspective: CutawayPerspectiveMode;
@@ -118,13 +148,28 @@ export interface MapPathRibbonNode {
   readonly waypoints: readonly (readonly [number, number])[];
 }
 
+export interface MapScatterClusterNode {
+  readonly id: string;
+  readonly x: number;
+  readonly z: number;
+  readonly radius: number;
+  readonly density: number;
+  readonly seed: number;
+  readonly modelUrl?: string;
+  readonly label?: string;
+}
+
 export interface MapSceneGraphState {
   readonly sceneKey: string;
   readonly name: string;
   readonly biome: string;
   readonly revision: number;
+  readonly floorAlbedoUrl?: string;
+  readonly floorNormalUrl?: string;
+  readonly floorTilingScale?: number;
   readonly scatterSeed: number;
   readonly scatterDensity: number;
+  readonly scatterClusters?: readonly MapScatterClusterNode[];
   readonly terrainRelief: number;
   readonly stamps: readonly MapStampNode[];
   readonly waterSplines: readonly WaterSplineNode[];

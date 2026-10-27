@@ -2,6 +2,7 @@ import '@babylonjs/loaders/glTF';
 import {
   AbstractMesh,
   Color3,
+  MeshoptCompression,
   PBRMaterial,
   Scene,
   SceneLoader,
@@ -17,12 +18,31 @@ export interface CachedGlbTemplate {
   readonly rawDepth: number;
 }
 
+export interface GlbCloneMetadata {
+  readonly lwNodeName: string;
+  readonly lwKind?: 'wall' | 'door' | 'object' | 'light';
+  readonly lwEntityId?: string;
+  readonly lwWallId?: string;
+}
+
 export class GlbModelCache {
   private static cache = new Map<string, CachedGlbTemplate>();
   private static pending = new Map<string, Promise<CachedGlbTemplate | null>>();
+  private static failedUrls = new Set<string>();
   private static activeScene: Scene | null = null;
+  private static decoderConfigured = false;
 
   static ensureScene(scene: Scene): void {
+    if (!this.decoderConfigured) {
+      try {
+        MeshoptCompression.Configuration.decoder = {
+          url: '/assets/object-library/meshopt_decoder.js',
+        };
+      } catch {
+        // Use default meshopt configuration fallback
+      }
+      this.decoderConfigured = true;
+    }
     if (this.activeScene !== scene) {
       this.cache.clear();
       this.pending.clear();
@@ -39,6 +59,9 @@ export class GlbModelCache {
     if (!modelUrl || !modelUrl.toLowerCase().endsWith('.glb')) {
       return null;
     }
+    if (this.failedUrls.has(modelUrl)) {
+      return null;
+    }
     const existing = this.cache.get(modelUrl);
     if (existing) {
       return existing;
@@ -46,8 +69,12 @@ export class GlbModelCache {
     if (!this.pending.has(modelUrl)) {
       const loadPromise = this.loadGlbTemplateAsync(scene, modelUrl).then((tpl) => {
         this.pending.delete(modelUrl);
-        if (tpl && onLoaded) {
-          onLoaded();
+        if (tpl) {
+          if (onLoaded) {
+            onLoaded();
+          }
+        } else {
+          this.failedUrls.add(modelUrl);
         }
         return tpl;
       });
@@ -79,8 +106,8 @@ export class GlbModelCache {
         m.computeWorldMatrix(true);
         if (m.material instanceof PBRMaterial) {
           m.material.maxSimultaneousLights = 8;
-          m.material.directIntensity = 1.45;
-          m.material.environmentIntensity = 0.65;
+          m.material.directIntensity = 1.5;
+          m.material.environmentIntensity = 0.72;
         } else if (m.material instanceof StandardMaterial) {
           m.material.maxSimultaneousLights = 8;
         }
@@ -122,6 +149,7 @@ export class GlbModelCache {
     targetDepth: number,
     uniformScale: boolean,
     isGhost = false,
+    meta?: GlbCloneMetadata,
   ): TransformNode {
     const wrapper = new TransformNode(instanceName, scene);
     const cloned = template.templatePivot.clone(`${instanceName}-pivot`, wrapper);
@@ -132,7 +160,6 @@ export class GlbModelCache {
         const s = targetHeight / maxSpan;
         cloned.scaling.setAll(s);
       } else {
-        // Long horizontal axis of the GLB aligns with X width of the wall segment
         const useZAsLength = template.rawDepth > template.rawWidth * 1.35;
         if (useZAsLength) {
           cloned.rotation.y = Math.PI / 2;
@@ -150,12 +177,15 @@ export class GlbModelCache {
         }
       }
 
+      const resolvedMeta: GlbCloneMetadata = meta ?? { lwNodeName: instanceName };
+      wrapper.metadata = resolvedMeta;
+
       const childMeshes: AbstractMesh[] = cloned.getChildMeshes(false);
       for (const m of childMeshes) {
         m.setEnabled(true);
         m.isPickable = !isGhost && m.getTotalVertices() > 0;
         m.receiveShadows = !isGhost;
-        m.metadata = { lwNodeName: instanceName };
+        m.metadata = resolvedMeta;
         if (isGhost) {
           const ghostMat = new StandardMaterial(`${instanceName}-ghost-mat`, scene);
           ghostMat.diffuseColor = Color3.FromHexString('#49e892');

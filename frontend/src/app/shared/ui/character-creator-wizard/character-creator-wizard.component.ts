@@ -219,15 +219,13 @@ export class LwCharacterCreatorWizardComponent {
   });
 
   readonly equippedDraftItems = computed<readonly EquipmentLoadoutItemVm[]>(() => {
-    const ids = this.draft().equippedItemIds ?? [];
-    const db = this.equipmentDatabase();
-    return ids.map((id) => db.find((i) => i.id === id)).filter((i): i is EquipmentLoadoutItemVm => !!i);
+    const items = this.draft().equipmentItems ?? [];
+    return items.filter((i) => i.equipped);
   });
 
   readonly backpackDraftItems = computed<readonly EquipmentLoadoutItemVm[]>(() => {
-    const ids = this.draft().backpackItemIds ?? [];
-    const db = this.equipmentDatabase();
-    return ids.map((id) => db.find((i) => i.id === id)).filter((i): i is EquipmentLoadoutItemVm => !!i);
+    const items = this.draft().equipmentItems ?? [];
+    return items.filter((i) => !i.equipped);
   });
 
   readonly characterLevel = computed<number>(() => Math.max(1, this.draft().level ?? 1));
@@ -346,28 +344,19 @@ export class LwCharacterCreatorWizardComponent {
   }
 
   addItemToDraft(item: EquipmentLoadoutItemVm, equipNow: boolean): void {
-    const curEquipped = [...(this.draft().equippedItemIds ?? [])];
-    const curBackpack = [...(this.draft().backpackItemIds ?? [])];
-    if (equipNow) {
-      if (!curEquipped.includes(item.id)) curEquipped.push(item.id);
-      this.draftPatched.emit({
-        equippedItemIds: curEquipped,
-        backpackItemIds: curBackpack.filter((id) => id !== item.id),
-      });
+    const current = [...(this.draft().equipmentItems ?? [])];
+    const existingIndex = current.findIndex((i) => i.id === item.id);
+    if (existingIndex >= 0) {
+      current[existingIndex] = { ...current[existingIndex], equipped: equipNow };
     } else {
-      if (!curBackpack.includes(item.id)) curBackpack.push(item.id);
-      this.draftPatched.emit({
-        equippedItemIds: curEquipped.filter((id) => id !== item.id),
-        backpackItemIds: curBackpack,
-      });
+      current.unshift({ ...item, equipped: equipNow });
     }
+    this.draftPatched.emit({ equipmentItems: current });
   }
 
   removeItemFromDraft(itemId: string): void {
-    this.draftPatched.emit({
-      equippedItemIds: (this.draft().equippedItemIds ?? []).filter((id) => id !== itemId),
-      backpackItemIds: (this.draft().backpackItemIds ?? []).filter((id) => id !== itemId),
-    });
+    const current = (this.draft().equipmentItems ?? []).filter((i) => i.id !== itemId);
+    this.draftPatched.emit({ equipmentItems: current });
   }
 
   selectPortrait(url: string): void {

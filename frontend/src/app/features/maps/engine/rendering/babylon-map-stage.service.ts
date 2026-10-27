@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import {
   ArcRotateCamera,
+  ArcRotateCameraPointersInput,
   Color3,
   Color4,
   Engine,
@@ -27,20 +28,30 @@ import { SeededScatterEngine } from '../scatter/seeded-scatter.engine';
 import { TerrainMeshBuilder } from '../terrain/terrain-mesh.builder';
 import { WallMeshBuilder } from '../walls/wall-mesh.builder';
 import { WaterSplineBuilder } from '../water/water-spline.builder';
-import { GlbModelCache } from './glb-model-cache';
+import { GlbCloneMetadata, GlbModelCache } from './glb-model-cache';
+
+export interface PickedSceneEntityMeta {
+  readonly lwNodeName?: string;
+  readonly lwKind?: 'wall' | 'door' | 'object' | 'light';
+  readonly lwEntityId?: string;
+  readonly lwWallId?: string;
+}
 
 export interface GhostAssetConfig {
   readonly enabled: boolean;
   readonly label: string;
-  readonly kind: 'prop' | 'wall' | 'light' | 'terrain' | 'decal';
+  readonly kind: 'prop' | 'wall' | 'door' | 'light' | 'terrain' | 'decal' | 'water' | 'scatter';
   readonly modelUrl?: string;
   readonly albedoUrl?: string;
   readonly normalUrl?: string;
+  readonly thumbnailUrl?: string;
   readonly scale: number;
+  readonly offsetY?: number;
   readonly rotationRad: number;
   readonly heightMeters: number;
   readonly thicknessMeters: number;
   readonly wallDrawMode: WallDrawMode;
+  readonly freehandPoints?: readonly (readonly [number, number])[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -48,12 +59,19 @@ export class BabylonMapStageService {
   private engine: Engine | null = null;
   private scene: Scene | null = null;
   private camera: ArcRotateCamera | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private selectedPosition: Vector3 | null = null;
   private hideGmSecrets = false;
   private snapToGrid = true;
+  private surfaceLockEnabled = false;
   private lastState: MapSceneGraphState | null = null;
   private pointerDownClientX = 0;
   private pointerDownClientY = 0;
+  private isLeftPointerDown = false;
+  private lastFpsUpdateMs = 0;
+  private holdTimer: ReturnType<typeof setInterval> | null = null;
+  private holdTicks = 0;
+
   private ghostConfig: GhostAssetConfig = {
     enabled: false,
     label: 'Stone Wall Segment',
@@ -74,8 +92,10 @@ export class BabylonMapStageService {
   mountCanvas(
     canvas: HTMLCanvasElement,
     initialState: MapSceneGraphState,
-    onGroundClicked: (x: number, z: number, pickedMeshName?: string) => void,
+    onGroundClicked: (x: number, z: number, pickedMeta?: PickedSceneEntityMeta) => void,
     onGroundHovered?: (x: number, z: number) => void,
+    onSurfaceDrag?: (x: number, z: number, holdTicks: number) => void,
+    onSurfaceRelease?: (x: number, z: number) => void,
   ): void {
     this.dispose();
 
@@ -97,59 +117,77 @@ export class BabylonMapStageService {
         Vector3.Zero(),
         this.scene,
       );
-      this.camera.lowerRadiusLimit = 6;
-      this.camera.upperRadiusLimit = 58;
+      this.camera.lowerRadiusLimit = 5;
+      this.camera.upperRadiusLimit = 64;
       this.camera.wheelPrecision = 18;
       this.camera.attachControl(canvas, true);
+      this.applyCameraPointerButtons();
+
+      if (typeof ResizeObserver !== 'undefined') {
+        this.resizeObserver = new ResizeObserver(() => {
+          this.engine?.resize();
+        });
+        this.resizeObserver.observe(canvas);
+      }
 
       this.scene.onPointerObservable.add((pointerInfo) => {
         if (!this.scene) return;
+        const evt = pointerInfo.event as PointerEvent;
 
         if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
-          const evt = pointerInfo.event as PointerEvent;
           this.pointerDownClientX = evt.clientX;
           this.pointerDownClientY = evt.clientY;
+          if (evt.button === 0) {
+            this.isLeftPointerDown = true;
+            this.holdTicks = 0;
+            const groundPt = this.pickGroundCoordinates();
+            if (groundPt && this.surfaceLockEnabled && onSurfaceDrag) {
+              onSurfaceDrag(groundPt.x, groundPt.z, 0);
+              this.startHoldTimer(onSurfaceDrag);
+            }
+          }
           return;
         }
 
-        const pick = this.scene.pick(
-          this.scene.pointerX,
-          this.scene.pointerY,
-          (m) =>
-            m.name === 'lw-terrain-ground' ||
-            m.name.startsWith('lw-wall-') ||
-            m.name.startsWith('lw-stamp-') ||
-            Boolean(m.metadata?.lwNodeName),
-        );
-        if (!pick?.hit || !pick.pickedPoint) return;
+        if (pointerInfo.type === PointerEventTypes.POINTERUP) {
+          const wasLeftDown = this.isLeftPointerDown;
+          this.isLeftPointerDown = false;
+          this.stopHoldTimer();
 
-        const rawX = pick.pickedPoint.x;
-        const rawZ = pick.pickedPoint.z;
-        const useExactPointer = !this.snapToGrid || this.ghostConfig.kind === 'terrain';
-        const gx = useExactPointer ? Math.round(rawX * 100) / 100 : Math.round(rawX * 2) / 2;
-        const gz = useExactPointer ? Math.round(rawZ * 100) / 100 : Math.round(rawZ * 2) / 2;
-
-        if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
-          this.hoverCoords.set({ x: gx, z: gz });
-          this.updateGhostMeshAt(gx, gz);
-          if (onGroundHovered) {
-            onGroundHovered(gx, gz);
+          if (evt.button !== 0 || !wasLeftDown) {
+            return;
           }
-        } else if (pointerInfo.type === PointerEventTypes.POINTERUP) {
-          const evt = pointerInfo.event as PointerEvent;
           const dragDist = Math.hypot(
             evt.clientX - this.pointerDownClientX,
             evt.clientY - this.pointerDownClientY,
           );
-          // Ignore camera orbit/pan drags or right-clicks
-          if (evt.button !== 0 || dragDist > 6) {
+          const groundPt = this.pickGroundCoordinates();
+          if (this.surfaceLockEnabled && onSurfaceRelease && groundPt) {
+            onSurfaceRelease(groundPt.x, groundPt.z);
+          }
+          if (dragDist > 7 && !this.surfaceLockEnabled) {
             return;
           }
-          this.lastPickedCoords.set({ x: gx, z: gz });
-          const pickedName =
-            (pick.pickedMesh?.metadata?.lwNodeName as string | undefined) ??
-            pick.pickedMesh?.name;
-          onGroundClicked(gx, gz, pickedName);
+          if (!groundPt) return;
+
+          const pickedMeta = this.pickSceneEntityMeta();
+          this.lastPickedCoords.set(groundPt);
+          onGroundClicked(groundPt.x, groundPt.z, pickedMeta);
+          return;
+        }
+
+        if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
+          const groundPt = this.pickGroundCoordinates();
+          if (!groundPt) return;
+
+          this.hoverCoords.set(groundPt);
+          this.updateGhostMeshAt(groundPt.x, groundPt.z);
+          if (onGroundHovered) {
+            onGroundHovered(groundPt.x, groundPt.z);
+          }
+          if (this.isLeftPointerDown && this.surfaceLockEnabled && onSurfaceDrag) {
+            onSurfaceDrag(groundPt.x, groundPt.z, this.holdTicks);
+          }
         }
       });
 
@@ -158,11 +196,116 @@ export class BabylonMapStageService {
       this.engine.runRenderLoop(() => {
         if (this.scene && this.engine) {
           this.scene.render();
-          this.fps.set(Math.round(this.engine.getFps()));
+          const now = performance.now();
+          if (now - this.lastFpsUpdateMs >= 500) {
+            this.lastFpsUpdateMs = now;
+            const nextFps = Math.round(this.engine.getFps());
+            if (this.fps() !== nextFps) {
+              this.fps.set(nextFps);
+            }
+          }
         }
       });
     } catch {
       // Headless or non-WebGL browser environment fallback
+    }
+  }
+
+  private startHoldTimer(onSurfaceDrag: (x: number, z: number, holdTicks: number) => void): void {
+    this.stopHoldTimer();
+    this.holdTimer = setInterval(() => {
+      if (!this.isLeftPointerDown || !this.surfaceLockEnabled) {
+        this.stopHoldTimer();
+        return;
+      }
+      this.holdTicks++;
+      const h = this.hoverCoords();
+      onSurfaceDrag(h.x, h.z, this.holdTicks);
+    }, 65);
+  }
+
+  private stopHoldTimer(): void {
+    if (this.holdTimer) {
+      clearInterval(this.holdTimer);
+      this.holdTimer = null;
+    }
+  }
+
+  private pickGroundCoordinates(): { x: number; z: number } | null {
+    if (!this.scene) return null;
+    // Always pick directly against the terrain ground mesh so walls/props never skew cursor X/Z
+    const pick = this.scene.pick(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      (m) => m.name === 'lw-terrain-ground',
+    );
+    if (pick?.hit && pick.pickedPoint) {
+      return {
+        x: Math.round(pick.pickedPoint.x * 100) / 100,
+        z: Math.round(pick.pickedPoint.z * 100) / 100,
+      };
+    }
+    // Fallback ray intersection with y=0 horizontal plane when pointer is near map edge
+    const ray = this.scene.createPickingRay(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      null,
+      this.camera,
+    );
+    if (Math.abs(ray.direction.y) > 0.0001) {
+      const t = -ray.origin.y / ray.direction.y;
+      if (t > 0) {
+        const hitX = Math.max(-18, Math.min(18, ray.origin.x + ray.direction.x * t));
+        const hitZ = Math.max(-18, Math.min(18, ray.origin.z + ray.direction.z * t));
+        return {
+          x: Math.round(hitX * 100) / 100,
+          z: Math.round(hitZ * 100) / 100,
+        };
+      }
+    }
+    return null;
+  }
+
+  private pickSceneEntityMeta(): PickedSceneEntityMeta | undefined {
+    if (!this.scene) return undefined;
+    const pick = this.scene.pick(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      (m) =>
+        m.isPickable &&
+        m.name !== 'lw-terrain-ground' &&
+        !m.name.startsWith('lw-ghost-') &&
+        !m.name.startsWith('lw-gizmo-') &&
+        (Boolean(m.metadata?.lwKind) ||
+          Boolean(m.metadata?.lwNodeName) ||
+          m.name.startsWith('lw-wall-') ||
+          m.name.startsWith('lw-door-') ||
+          m.name.startsWith('lw-stamp-') ||
+          m.name.startsWith('lw-light-orb-')),
+    );
+    if (!pick?.hit || !pick.pickedMesh) return undefined;
+    const meta = (pick.pickedMesh.metadata ?? {}) as PickedSceneEntityMeta;
+    return {
+      lwNodeName: meta.lwNodeName ?? pick.pickedMesh.name,
+      lwKind: meta.lwKind,
+      lwEntityId: meta.lwEntityId,
+      lwWallId: meta.lwWallId,
+    };
+  }
+
+  setSurfaceDrawingLock(locked: boolean): void {
+    this.surfaceLockEnabled = locked;
+    this.applyCameraPointerButtons();
+  }
+
+  private applyCameraPointerButtons(): void {
+    if (!this.camera) return;
+    const pointers = this.camera.inputs.attached['pointers'] as
+      | ArcRotateCameraPointersInput
+      | undefined;
+    if (pointers) {
+      // When surface drawing is locked, only right-click (2) or middle-click (1) orbits camera
+      pointers.buttons = this.surfaceLockEnabled ? [1, 2] : [0, 1, 2];
     }
   }
 
@@ -199,26 +342,38 @@ export class BabylonMapStageService {
 
     if (!this.ghostConfig.enabled) return;
 
-    if (this.ghostConfig.kind === 'wall' && this.wallStartAnchor) {
+    if (
+      this.ghostConfig.kind === 'wall' &&
+      (this.wallStartAnchor ||
+        (this.ghostConfig.wallDrawMode === 'freehand' &&
+          (this.ghostConfig.freehandPoints?.length ?? 0) >= 2))
+    ) {
+      const startX = this.wallStartAnchor?.x ?? gx;
+      const startZ = this.wallStartAnchor?.z ?? gz;
       WallMeshBuilder.renderGhostWallPreview(
         this.scene,
         this.ghostConfig.wallDrawMode,
-        this.wallStartAnchor.x,
-        this.wallStartAnchor.z,
+        startX,
+        startZ,
         gx,
         gz,
         this.ghostConfig.heightMeters,
         this.ghostConfig.thicknessMeters,
         this.ghostConfig.modelUrl,
+        this.ghostConfig.freehandPoints,
       );
       return;
     }
 
     const groundY = TerrainMeshBuilder.sampleElevationAt(this.scene, gx, gz);
 
-    // Terrain brush: ONLY an outline circle conforming to the terrain (no filled 3D cylinder)
-    if (this.ghostConfig.kind === 'terrain') {
-      const radius = Math.max(1.0, this.ghostConfig.scale);
+    // Terrain, Water, or Scatter brush: outline circle conforming 1:1 to terrain
+    if (
+      this.ghostConfig.kind === 'terrain' ||
+      this.ghostConfig.kind === 'water' ||
+      this.ghostConfig.kind === 'scatter'
+    ) {
+      const radius = Math.max(0.6, this.ghostConfig.scale);
       const pts: Vector3[] = [];
       const steps = 48;
       for (let i = 0; i <= steps; i++) {
@@ -229,9 +384,38 @@ export class BabylonMapStageService {
         pts.push(new Vector3(px, py, pz));
       }
       const ring = MeshBuilder.CreateLines('lw-ghost-terrain-ring', { points: pts }, this.scene);
-      ring.color = Color3.FromHexString('#49e892');
+      ring.color = Color3.FromHexString(
+        this.ghostConfig.kind === 'water' ? '#38bdf8' : '#49e892',
+      );
       ring.isPickable = false;
       return;
+    }
+
+    // Door ghost: snap to closest wall segment if near a wall
+    if (this.ghostConfig.kind === 'door') {
+      const hit = WallMeshBuilder.findClosestWallAttachment(this.lastState?.walls, gx, gz, 4.5);
+      const dx = hit ? hit.x : gx;
+      const dz = hit ? hit.z : gz;
+      const rotY = hit ? hit.angleY : this.ghostConfig.rotationRad;
+      const dy = TerrainMeshBuilder.sampleElevationAt(this.scene, dx, dz);
+      const doorUrl =
+        this.ghostConfig.modelUrl || '/assets/object-library/models/obj-89c62a2b01238531.glb';
+      const tpl = GlbModelCache.getOrLoadTemplate(this.scene, doorUrl);
+      if (tpl) {
+        const inst = GlbModelCache.instantiateClone(
+          this.scene,
+          tpl,
+          'lw-ghost-cursor-door',
+          this.ghostConfig.scale,
+          this.ghostConfig.heightMeters,
+          this.ghostConfig.thicknessMeters * 1.35,
+          false,
+          true,
+        );
+        inst.position.set(dx, dy, dz);
+        inst.rotation.y = rotY;
+        return;
+      }
     }
 
     // 2D Cutout Stamp Decal Ghost
@@ -242,7 +426,7 @@ export class BabylonMapStageService {
         { width: size, height: size },
         this.scene,
       );
-      decal.position.set(gx, groundY + 0.05, gz);
+      decal.position.set(gx, groundY + 0.05 + (this.ghostConfig.offsetY ?? 0), gz);
       decal.rotation.y = this.ghostConfig.rotationRad;
       const dMat = new StandardMaterial('lw-ghost-decal-mat', this.scene);
       const tex = new Texture(this.ghostConfig.albedoUrl, this.scene);
@@ -270,26 +454,26 @@ export class BabylonMapStageService {
           !isWall,
           true,
         );
-        inst.position.set(gx, groundY, gz);
+        inst.position.set(gx, groundY + (this.ghostConfig.offsetY ?? 0), gz);
         inst.rotation.y = this.ghostConfig.rotationRad;
         return;
       }
     }
 
-    const mat = new StandardMaterial('lw-ghost-cursor-mat', this.scene);
-    mat.diffuseColor = Color3.FromHexString('#49e892');
-    mat.emissiveColor = Color3.FromHexString('#2ee66b').scale(0.5);
-    mat.alpha = 0.42;
-
+    // Light placement width ring ghost
     if (this.ghostConfig.kind === 'light') {
-      const orb = MeshBuilder.CreateSphere(
-        'lw-ghost-cursor-mesh',
-        { diameter: 0.75, segments: 12 },
-        this.scene,
-      );
-      orb.position.set(gx, groundY + 2.2, gz);
-      orb.material = mat;
-      orb.isPickable = false;
+      const radius = Math.max(0.5, this.ghostConfig.scale);
+      const pts: Vector3[] = [];
+      for (let i = 0; i <= 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        const px = gx + Math.cos(a) * radius;
+        const pz = gz + Math.sin(a) * radius;
+        const py = TerrainMeshBuilder.sampleElevationAt(this.scene, px, pz) + 0.08;
+        pts.push(new Vector3(px, py, pz));
+      }
+      const ring = MeshBuilder.CreateLines('lw-ghost-light-ring', { points: pts }, this.scene);
+      ring.color = Color3.FromHexString('#ffd269');
+      ring.isPickable = false;
     }
   }
 
@@ -322,6 +506,12 @@ export class BabylonMapStageService {
   ): void {
     if (!this.scene) return;
     TerrainMeshBuilder.sculptElevationAt(this.scene, worldX, worldZ, radius, deltaY, mode);
+    if (this.lastState) {
+      // Refresh walls, stamps, water, and scatter so they sit on updated terrain height
+      WallMeshBuilder.rebuildWallMeshes(this.scene, this.lastState.walls, this.hideGmSecrets);
+      WaterSplineBuilder.rebuildWaterSplines(this.scene, this.lastState.waterSplines);
+      this.rebuildStamps(this.scene, this.lastState.stamps);
+    }
     this.updateGhostMeshAt(worldX, worldZ);
   }
 
@@ -376,7 +566,8 @@ export class BabylonMapStageService {
     if (x === null) {
       this.selectedPosition = null;
     } else {
-      this.selectedPosition = new Vector3(x, y, z);
+      const groundY = this.scene ? TerrainMeshBuilder.sampleElevationAt(this.scene, x, z) : 0;
+      this.selectedPosition = new Vector3(x, groundY + y, z);
     }
     this.rebuildSelectionGizmo();
   }
@@ -386,16 +577,25 @@ export class BabylonMapStageService {
     this.lastState = state;
 
     TerrainMeshBuilder.buildTerrainAndGrid(this.scene, state.biome, state.terrainRelief);
+    if (state.floorAlbedoUrl && state.floorNormalUrl) {
+      TerrainMeshBuilder.applyFloorBumpTexture(
+        this.scene,
+        state.floorAlbedoUrl,
+        state.floorNormalUrl,
+        state.floorTilingScale ?? 10,
+      );
+    }
     WaterSplineBuilder.rebuildWaterSplines(this.scene, state.waterSplines);
     SceneLightingController.syncLights(this.scene, state.lights);
-    const scatterCount =
-      state.scatterDensity > 0
-        ? SeededScatterEngine.rebuildScatterInstances(
-            this.scene,
-            state.scatterSeed,
-            state.scatterDensity,
-          )
-        : this.clearScatterMeshes();
+    const scatterCount = SeededScatterEngine.rebuildScatterInstances(
+      this.scene,
+      state.scatterSeed,
+      state.scatterDensity,
+      state.scatterClusters,
+      () => {
+        if (this.lastState) this.syncSceneGraph(this.lastState);
+      },
+    );
     const wallCount = WallMeshBuilder.rebuildWallMeshes(
       this.scene,
       state.walls,
@@ -413,14 +613,6 @@ export class BabylonMapStageService {
     );
   }
 
-  private clearScatterMeshes(): number {
-    if (!this.scene) return 0;
-    this.scene.meshes
-      .filter((m) => m.name.startsWith('lw-scatter-'))
-      .forEach((m) => m.dispose());
-    return 0;
-  }
-
   private rebuildStamps(scene: Scene, stamps: readonly MapStampNode[]): void {
     scene.transformNodes
       .filter((n) => n.name.startsWith('lw-stamp-node-'))
@@ -430,26 +622,63 @@ export class BabylonMapStageService {
       .forEach((m) => m.dispose());
 
     for (const st of stamps) {
-      if (this.hideGmSecrets && st.label.toLowerCase().includes('secret')) {
+      if (this.hideGmSecrets && (st.gmSecretOnly || st.label.toLowerCase().includes('secret'))) {
         continue;
       }
       const groundY = TerrainMeshBuilder.sampleElevationAt(scene, st.x, st.z);
+      const offsetY = st.offsetY ?? 0;
+      const stampMeta: GlbCloneMetadata = {
+        lwNodeName: `lw-stamp-${st.id}`,
+        lwKind: 'object',
+        lwEntityId: st.id,
+      };
 
-      // 1. 2D Cutout Floor Stamp / Decal (e.g. Ancient Standing Stone Circle, Sarcophagus, Rug, Crater)
-      if (st.albedoUrl && !st.modelUrl) {
+      // 1. Real 3D .glb Asset Model
+      if (st.modelUrl) {
+        const tpl = GlbModelCache.getOrLoadTemplate(scene, st.modelUrl, () => {
+          if (this.lastState) {
+            this.rebuildStamps(scene, this.lastState.stamps);
+            SceneLightingController.refreshShadowCasters(scene);
+          }
+        });
+        if (tpl) {
+          const sx = (st.scaleX ?? 1) * st.scale;
+          const sy = (st.scaleY ?? 1) * st.scale;
+          const sz = (st.scaleZ ?? 1) * st.scale;
+          const inst = GlbModelCache.instantiateClone(
+            scene,
+            tpl,
+            `lw-stamp-node-${st.id}`,
+            2.2 * sx,
+            2.2 * sy,
+            2.2 * sz,
+            st.scaleX === undefined && st.scaleY === undefined && st.scaleZ === undefined,
+            false,
+            stampMeta,
+          );
+          inst.position.set(st.x, groundY + offsetY, st.z);
+          inst.rotation.y = st.rotationY;
+          inst.rotation.x = ((st.tiltX ?? 0) * Math.PI) / 180;
+          continue;
+        }
+      }
+
+      // 2. 2D Cutout Floor Stamp / Decal or Thumbnail Billboard while GLB downloads
+      const texUrl = st.albedoUrl || st.thumbnailUrl;
+      if (texUrl) {
         const size = 2.6 * st.scale;
         const decal = MeshBuilder.CreateGround(
           `lw-stamp-${st.id}`,
           { width: size, height: size },
           scene,
         );
-        decal.position.set(st.x, groundY + 0.04, st.z);
+        decal.position.set(st.x, groundY + 0.04 + offsetY, st.z);
         decal.rotation.y = st.rotationY;
         decal.receiveShadows = true;
-        decal.metadata = { lwNodeName: `lw-stamp-${st.id}` };
+        decal.metadata = stampMeta;
 
         const dMat = new StandardMaterial(`lw-stamp-decal-mat-${st.id}`, scene);
-        const diffTex = new Texture(st.albedoUrl, scene);
+        const diffTex = new Texture(texUrl, scene);
         diffTex.hasAlpha = true;
         dMat.diffuseTexture = diffTex;
         dMat.useAlphaFromDiffuseTexture = true;
@@ -460,48 +689,7 @@ export class BabylonMapStageService {
           dMat.bumpTexture = bumpTex;
         }
         decal.material = dMat;
-        continue;
       }
-
-      // 2. Real 3D .glb Asset Model
-      if (st.modelUrl) {
-        const tpl = GlbModelCache.getOrLoadTemplate(scene, st.modelUrl, () => {
-          if (this.lastState) {
-            this.rebuildStamps(scene, this.lastState.stamps);
-            SceneLightingController.refreshShadowCasters(scene);
-          }
-        });
-        if (tpl) {
-          const inst = GlbModelCache.instantiateClone(
-            scene,
-            tpl,
-            `lw-stamp-node-${st.id}`,
-            2.2 * st.scale,
-            2.2 * st.scale,
-            2.2 * st.scale,
-            true,
-            false,
-          );
-          inst.position.set(st.x, groundY, st.z);
-          inst.rotation.y = st.rotationY;
-          continue;
-        }
-      }
-
-      // 3. Fallback tabletop token disc only if neither modelUrl nor albedoUrl is present
-      const mesh: Mesh = MeshBuilder.CreateCylinder(
-        `lw-stamp-${st.id}`,
-        { height: 0.45, diameter: 1.45 * st.scale, tessellation: 24 },
-        scene,
-      );
-      mesh.position.set(st.x, groundY + 0.25, st.z);
-      mesh.rotation.y = st.rotationY;
-      mesh.receiveShadows = true;
-      mesh.metadata = { lwNodeName: `lw-stamp-${st.id}` };
-
-      const mat = new StandardMaterial(`lw-stamp-mat-${st.id}`, scene);
-      mat.diffuseColor = Color3.FromHexString(st.colorHex || '#49e892');
-      mesh.material = mat;
     }
   }
 
@@ -530,6 +718,9 @@ export class BabylonMapStageService {
   }
 
   dispose(): void {
+    this.stopHoldTimer();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.scene?.dispose();
     this.engine?.dispose();
     this.scene = null;

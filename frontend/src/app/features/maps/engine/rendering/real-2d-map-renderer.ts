@@ -5,6 +5,8 @@ export interface Real2dRenderOptions {
   readonly selectedNodeId?: string;
   readonly gridStepWorld?: number;
   readonly gridMode?: string;
+  readonly floorAlbedoUrl?: string;
+  readonly floorTilingScale?: number;
   readonly ghostX?: number;
   readonly ghostZ?: number;
   readonly ghostLabel?: string;
@@ -12,9 +14,36 @@ export interface Real2dRenderOptions {
   readonly celestialMode?: 'sun' | 'moon';
   readonly celestialAzimuthDeg?: number;
   readonly celestialAltitudeDeg?: number;
+  readonly onImageLoaded?: () => void;
 }
 
 export class Real2dMapRenderer {
+  private static imageCache = new Map<string, HTMLImageElement>();
+  private static loadingUrls = new Set<string>();
+
+  private static getOrLoadImage(url: string, onLoaded?: () => void): HTMLImageElement | null {
+    if (!url) return null;
+    const cached = this.imageCache.get(url);
+    if (cached && cached.complete && cached.naturalWidth > 0) {
+      return cached;
+    }
+    if (!this.loadingUrls.has(url) && typeof Image !== 'undefined') {
+      this.loadingUrls.add(url);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        this.loadingUrls.delete(url);
+        this.imageCache.set(url, img);
+        if (onLoaded) onLoaded();
+      };
+      img.onerror = () => {
+        this.loadingUrls.delete(url);
+      };
+      img.src = url;
+    }
+    return null;
+  }
+
   static renderSceneToCanvas(
     canvas: HTMLCanvasElement,
     state: MapSceneGraphState,
@@ -34,7 +63,7 @@ export class Real2dMapRenderer {
     const toScreenX = (wx: number): number => cx + wx * scale;
     const toScreenY = (wz: number): number => cy - wz * scale;
 
-    // 1. Background bump/height terrain base with Sun/Moon directional tint
+    // 1. Background bump/height terrain base + seamless 2D floor texture tiling
     const isMoon = options.celestialMode === 'moon';
     const grad = ctx.createRadialGradient(cx, cy, 30, cx, cy, Math.max(width, height) * 0.65);
     grad.addColorStop(0, isMoon ? '#0e1d2a' : '#162d21');
@@ -43,7 +72,25 @@ export class Real2dMapRenderer {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    // Compute Sun/Moon shadow projection offset in 2D
+    const floorUrl = options.floorAlbedoUrl || state.floorAlbedoUrl;
+    if (floorUrl) {
+      const floorImg = this.getOrLoadImage(floorUrl, options.onImageLoaded);
+      if (floorImg) {
+        const tiling = Math.max(2, options.floorTilingScale || state.floorTilingScale || 10);
+        const tilePx = Math.max(36, Math.round(width / tiling));
+        ctx.save();
+        for (let y = 0; y < height; y += tilePx) {
+          for (let x = 0; x < width; x += tilePx) {
+            ctx.drawImage(floorImg, x, y, tilePx + 1, tilePx + 1);
+          }
+        }
+        // Subtle directional sun/moon lighting overlay
+        ctx.fillStyle = isMoon ? 'rgba(8, 20, 36, 0.32)' : 'rgba(5, 16, 12, 0.18)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+    }
+
     const azRad = ((options.celestialAzimuthDeg ?? 135) * Math.PI) / 180;
     const altRad = (Math.max(10, options.celestialAltitudeDeg ?? 42) * Math.PI) / 180;
     const shadowLenPx = Math.min(28, (1 / Math.tan(altRad)) * 11);
@@ -53,7 +100,7 @@ export class Real2dMapRenderer {
     // 2. Tactical floor grid (5 ft, 10 ft, Hex, or Off)
     const mode = options.gridMode ?? '5 ft';
     if (mode !== 'Off') {
-      ctx.strokeStyle = 'rgba(73, 232, 146, 0.14)';
+      ctx.strokeStyle = 'rgba(73, 232, 146, 0.16)';
       ctx.lineWidth = 1;
       if (mode === 'Hex') {
         const hexR = 0.92;
@@ -96,29 +143,55 @@ export class Real2dMapRenderer {
 
     // 3. Water splines
     for (const water of state.waterSplines) {
-      if (water.points.length < 2) continue;
+      if (water.points.length === 0) continue;
       ctx.save();
       ctx.strokeStyle = water.colorHex || '#1b6d82';
-      ctx.lineWidth = Math.max(6, water.width * scale * 0.65);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.fillStyle = water.colorHex || '#1b6d82';
+      const wPx = Math.max(8, water.width * scale * 0.75);
+      if (water.points.length === 1) {
+        const sx = toScreenX(water.points[0][0]);
+        const sy = toScreenY(water.points[0][2]);
+        ctx.beginPath();
+        ctx.arc(sx, sy, wPx * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.lineWidth = wPx;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        water.points.forEach((pt, idx) => {
+          const sx = toScreenX(pt[0]);
+          const sy = toScreenY(pt[2]);
+          if (idx === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        });
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 4. Scatter clusters
+    for (const cluster of state.scatterClusters ?? []) {
+      const sx = toScreenX(cluster.x);
+      const sy = toScreenY(cluster.z);
+      const rPx = Math.max(10, cluster.radius * scale * 0.65);
+      ctx.save();
+      ctx.fillStyle = 'rgba(46, 168, 102, 0.28)';
+      ctx.strokeStyle = 'rgba(73, 232, 146, 0.55)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      water.points.forEach((pt, idx) => {
-        const sx = toScreenX(pt[0]);
-        const sy = toScreenY(pt[2]);
-        if (idx === 0) ctx.moveTo(sx, sy);
-        else ctx.lineTo(sx, sy);
-      });
+      ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
       ctx.restore();
     }
 
-    // 4. Cutaway rooms, dungeon walls, and directional Sun/Moon shadows
+    // 5. Cutaway rooms, dungeon walls, doors, and directional Sun/Moon shadows
     for (const wall of state.walls ?? []) {
       if (wall.points.length < 2) continue;
       const isSelected = options.selectedNodeId === wall.id;
+      const closed = wall.drawMode !== 'line' && wall.drawMode !== 'freehand';
 
-      // Cast directional shadow
       ctx.save();
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.lineWidth = Math.max(5, wall.thicknessMeters * scale * 1.15);
@@ -130,12 +203,12 @@ export class Real2dMapRenderer {
         if (idx === 0) ctx.moveTo(sx, sy);
         else ctx.lineTo(sx, sy);
       });
-      if (wall.drawMode !== 'line') ctx.closePath();
+      if (closed) ctx.closePath();
       ctx.stroke();
       ctx.restore();
 
       ctx.save();
-      ctx.fillStyle = 'rgba(26, 36, 32, 0.58)';
+      ctx.fillStyle = 'rgba(26, 36, 32, 0.42)';
       ctx.strokeStyle = isSelected ? '#49e892' : '#96a69d';
       ctx.lineWidth = Math.max(4, wall.thicknessMeters * scale * 0.95);
       ctx.lineJoin = 'round';
@@ -147,29 +220,22 @@ export class Real2dMapRenderer {
         if (idx === 0) ctx.moveTo(sx, sy);
         else ctx.lineTo(sx, sy);
       });
-      if (wall.drawMode !== 'line') {
+      if (closed) {
         ctx.closePath();
         ctx.fill();
       }
       ctx.stroke();
-
-      for (const pt of wall.points) {
-        const sx = toScreenX(pt[0]);
-        const sy = toScreenY(pt[1]);
-        ctx.fillStyle = isSelected ? '#49e892' : '#d9b77a';
-        ctx.fillRect(sx - 3.5, sy - 3.5, 7, 7);
-      }
       ctx.restore();
     }
 
-    // 5. Dynamic Torch & Light Halos
+    // 6. Dynamic Lights & Placement Width Halos
     for (const light of state.lights) {
       const sx = toScreenX(light.x);
       const sy = toScreenY(light.z);
       const radiusPx = Math.max(24, light.range * scale * 0.35);
       const halo = ctx.createRadialGradient(sx, sy, 2, sx, sy, radiusPx);
-      halo.addColorStop(0, 'rgba(255, 198, 109, 0.38)');
-      halo.addColorStop(0.5, 'rgba(255, 152, 68, 0.14)');
+      halo.addColorStop(0, 'rgba(255, 198, 109, 0.42)');
+      halo.addColorStop(0.5, 'rgba(255, 152, 68, 0.16)');
       halo.addColorStop(1, 'rgba(255, 152, 68, 0)');
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -177,43 +243,41 @@ export class Real2dMapRenderer {
       ctx.fill();
     }
 
-    // 6. Props, Bump Stamps & Tokens + directional shadows
+    // 7. Props, Bump Stamps & Tokens
     for (const st of state.stamps) {
-      if (options.hideGmSecrets && st.label.toLowerCase().includes('secret')) {
+      if (options.hideGmSecrets && (st.gmSecretOnly || st.label.toLowerCase().includes('secret'))) {
         continue;
       }
       const sx = toScreenX(st.x);
       const sy = toScreenY(st.z);
-      const r = Math.max(7, 8 * st.scale);
+      const r = Math.max(12, 16 * st.scale);
       const isSelected = options.selectedNodeId === st.id;
+      const stampImgUrl = st.albedoUrl || st.thumbnailUrl;
+      const stampImg = stampImgUrl ? this.getOrLoadImage(stampImgUrl, options.onImageLoaded) : null;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
-      ctx.beginPath();
-      ctx.arc(sx + shadowDx * 0.65, sy + shadowDy * 0.65, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = st.colorHex || '#49e892';
-      ctx.strokeStyle = isSelected ? '#49e892' : '#06140e';
-      ctx.lineWidth = isSelected ? 3 : 1.5;
-
-      ctx.beginPath();
-      if (st.category === 'Token') {
-        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.translate(sx, sy);
+      ctx.rotate(-st.rotationY);
+      if (stampImg) {
+        ctx.drawImage(stampImg, -r, -r, r * 2, r * 2);
+        if (isSelected) {
+          ctx.strokeStyle = '#49e892';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-r, -r, r * 2, r * 2);
+        }
       } else {
-        ctx.roundRect(sx - r, sy - r, r * 2, r * 2, 4);
+        ctx.fillStyle = st.colorHex || '#49e892';
+        ctx.strokeStyle = isSelected ? '#49e892' : '#06140e';
+        ctx.lineWidth = isSelected ? 3 : 1.5;
+        ctx.beginPath();
+        ctx.roundRect(-r * 0.6, -r * 0.6, r * 1.2, r * 1.2, 4);
+        ctx.fill();
+        ctx.stroke();
       }
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = '#e9f8ef';
-      ctx.font = '600 10px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(st.label.slice(0, 18), sx, sy - r - 5);
       ctx.restore();
     }
 
-    // 7. Ghost Asset / Wall Line Preview at Mouse Cursor
+    // 8. Ghost Preview at Mouse Cursor
     if (options.ghostX !== undefined && options.ghostZ !== undefined) {
       const gx = toScreenX(options.ghostX);
       const gy = toScreenY(options.ghostZ);
@@ -223,7 +287,7 @@ export class Real2dMapRenderer {
         const ax = toScreenX(options.wallStartAnchor.x);
         const ay = toScreenY(options.wallStartAnchor.z);
         ctx.strokeStyle = 'rgba(73, 232, 146, 0.85)';
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 5;
         ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(ax, ay);
@@ -231,20 +295,13 @@ export class Real2dMapRenderer {
         ctx.stroke();
       }
 
-      ctx.fillStyle = 'rgba(46, 230, 107, 0.32)';
+      ctx.fillStyle = 'rgba(46, 230, 107, 0.28)';
       ctx.strokeStyle = '#49e892';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(gx - 12, gy - 12, 24, 24, 5);
+      ctx.arc(gx, gy, 12, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-
-      if (options.ghostLabel) {
-        ctx.fillStyle = '#49e892';
-        ctx.font = '700 10px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Ghost: ${options.ghostLabel.slice(0, 20)}`, gx, gy - 16);
-      }
       ctx.restore();
     }
   }
@@ -261,8 +318,8 @@ export class Real2dMapRenderer {
     const wx = (px - canvas.width / 2) / scale;
     const wz = (canvas.height / 2 - py) / scale;
     return {
-      x: Math.round(wx * 10) / 10,
-      z: Math.round(wz * 10) / 10,
+      x: Math.round(wx * 100) / 100,
+      z: Math.round(wz * 100) / 100,
     };
   }
 }

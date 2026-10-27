@@ -37,13 +37,13 @@ import {
 } from '../../shared/ui/public-api';
 import { MapHistoryEngineService } from './application/map-history-engine.service';
 import { MapPngAssetApiService } from './application/map-png-asset-api.service';
-import { MapSceneCommandsService } from './application/map-scene-commands.service';
 import { MapStudioStoreService } from './application/map-studio-store.service';
-import { MapCatalogAssetItem, MapStudioSnapshot } from './application/map-studio.models';
+import { MapStudioSnapshot } from './application/map-studio.models';
 import {
   MapSceneGraphState,
   MapWallSegmentNode,
   WallDrawMode,
+  WallOpeningNode,
 } from './engine/map-scene-contract';
 import { INITIAL_CINTH_SCENE_GRAPH, createBlankSceneGraph } from './engine/map-scene-seed';
 import {
@@ -53,7 +53,10 @@ import {
   DEFAULT_MAP_MATERIALS,
   INITIAL_SELECTED_WALL_NODE,
 } from './engine/map-studio-presets';
-import { BabylonMapStageService } from './engine/rendering/babylon-map-stage.service';
+import {
+  BabylonMapStageService,
+  PickedSceneEntityMeta,
+} from './engine/rendering/babylon-map-stage.service';
 import { Real2dMapRenderer } from './engine/rendering/real-2d-map-renderer';
 import { WallMeshBuilder } from './engine/walls/wall-mesh.builder';
 
@@ -79,7 +82,6 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   @ViewChild('babylonCanvas') private canvasRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('real2dCanvas') private canvas2dRef?: ElementRef<HTMLCanvasElement>;
 
-  private readonly commands = inject(MapSceneCommandsService);
   private readonly pngApi = inject(MapPngAssetApiService);
   readonly store = inject(LoomWeaverStoreService);
   readonly adventureGuide = inject(AdventureGuideService);
@@ -118,63 +120,140 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   readonly pngPipelineBanner = this.pngApi.pngPipelineBanner;
   readonly selectedPngAssetId = signal<string>('obj-4f9776736fb571f1');
   readonly selectedPlacedId = signal<string | null>(null);
+  readonly selectedPlacedKind = signal<'wall' | 'door' | 'object' | 'light' | null>(null);
+  readonly selectedPlacedWallId = signal<string | null>(null);
   readonly materials = signal<readonly LwMapMaterialPreset[]>(DEFAULT_MAP_MATERIALS);
   readonly selectedNode = signal<LwSelectedSceneNode>(INITIAL_SELECTED_WALL_NODE);
 
   readonly floorTilingScale = signal<number>(10);
   readonly wallDrawMode = signal<WallDrawMode>('line');
   readonly wallStartAnchor = signal<{ x: number; z: number } | null>(null);
+  readonly freehandWallPoints = signal<readonly (readonly [number, number])[]>([]);
+
   readonly terrainSculptOp = signal<LwTerrainSculptOp>('raise');
   readonly terrainBrushRadius = signal<number>(4.5);
   readonly terrainBrushDelta = signal<number>(1.4);
+  readonly terrainGradualRate = signal<number>(55);
+
+  readonly doorWallPositionPct = signal<number>(50);
+  readonly doorWidthMeters = signal<number>(2.4);
+  readonly doorHeightMeters = signal<number>(2.6);
+  readonly doorIsOpen = signal<boolean>(false);
 
   readonly celestialMode = signal<LwCelestialBodyMode>('sun');
   readonly celestialAzimuthDeg = signal<number>(135);
   readonly celestialAltitudeDeg = signal<number>(42);
   readonly shadowDarkness = signal<number>(72);
-  readonly customLightKind = signal<LwCustomLightKind>('point');
+
+  readonly customLightKind = signal<LwCustomLightKind>('torch');
   readonly customLightColor = signal<string>('#ffae52');
   readonly customLightRange = signal<number>(25);
-  readonly torchIntensity = signal<number>(115);
+  readonly lightPlacementWidth = signal<number>(2.0);
+  readonly lightHeightMeters = signal<number>(2.4);
+  readonly torchIntensity = signal<number>(125);
+  readonly lightShowFixture = signal<boolean>(true);
 
-  readonly scatterDensity = signal<number>(0);
+  readonly scatterDensity = signal<number>(65);
+  readonly waterWidthMeters = signal<number>(3.0);
   readonly waterFlowSpeed = signal<number>(1.4);
-  readonly activeCatalogAsset = signal<MapCatalogAssetItem | null>(null);
-  readonly activeToolId = signal<string>('stamps');
+  private activeWaterSplineId: string | null = null;
+  private lastScatterPaintPos: { x: number; z: number } | null = null;
+
   readonly selectedSceneKey = signal<string>('scene-forgotten-crypt');
   readonly sceneGraph = signal<MapSceneGraphState>(createBlankSceneGraph('The Forgotten Crypt'));
 
+  private isWallAsset(a: LwMapPngAssetItem): boolean {
+    const n = a.name.toLowerCase();
+    const c = a.category.toLowerCase();
+    return (
+      !a.isFloor &&
+      (n.includes('wall') ||
+        n.includes('brick') ||
+        n.includes('fence') ||
+        n.includes('palisade') ||
+        n.includes('barrier') ||
+        n.includes('rampart') ||
+        n.includes('battlement') ||
+        n.includes('buttress') ||
+        n.includes('modular') ||
+        n.includes('dungeon tile') ||
+        c.includes('wall'))
+    );
+  }
+
+  private isDoorAsset(a: LwMapPngAssetItem): boolean {
+    const n = a.name.toLowerCase();
+    return (
+      !a.isFloor &&
+      Boolean(a.modelUrl) &&
+      (n.includes('door') ||
+        n.includes('gate') ||
+        n.includes('archway') ||
+        n.includes('entry') ||
+        n.includes('passage') ||
+        n.includes('portal') ||
+        n.includes('portcullis')) &&
+      !n.includes('archer')
+    );
+  }
+
   readonly displayedAssets = computed<readonly LwMapPngAssetItem[]>(() => {
-    const tool = this.activeDockToolId();
-    if (tool === 'floor-bump') {
-      return this.pngApi.bumpHeightAssets2d().filter((a) => a.isFloor);
+    const rawTool = this.activeDockToolId();
+    const placedKind = this.selectedPlacedKind();
+    const effectiveTool =
+      rawTool === 'select' && placedKind
+        ? placedKind === 'wall'
+          ? 'wall'
+          : placedKind === 'door'
+            ? 'door'
+            : 'objects'
+        : rawTool;
+
+    const all3d = this.pngApi.pngAssets3d().filter((a) => !a.isFloor);
+    const all2d = this.pngApi.bumpHeightAssets2d();
+
+    if (effectiveTool === 'floor-bump') {
+      return all2d.filter((a) => a.isFloor);
     }
-    if (this.dimensionMode() === '2d') return this.pngApi.bumpHeightAssets2d();
-    const models = this.pngApi.pngAssets3d().filter((a) => !a.isFloor);
-    const stamps2d = this.pngApi.bumpHeightAssets2d();
-    return [...models, ...stamps2d];
+    if (effectiveTool === 'wall' || effectiveTool === 'room') {
+      const walls3d = all3d.filter((a) => this.isWallAsset(a));
+      const walls2d = all2d.filter((a) => this.isWallAsset(a));
+      return [...walls3d, ...walls2d];
+    }
+    if (effectiveTool === 'door') {
+      return all3d.filter((a) => this.isDoorAsset(a));
+    }
+    if (effectiveTool === 'scatter') {
+      return all3d.filter(
+        (a) =>
+          a.category === 'Nature' ||
+          a.category === 'Rocks & Cliffs' ||
+          a.category === 'Props',
+      );
+    }
+    if (this.dimensionMode() === '2d') {
+      return all2d.filter((a) => !a.isFloor);
+    }
+    return [...all3d, ...all2d.filter((a) => !a.isFloor)];
   });
 
-  readonly displayedCategories = computed<readonly string[]>(() =>
-    this.dimensionMode() === '2d'
-      ? ['All', 'Flooring (Bump/Height)', 'Walls & Cliffs (Bump/Height)', 'Stamps & Props (Bump/Height)']
-      : [
-          'All',
-          'Architecture',
-          'Furniture',
-          'Props',
-          'Nature',
-          'Rocks & Cliffs',
-          'Lighting',
-          'Tokens',
-          'Flooring (Bump/Height)',
-          'Stamps & Props (Bump/Height)',
-        ],
-  );
+  readonly displayedCategories = computed<readonly string[]>(() => {
+    const list = this.displayedAssets();
+    const cats = new Set<string>(['All']);
+    for (const a of list) {
+      if (a.category) cats.add(a.category);
+    }
+    return Array.from(cats);
+  });
 
-  readonly show3dCanvas = computed(() => this.dimensionMode() === '3d' && this.cameraView() !== 'real-2d');
+  readonly show3dCanvas = computed(
+    () => this.dimensionMode() === '3d' && this.cameraView() !== 'real-2d',
+  );
   readonly show2dCanvas = computed(
-    () => this.dimensionMode() === '2d' || this.cameraView() === 'real-2d' || this.cameraView() === 'split-2d-3d',
+    () =>
+      this.dimensionMode() === '2d' ||
+      this.cameraView() === 'real-2d' ||
+      this.cameraView() === 'split-2d-3d',
   );
 
   @HostListener('window:keydown.escape')
@@ -195,15 +274,19 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   }
 
   cancelActivePlacement(): void {
-    if (this.wallStartAnchor()) {
+    if (this.wallStartAnchor() || this.freehandWallPoints().length > 0) {
       this.wallStartAnchor.set(null);
+      this.freehandWallPoints.set([]);
       this.syncGhostCursorToStage();
-      this.pngPipelineBanner.set('Canceled wall line placement.');
+      this.pngPipelineBanner.set('Canceled wall placement.');
       return;
     }
     this.selectedPlacedId.set(null);
+    this.selectedPlacedKind.set(null);
+    this.selectedPlacedWallId.set(null);
     this.stage.focusGizmoAt(null);
     this.activeDockToolId.set('select');
+    this.syncSurfaceLock();
     this.syncGhostCursorToStage();
   }
 
@@ -214,14 +297,26 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         this.stage.mountCanvas(
           canvas,
           this.sceneGraph(),
-          (x, z, pickedName) => this.applyCanvasStrokeAt(x, z, pickedName),
+          (x, z, pickedMeta) => this.applyCanvasStrokeAt(x, z, pickedMeta),
           (hx, hz) => this.onCanvasHoverAt(hx, hz),
+          (dx, dz, holdTicks) => this.onSurfaceDragAt(dx, dz, holdTicks),
+          (rx, rz) => this.onSurfaceReleaseAt(rx, rz),
         );
+        this.syncSurfaceLock();
         this.syncGhostCursorToStage();
         this.pushCelestialLightToStage();
       }
       this.render2dViewport();
     }, 35);
+  }
+
+  private syncSurfaceLock(): void {
+    const tool = this.activeDockToolId();
+    const isFreehandWall =
+      (tool === 'wall' || tool === 'room') && this.wallDrawMode() === 'freehand';
+    const shouldLockSurface =
+      tool === 'terrain' || tool === 'water' || tool === 'scatter' || isFreehandWall;
+    this.stage.setSurfaceDrawingLock(shouldLockSurface);
   }
 
   onCreateMapFromLanding(intent: LwCreateMapLaunchIntent): void {
@@ -235,31 +330,27 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.dimensionMode.set(intent.dimensionMode);
     this.cameraView.set(intent.dimensionMode === '2d' ? 'real-2d' : 'isometric');
 
-    // Start with a completely blank scene and open the left tool dock
+    const starterFloor = this.pngApi
+      .bumpHeightAssets2d()
+      .find((f) => f.id === intent.starterFloorBumpId && f.isFloor);
+
     this.stage.resetTerrainElevations();
-    this.sceneGraph.set(createBlankSceneGraph(intent.name));
+    const blank = createBlankSceneGraph(intent.name);
+    this.sceneGraph.set({
+      ...blank,
+      floorAlbedoUrl: starterFloor?.albedoUrl,
+      floorNormalUrl: starterFloor?.normalUrl,
+      floorTilingScale: this.floorTilingScale(),
+    });
     this.selectedPlacedId.set(null);
+    this.selectedPlacedKind.set(null);
     this.wallStartAnchor.set(null);
+    this.freehandWallPoints.set([]);
     this.activeDockToolId.set('select');
     this.leftDockCollapsed.set(false);
     this.rightDockCollapsed.set(true);
     this.showLandingHub.set(false);
     this.mountStudioViewports();
-
-    const starterFloor = this.pngApi
-      .bumpHeightAssets2d()
-      .find((f) => f.id === intent.starterFloorBumpId && f.isFloor);
-    if (starterFloor?.albedoUrl && starterFloor.normalUrl) {
-      setTimeout(
-        () =>
-          this.stage.applyFloorBumpMap(
-            starterFloor.albedoUrl!,
-            starterFloor.normalUrl!,
-            this.floorTilingScale(),
-          ),
-        90,
-      );
-    }
   }
 
   onOpenExistingMapFromLanding(summary: LwExistingMapSummary): void {
@@ -275,7 +366,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         : createBlankSceneGraph(summary.name, summary.sceneKey),
     );
     this.selectedPlacedId.set(null);
+    this.selectedPlacedKind.set(null);
     this.wallStartAnchor.set(null);
+    this.freehandWallPoints.set([]);
     this.activeDockToolId.set('select');
     this.leftDockCollapsed.set(false);
     this.rightDockCollapsed.set(true);
@@ -293,58 +386,61 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.activeDockToolId.set(dockToolId);
     this.rightDockCollapsed.set(false);
     this.wallStartAnchor.set(null);
+    this.freehandWallPoints.set([]);
+    this.activeWaterSplineId = null;
+
     if (dockToolId !== 'select') {
       this.selectedPlacedId.set(null);
+      this.selectedPlacedKind.set(null);
+      this.selectedPlacedWallId.set(null);
       this.stage.focusGizmoAt(null);
     }
-    if (dockToolId === 'room') this.wallDrawMode.set('room');
-    else if (dockToolId === 'wall') this.wallDrawMode.set('line');
+    if (dockToolId === 'room' && this.wallDrawMode() === 'line') {
+      this.wallDrawMode.set('room');
+    } else if (dockToolId === 'wall') {
+      this.wallDrawMode.set('line');
+    }
 
-    // Equip default asset matching the tool if needed
     if (dockToolId === 'floor-bump') {
       const firstFloor = this.pngApi.bumpHeightAssets2d().find((a) => a.isFloor);
       if (firstFloor) this.equipAssetOnNode(firstFloor);
     } else if (dockToolId === 'wall' || dockToolId === 'room') {
       const firstWall =
-        this.pngApi.pngAssets3d().find((a) => a.name.toLowerCase().includes('wall')) ??
+        this.pngApi.pngAssets3d().find((a) => this.isWallAsset(a)) ??
         this.pngApi.pngAssets3d()[0];
       if (firstWall) this.equipAssetOnNode(firstWall);
-    } else if (dockToolId === 'objects' && this.selectedNode().kind === 'wall') {
-      const firstProp =
-        this.pngApi.pngAssets3d().find((a) => !a.name.toLowerCase().includes('wall')) ??
+    } else if (dockToolId === 'door') {
+      const firstDoor =
+        this.pngApi.pngAssets3d().find((a) => this.isDoorAsset(a)) ??
         this.pngApi.pngAssets3d()[0];
-      if (firstProp) this.equipAssetOnNode(firstProp);
+      if (firstDoor) this.equipAssetOnNode(firstDoor);
+    } else if (dockToolId === 'objects') {
+      const curId = this.selectedNode().id;
+      const curAsset = this.pngApi.pngAssets3d().find((a) => a.id === curId);
+      if (!curAsset || this.isWallAsset(curAsset) || this.isDoorAsset(curAsset)) {
+        const firstProp =
+          this.pngApi
+            .pngAssets3d()
+            .find((a) => !a.isFloor && !this.isWallAsset(a) && !this.isDoorAsset(a)) ??
+          this.pngApi.pngAssets3d()[0];
+        if (firstProp) this.equipAssetOnNode(firstProp);
+      }
     }
 
-    const mapToEngineTool: Record<string, string> = {
-      select: 'stamps',
-      'floor-bump': 'terrain',
-      terrain: 'terrain',
-      wall: 'walls',
-      room: 'walls',
-      door: 'walls',
-      objects: 'stamps',
-      lighting: 'lighting',
-      'sun-moon': 'lighting',
-      water: 'water',
-      scatter: 'scatter',
-      annotate: 'stamps',
-    };
-    this.activeToolId.set(mapToEngineTool[dockToolId] ?? 'stamps');
+    this.syncSurfaceLock();
     this.pushCelestialLightToStage();
     this.syncGhostCursorToStage();
   }
 
   private equipAssetOnNode(asset: LwMapPngAssetItem): void {
     this.selectedPngAssetId.set(asset.id);
-    const isWall =
-      asset.category.toLowerCase().includes('wall') ||
-      asset.name.toLowerCase().includes('wall');
+    const isWall = this.isWallAsset(asset);
+    const isDoor = this.isDoorAsset(asset);
     this.selectedNode.update((cur) => ({
       ...cur,
       id: asset.id,
       name: asset.name,
-      kind: isWall ? 'wall' : 'prop',
+      kind: isDoor ? 'door' : isWall ? 'wall' : 'prop',
       subtitle: asset.modelUrl
         ? `3D .GLB · ${asset.category}`
         : asset.isFloor
@@ -362,26 +458,104 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.equipAssetOnNode(asset);
 
     if (asset.isFloor && asset.albedoUrl && asset.normalUrl) {
-      this.stage.applyFloorBumpMap(asset.albedoUrl, asset.normalUrl, this.floorTilingScale());
-      this.pngPipelineBanner.set(`Applied Seamless Flooring: ${asset.name}`);
-      this.syncGhostCursorToStage();
+      this.applyFloorTextureToScene(asset.name, asset.albedoUrl, asset.normalUrl);
       return;
     }
 
-    if (this.activeDockToolId() === 'select' || this.activeDockToolId() === 'floor-bump') {
-      const isWall =
-        asset.category.toLowerCase().includes('wall') ||
-        asset.name.toLowerCase().includes('wall');
-      this.activeDockToolId.set(isWall ? 'wall' : 'objects');
+    // If a placed Wall, Door, or Object is currently selected, live-swap its 3D asset!
+    const placedId = this.selectedPlacedId();
+    const placedKind = this.selectedPlacedKind();
+    if (placedId && placedKind === 'wall') {
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        revision: cur.revision + 1,
+        walls: (cur.walls ?? []).map((w) =>
+          w.id === placedId
+            ? {
+                ...w,
+                name: asset.name,
+                modelUrl: asset.modelUrl || undefined,
+                albedoUrl: asset.albedoUrl,
+                normalUrl: asset.normalUrl,
+                thumbnailUrl: asset.thumbnailUrl,
+              }
+            : w,
+        ),
+      }));
+      this.pngPipelineBanner.set(`Updated Wall Texture/Model -> ${asset.name}`);
+      return;
     }
+    if (placedId && placedKind === 'door') {
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        revision: cur.revision + 1,
+        walls: (cur.walls ?? []).map((w) => ({
+          ...w,
+          openings: w.openings.map((op) =>
+            op.id === placedId
+              ? {
+                  ...op,
+                  name: asset.name,
+                  modelUrl: asset.modelUrl || undefined,
+                  thumbnailUrl: asset.thumbnailUrl,
+                }
+              : op,
+          ),
+        })),
+      }));
+      this.pngPipelineBanner.set(`Updated Door 3D Model -> ${asset.name}`);
+      return;
+    }
+    if (placedId && placedKind === 'object') {
+      const isDecal = Boolean(asset.albedoUrl && !asset.modelUrl && !asset.isFloor);
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        revision: cur.revision + 1,
+        stamps: cur.stamps.map((s) =>
+          s.id === placedId
+            ? {
+                ...s,
+                label: asset.name,
+                category: isDecal ? 'DecalStamp' : 'Prop',
+                modelUrl: asset.modelUrl || undefined,
+                albedoUrl: isDecal ? asset.albedoUrl : undefined,
+                normalUrl: isDecal ? asset.normalUrl : undefined,
+                thumbnailUrl: asset.thumbnailUrl,
+              }
+            : s,
+        ),
+      }));
+      this.pngPipelineBanner.set(`Updated Object Model -> ${asset.name}`);
+      return;
+    }
+
+    this.syncGhostCursorToStage();
+  }
+
+  private applyFloorTextureToScene(name: string, albedoUrl: string, normalUrl: string): void {
+    this.stage.applyFloorBumpMap(albedoUrl, normalUrl, this.floorTilingScale());
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      floorAlbedoUrl: albedoUrl,
+      floorNormalUrl: normalUrl,
+      floorTilingScale: this.floorTilingScale(),
+    }));
+    this.pngPipelineBanner.set(`Applied Seamless Flooring: ${name}`);
     this.syncGhostCursorToStage();
   }
 
   onFloorTilingChange(scale: number): void {
     this.floorTilingScale.set(scale);
     const node = this.selectedNode();
-    if (node.albedoUrl && node.normalUrl) {
-      this.stage.applyFloorBumpMap(node.albedoUrl, node.normalUrl, scale);
+    const albedo = node.albedoUrl || this.sceneGraph().floorAlbedoUrl;
+    const normal = node.normalUrl || this.sceneGraph().floorNormalUrl;
+    if (albedo && normal) {
+      this.stage.applyFloorBumpMap(albedo, normal, scale);
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        floorTilingScale: scale,
+      }));
     }
   }
 
@@ -390,15 +564,32 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     const node = this.selectedNode();
     const isDecalStamp = Boolean(node.albedoUrl && !node.modelUrl && !node.isFloor);
     const kind =
-      tool === 'wall' || tool === 'room' || tool === 'door'
+      tool === 'wall' || tool === 'room'
         ? 'wall'
-        : tool === 'terrain'
-          ? 'terrain'
-          : tool === 'lighting' || tool === 'sun-moon'
-            ? 'light'
-            : isDecalStamp
-              ? 'decal'
-              : 'prop';
+        : tool === 'door'
+          ? 'door'
+          : tool === 'terrain'
+            ? 'terrain'
+            : tool === 'water'
+              ? 'water'
+              : tool === 'scatter'
+                ? 'scatter'
+                : tool === 'lighting'
+                  ? 'light'
+                  : isDecalStamp
+                    ? 'decal'
+                    : 'prop';
+    const scale =
+      tool === 'terrain' || tool === 'scatter'
+        ? this.terrainBrushRadius()
+        : tool === 'water'
+          ? this.waterWidthMeters() * 0.5
+          : tool === 'lighting'
+            ? this.lightPlacementWidth()
+            : tool === 'door'
+              ? this.doorWidthMeters()
+              : node.scale;
+
     this.stage.setGhostConfig(
       {
         enabled: tool !== 'select' && tool !== 'floor-bump' && tool !== 'sun-moon',
@@ -407,11 +598,14 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         modelUrl: node.modelUrl,
         albedoUrl: node.albedoUrl,
         normalUrl: node.normalUrl,
-        scale: tool === 'terrain' ? this.terrainBrushRadius() : node.scale,
+        thumbnailUrl: node.thumbnailUrl,
+        scale,
+        offsetY: node.elevationY,
         rotationRad: (node.rotationDeg * Math.PI) / 180,
-        heightMeters: node.heightSquares * 1.5,
+        heightMeters: tool === 'door' ? this.doorHeightMeters() : node.heightSquares * 1.5,
         thicknessMeters: 0.45 * node.thickness,
         wallDrawMode: this.wallDrawMode(),
+        freehandPoints: this.freehandWallPoints(),
       },
       this.wallStartAnchor(),
     );
@@ -428,41 +622,259 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     if (this.show2dCanvas()) this.render2dViewport(hx, hz);
   }
 
-  applyCanvasStrokeAt(x: number, z: number, pickedMeshName?: string): void {
+  onSurfaceDragAt(x: number, z: number, holdTicks: number): void {
+    const tool = this.activeDockToolId();
+    if (tool === 'terrain') {
+      const rateFactor = this.terrainGradualRate() / 100;
+      const stepDelta = Math.max(0.06, this.terrainBrushDelta() * rateFactor * 0.22);
+      const expandedRadius =
+        this.terrainBrushRadius() * (1 + Math.min(1.6, holdTicks * 0.04 * rateFactor));
+      this.stage.sculptTerrainAt(x, z, expandedRadius, stepDelta, this.terrainSculptOp());
+      return;
+    }
+
+    if (tool === 'water') {
+      if (!this.activeWaterSplineId) {
+        this.activeWaterSplineId = `water-${Date.now()}`;
+        this.commitSceneUpdate((cur) => ({
+          ...cur,
+          revision: cur.revision + 1,
+          waterSplines: [
+            ...cur.waterSplines,
+            {
+              id: this.activeWaterSplineId!,
+              name: 'River Stream',
+              width: this.waterWidthMeters(),
+              flowSpeed: this.waterFlowSpeed(),
+              colorHex: '#1b6d82',
+              points: [[x, 0.09, z]],
+            },
+          ],
+        }));
+        return;
+      }
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        waterSplines: cur.waterSplines.map((ws) => {
+          if (ws.id !== this.activeWaterSplineId) return ws;
+          const last = ws.points[ws.points.length - 1];
+          if (last && Math.hypot(x - last[0], z - last[2]) < 0.45) return ws;
+          return { ...ws, points: [...ws.points, [x, 0.09, z]] };
+        }),
+      }));
+      return;
+    }
+
+    if (tool === 'scatter') {
+      if (
+        this.lastScatterPaintPos &&
+        Math.hypot(x - this.lastScatterPaintPos.x, z - this.lastScatterPaintPos.z) < 1.35
+      ) {
+        return;
+      }
+      this.lastScatterPaintPos = { x, z };
+      const node = this.selectedNode();
+      this.commitSceneUpdate((cur) => ({
+        ...cur,
+        revision: cur.revision + 1,
+        scatterClusters: [
+          ...(cur.scatterClusters ?? []),
+          {
+            id: `scat-${Date.now()}-${(cur.scatterClusters ?? []).length}`,
+            x,
+            z,
+            radius: this.terrainBrushRadius(),
+            density: this.scatterDensity(),
+            seed: Math.round(Math.abs(x * 137 + z * 293)) + cur.revision * 17,
+            modelUrl: node.modelUrl,
+            label: node.name,
+          },
+        ],
+      }));
+      return;
+    }
+
+    if ((tool === 'wall' || tool === 'room') && this.wallDrawMode() === 'freehand') {
+      const pts = this.freehandWallPoints();
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(x - last[0], z - last[1]) >= 0.65) {
+        this.freehandWallPoints.set([...pts, [x, z]]);
+        this.syncGhostCursorToStage();
+      }
+    }
+  }
+
+  onSurfaceReleaseAt(x: number, z: number): void {
+    this.activeWaterSplineId = null;
+    this.lastScatterPaintPos = null;
+    const tool = this.activeDockToolId();
+    if ((tool === 'wall' || tool === 'room') && this.wallDrawMode() === 'freehand') {
+      const pts = this.freehandWallPoints();
+      if (pts.length >= 2) {
+        const node = this.selectedNode();
+        const newWall: MapWallSegmentNode = {
+          id: `wall-${this.sceneGraph().revision + 1}`,
+          name: node.name,
+          drawMode: 'freehand',
+          material: 'Crypt Ashlar Stone',
+          modelUrl: node.modelUrl,
+          albedoUrl: node.albedoUrl,
+          normalUrl: node.normalUrl,
+          thumbnailUrl: node.thumbnailUrl,
+          heightMeters: node.heightSquares * 1.5,
+          thicknessMeters: 0.45 * node.thickness,
+          perspective: 'auto',
+          projection: 'inward',
+          hasCornerPosts: false,
+          levelIndex: 0,
+          points: pts,
+          openings: [],
+        };
+        this.freehandWallPoints.set([]);
+        this.recordHistoryBeforeEdit('Draw Freehand 3D Wall');
+        this.commitSceneUpdate((cur) => ({
+          ...cur,
+          revision: cur.revision + 1,
+          walls: [...(cur.walls ?? []), newWall],
+        }));
+        this.syncGhostCursorToStage();
+      } else {
+        this.freehandWallPoints.set([]);
+      }
+    }
+  }
+
+  private selectPlacedEntity(meta: PickedSceneEntityMeta, fallbackX: number, fallbackZ: number): boolean {
+    const kind = meta.lwKind;
+    const id = meta.lwEntityId;
+    if (!kind || !id) return false;
+
+    const state = this.sceneGraph();
+    this.selectedPlacedId.set(id);
+    this.selectedPlacedKind.set(kind);
+    this.selectedPlacedWallId.set(meta.lwWallId ?? null);
+    this.rightDockCollapsed.set(false);
+
+    if (kind === 'wall') {
+      const wall = (state.walls ?? []).find((w) => w.id === id);
+      if (wall) {
+        const p0 = wall.points[0] ?? [fallbackX, fallbackZ];
+        this.selectedNode.update((cur) => ({
+          ...cur,
+          id: wall.id,
+          name: wall.name,
+          kind: 'wall',
+          subtitle: `3D Wall · ${Math.round(wall.heightMeters / 0.3048)} ft`,
+          thumbnailUrl: wall.thumbnailUrl || cur.thumbnailUrl,
+          modelUrl: wall.modelUrl,
+          albedoUrl: wall.albedoUrl,
+          normalUrl: wall.normalUrl,
+          heightSquares: Math.max(1, Math.round(wall.heightMeters / 1.5)),
+          thickness: Math.round((wall.thicknessMeters / 0.45) * 100) / 100,
+          gridX: p0[0],
+          gridZ: p0[1],
+        }));
+        this.stage.focusGizmoAt(p0[0], 0.1, p0[1]);
+        return true;
+      }
+    }
+
+    if (kind === 'door') {
+      const parentWall = (state.walls ?? []).find((w) =>
+        w.openings.some((op) => op.id === id),
+      );
+      const op = parentWall?.openings.find((o) => o.id === id);
+      if (parentWall && op) {
+        this.selectedPlacedWallId.set(parentWall.id);
+        this.doorWallPositionPct.set(Math.round(op.t * 100));
+        this.doorWidthMeters.set(op.widthMeters);
+        this.doorHeightMeters.set(op.heightMeters ?? 2.6);
+        this.doorIsOpen.set(op.isOpen);
+        this.selectedNode.update((cur) => ({
+          ...cur,
+          id: op.id,
+          name: op.name || 'Gothic Arch Door',
+          kind: 'door',
+          subtitle: `Wall Cutout Door · ${op.widthMeters.toFixed(1)}m`,
+          thumbnailUrl: op.thumbnailUrl || '/assets/previews-png/obj-89c62a2b01238531.png',
+          modelUrl: op.modelUrl || '/assets/object-library/models/obj-89c62a2b01238531.glb',
+        }));
+        this.stage.focusGizmoAt(fallbackX, 0.1, fallbackZ);
+        return true;
+      }
+    }
+
+    if (kind === 'object') {
+      const st = state.stamps.find((s) => s.id === id);
+      if (st) {
+        this.selectedNode.update((cur) => ({
+          ...cur,
+          id: st.id,
+          name: st.label,
+          kind: 'prop',
+          subtitle: st.modelUrl ? 'Placed 3D .GLB Object' : 'Placed 2D Floor Stamp',
+          thumbnailUrl: st.thumbnailUrl || st.albedoUrl || cur.thumbnailUrl,
+          modelUrl: st.modelUrl,
+          albedoUrl: st.albedoUrl,
+          normalUrl: st.normalUrl,
+          gridX: st.x,
+          gridZ: st.z,
+          elevationY: st.offsetY ?? 0,
+          scale: st.scale,
+          scaleX: st.scaleX ?? 1,
+          scaleY: st.scaleY ?? 1,
+          scaleZ: st.scaleZ ?? 1,
+          rotationDeg: Math.round((st.rotationY * 180) / Math.PI),
+          tiltDeg: st.tiltX ?? 0,
+          gmSecretOnly: Boolean(st.gmSecretOnly),
+        }));
+        this.stage.focusGizmoAt(st.x, (st.offsetY ?? 0) + 0.1, st.z);
+        return true;
+      }
+    }
+
+    if (kind === 'light') {
+      const lt = state.lights.find((l) => l.id === id);
+      if (lt) {
+        this.customLightKind.set(lt.kind ?? 'torch');
+        this.customLightColor.set(lt.colorHex);
+        this.customLightRange.set(lt.range);
+        this.lightPlacementWidth.set(lt.widthMeters ?? 2.0);
+        this.lightHeightMeters.set(lt.y);
+        this.torchIntensity.set(Math.round(lt.intensity * 100));
+        this.lightShowFixture.set(lt.showFixture !== false);
+        this.stage.focusGizmoAt(lt.x, 0.1, lt.z);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  applyCanvasStrokeAt(x: number, z: number, pickedMeta?: PickedSceneEntityMeta): void {
     const dockTool = this.activeDockToolId();
-    const px = this.snapEnabled() ? Math.round(x * 2) / 2 : x;
-    const pz = this.snapEnabled() ? Math.round(z * 2) / 2 : z;
 
     if (dockTool === 'select') {
-      if (pickedMeshName && pickedMeshName !== 'lw-terrain-ground') {
-        this.selectedPlacedId.set(pickedMeshName);
-        this.selectedNode.update((cur) => ({ ...cur, gridX: px, gridZ: pz }));
-        this.stage.focusGizmoAt(px, 0.1, pz);
-      } else {
-        this.selectedPlacedId.set(null);
-        this.stage.focusGizmoAt(null);
+      if (pickedMeta && this.selectPlacedEntity(pickedMeta, x, z)) {
+        return;
       }
+      this.selectedPlacedId.set(null);
+      this.selectedPlacedKind.set(null);
+      this.selectedPlacedWallId.set(null);
+      this.stage.focusGizmoAt(null);
+      return;
+    }
+
+    if (dockTool === 'terrain' || dockTool === 'water' || dockTool === 'scatter') {
+      // Handled continuously by onSurfaceDragAt
       return;
     }
 
     if (dockTool === 'floor-bump') {
       const node = this.selectedNode();
       if (node.albedoUrl && node.normalUrl) {
-        this.stage.applyFloorBumpMap(node.albedoUrl, node.normalUrl, this.floorTilingScale());
+        this.applyFloorTextureToScene(node.name, node.albedoUrl, node.normalUrl);
       }
-      return;
-    }
-
-    this.selectedNode.update((cur) => ({ ...cur, gridX: px, gridZ: pz }));
-
-    if (dockTool === 'terrain') {
-      this.stage.sculptTerrainAt(
-        x,
-        z,
-        this.terrainBrushRadius(),
-        this.terrainBrushDelta(),
-        this.terrainSculptOp(),
-      );
       return;
     }
 
@@ -471,8 +883,8 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       this.celestialAltitudeDeg.set(
         Math.max(10, Math.min(86, Math.round(85 - Math.min(20, Math.hypot(x, z)) * 3.4))),
       );
-      // Lock the Sun/Moon at the clicked location, release mouse movement, and hide the sky orb
       this.activeDockToolId.set('select');
+      this.syncSurfaceLock();
       this.pushCelestialLightToStage();
       this.syncGhostCursorToStage();
       const bodyLabel = this.celestialMode() === 'sun' ? 'Sun' : 'Moon';
@@ -483,21 +895,29 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (dockTool === 'lighting') {
-      this.onSpawnCustomLightAt(px, pz);
+      this.onSpawnCustomLightAt(x, z);
       return;
     }
 
-    if (dockTool === 'wall' || dockTool === 'room' || dockTool === 'door') {
+    if (dockTool === 'door') {
+      this.placeDoorCutoutOnClosestWall(x, z);
+      return;
+    }
+
+    if (dockTool === 'wall' || dockTool === 'room') {
+      if (this.wallDrawMode() === 'freehand') {
+        return;
+      }
       const anchor = this.wallStartAnchor();
       if (!anchor) {
-        this.wallStartAnchor.set({ x: px, z: pz });
+        this.wallStartAnchor.set({ x, z });
         this.syncGhostCursorToStage();
         return;
       }
-      if (Math.hypot(px - anchor.x, pz - anchor.z) < 0.25) {
+      if (Math.hypot(x - anchor.x, z - anchor.z) < 0.25) {
         return;
       }
-      const pts = WallMeshBuilder.buildShapePoints(this.wallDrawMode(), anchor.x, anchor.z, px, pz);
+      const pts = WallMeshBuilder.buildShapePoints(this.wallDrawMode(), anchor.x, anchor.z, x, z);
       const node = this.selectedNode();
       const newWall: MapWallSegmentNode = {
         id: `wall-${this.sceneGraph().revision + 1}`,
@@ -505,6 +925,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         drawMode: this.wallDrawMode(),
         material: 'Crypt Ashlar Stone',
         modelUrl: node.modelUrl,
+        albedoUrl: node.albedoUrl,
+        normalUrl: node.normalUrl,
+        thumbnailUrl: node.thumbnailUrl,
         heightMeters: node.heightSquares * 1.5,
         thicknessMeters: 0.45 * node.thickness,
         perspective: 'auto',
@@ -526,27 +949,53 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (dockTool === 'objects' || dockTool === 'annotate') {
-      this.placeStampAt(px, pz);
+      this.placeStampAt(x, z);
+    }
+  }
+
+  private placeDoorCutoutOnClosestWall(x: number, z: number): void {
+    const walls = this.sceneGraph().walls ?? [];
+    const hit = WallMeshBuilder.findClosestWallAttachment(walls, x, z, 6.0);
+    if (!hit) {
+      this.pngPipelineBanner.set('Move cursor near an existing wall to attach and cut a Door.');
       return;
     }
+    const node = this.selectedNode();
+    const doorId = `door-${this.sceneGraph().revision + 1}`;
+    const newOpening: WallOpeningNode = {
+      id: doorId,
+      type: 'door',
+      name: node.name,
+      modelUrl: node.modelUrl || '/assets/object-library/models/obj-89c62a2b01238531.glb',
+      thumbnailUrl: node.thumbnailUrl || '/assets/previews-png/obj-89c62a2b01238531.png',
+      t: hit.t,
+      widthMeters: this.doorWidthMeters(),
+      heightMeters: this.doorHeightMeters(),
+      isOpen: this.doorIsOpen(),
+      isSecret: false,
+      isRevealedToPlayers: true,
+    };
 
-    this.recordHistoryBeforeEdit(`Tool [${dockTool}] at (${px}, ${pz})`);
-    this.commitSceneUpdate(
-      (cur) =>
-        this.commands.applyToolStroke(
-          cur,
-          this.activeToolId(),
-          px,
-          pz,
-          this.terrainBrushRadius(),
-          this.activeCatalogAsset(),
-        ).nextGraph,
-    );
+    this.recordHistoryBeforeEdit(`Cut Door (${node.name}) into Wall`);
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      walls: (cur.walls ?? []).map((w) =>
+        w.id === hit.wallId ? { ...w, openings: [...w.openings, newOpening] } : w,
+      ),
+    }));
+    this.selectedPlacedId.set(doorId);
+    this.selectedPlacedKind.set('door');
+    this.selectedPlacedWallId.set(hit.wallId);
+    this.doorWallPositionPct.set(Math.round(hit.t * 100));
+    this.stage.focusGizmoAt(hit.x, 0.1, hit.z);
+    this.pngPipelineBanner.set(`Cut ${node.name} into wall. Adjust size or position in right panel.`);
   }
 
   private placeStampAt(x: number, z: number): void {
     const node = this.selectedNode();
     const isDecal = Boolean(node.albedoUrl && !node.modelUrl && !node.isFloor);
+    const stampId = `st-${this.sceneGraph().revision + 1}`;
     this.recordHistoryBeforeEdit(`Place -> ${node.name}`);
     this.commitSceneUpdate((cur) => ({
       ...cur,
@@ -554,55 +1003,145 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       stamps: [
         ...cur.stamps,
         {
-          id: `st-${cur.revision + 1}`,
+          id: stampId,
           label: node.name,
           category: isDecal ? 'DecalStamp' : 'Prop',
           modelUrl: node.modelUrl,
           albedoUrl: isDecal ? node.albedoUrl : undefined,
           normalUrl: isDecal ? node.normalUrl : undefined,
+          thumbnailUrl: node.thumbnailUrl,
           x,
           z,
+          offsetY: node.elevationY,
           scale: node.scale,
+          scaleX: node.scaleX ?? 1,
+          scaleY: node.scaleY ?? 1,
+          scaleZ: node.scaleZ ?? 1,
           rotationY: (node.rotationDeg * Math.PI) / 180,
+          tiltX: node.tiltDeg ?? 0,
           colorHex: '#56b886',
+          gmSecretOnly: node.gmSecretOnly,
         },
       ],
     }));
+    this.selectedPlacedId.set(stampId);
+    this.selectedPlacedKind.set('object');
+    this.selectedNode.update((cur) => ({ ...cur, gridX: x, gridZ: z }));
+    this.stage.focusGizmoAt(x, node.elevationY + 0.1, z);
   }
 
   onDeleteSelectedPlacedNode(): void {
-    const picked = this.selectedPlacedId();
-    if (!picked) return;
+    const pickedId = this.selectedPlacedId();
+    const pickedKind = this.selectedPlacedKind();
+    if (!pickedId) return;
     this.recordHistoryBeforeEdit('Delete Selected Item');
     this.commitSceneUpdate((cur) => ({
       ...cur,
       revision: cur.revision + 1,
-      stamps: cur.stamps.filter((s) => !picked.includes(s.id)),
-      walls: (cur.walls ?? []).filter((w) => !picked.includes(w.id)),
+      stamps: pickedKind === 'object' ? cur.stamps.filter((s) => s.id !== pickedId) : cur.stamps,
+      walls:
+        pickedKind === 'wall'
+          ? (cur.walls ?? []).filter((w) => w.id !== pickedId)
+          : pickedKind === 'door'
+            ? (cur.walls ?? []).map((w) => ({
+                ...w,
+                openings: w.openings.filter((op) => op.id !== pickedId),
+              }))
+            : cur.walls,
+      lights: pickedKind === 'light' ? cur.lights.filter((l) => l.id !== pickedId) : cur.lights,
     }));
     this.selectedPlacedId.set(null);
+    this.selectedPlacedKind.set(null);
+    this.selectedPlacedWallId.set(null);
     this.stage.focusGizmoAt(null);
   }
 
   onSpawnCustomLightAt(x?: number, z?: number): void {
     const coords = this.stage.lastPickedCoords();
-    this.recordHistoryBeforeEdit('Add Custom Scene Light');
+    const lx = x ?? coords.x;
+    const lz = z ?? coords.z;
+    const lightId = `light-${this.sceneGraph().revision + 1}`;
+    this.recordHistoryBeforeEdit('Add Scene Light');
     this.commitSceneUpdate((cur) => ({
       ...cur,
       revision: cur.revision + 1,
       lights: [
         ...cur.lights,
         {
-          id: `light-${cur.revision + 1}`,
+          id: lightId,
           label: `${this.customLightKind().toUpperCase()} Light`,
+          kind: this.customLightKind(),
           colorHex: this.customLightColor(),
           intensity: this.torchIntensity() / 100,
           range: this.customLightRange(),
-          x: x ?? coords.x,
-          y: 2.8,
-          z: z ?? coords.z,
+          widthMeters: this.lightPlacementWidth(),
+          x: lx,
+          y: this.lightHeightMeters(),
+          z: lz,
+          showFixture: this.lightShowFixture(),
         },
       ],
+    }));
+    this.selectedPlacedId.set(lightId);
+    this.selectedPlacedKind.set('light');
+    this.stage.focusGizmoAt(lx, 0.1, lz);
+  }
+
+  private syncActiveOrLastLight(): void {
+    const targetId =
+      this.selectedPlacedKind() === 'light' ? this.selectedPlacedId() : null;
+    this.commitSceneUpdate((cur) => {
+      if (cur.lights.length === 0) return cur;
+      const idxToUpdate = targetId
+        ? cur.lights.findIndex((l) => l.id === targetId)
+        : cur.lights.length - 1;
+      if (idxToUpdate < 0) return cur;
+      return {
+        ...cur,
+        revision: cur.revision + 1,
+        lights: cur.lights.map((lt, idx) =>
+          idx === idxToUpdate
+            ? {
+                ...lt,
+                kind: this.customLightKind(),
+                colorHex: this.customLightColor(),
+                range: this.customLightRange(),
+                widthMeters: this.lightPlacementWidth(),
+                y: this.lightHeightMeters(),
+                intensity: this.torchIntensity() / 100,
+                showFixture: this.lightShowFixture(),
+              }
+            : lt,
+        ),
+      };
+    });
+  }
+
+  onLightPropertyChanged(): void {
+    this.syncGhostCursorToStage();
+    this.syncActiveOrLastLight();
+  }
+
+  onDoorPropertyChanged(): void {
+    this.syncGhostCursorToStage();
+    const doorId = this.selectedPlacedKind() === 'door' ? this.selectedPlacedId() : null;
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      walls: (cur.walls ?? []).map((w) => ({
+        ...w,
+        openings: w.openings.map((op, idx) =>
+          (doorId ? op.id === doorId : idx === w.openings.length - 1)
+            ? {
+                ...op,
+                t: this.doorWallPositionPct() / 100,
+                widthMeters: this.doorWidthMeters(),
+                heightMeters: this.doorHeightMeters(),
+                isOpen: this.doorIsOpen(),
+              }
+            : op,
+        ),
+      })),
     }));
   }
 
@@ -627,6 +1166,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     if (!canvas) return;
     const coords = Real2dMapRenderer.screenToWorld(canvas, event.clientX, event.clientY);
     this.onCanvasHoverAt(coords.x, coords.z);
+    if (event.buttons === 1) {
+      this.onSurfaceDragAt(coords.x, coords.z, 1);
+    }
   }
 
   on2dCanvasClick(event: MouseEvent): void {
@@ -641,8 +1183,10 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     if (!canvas) return;
     Real2dMapRenderer.renderSceneToCanvas(canvas, this.sceneGraph(), {
       hideGmSecrets: this.showPlayerSafeOnly(),
-      selectedNodeId: this.selectedNode().id,
+      selectedNodeId: this.selectedPlacedId() ?? this.selectedNode().id,
       gridMode: this.gridSizeLabel(),
+      floorAlbedoUrl: this.sceneGraph().floorAlbedoUrl,
+      floorTilingScale: this.floorTilingScale(),
       ghostX,
       ghostZ,
       ghostLabel: this.selectedNode().name,
@@ -650,6 +1194,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       celestialMode: this.celestialMode(),
       celestialAzimuthDeg: this.celestialAzimuthDeg(),
       celestialAltitudeDeg: this.celestialAltitudeDeg(),
+      onImageLoaded: () => this.render2dViewport(),
     });
   }
 
@@ -682,46 +1227,128 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.showPlayerSafeOnly.set(variant === 'player-safe');
     this.stage.setPlayerSafeFilter(variant === 'player-safe', this.sceneGraph());
     this.render2dViewport();
-    this.pngPipelineBanner.set(`Exported ${variant === 'player-safe' ? 'Player-Safe' : 'GM Master'} PNG.`);
+    this.pngPipelineBanner.set(
+      `Exported ${variant === 'player-safe' ? 'Player-Safe' : 'GM Master'} PNG.`,
+    );
   }
 
-  onInspectorPositionChange(axis: 'x' | 'z', value: number): void {
-    this.selectedNode.update((cur) => (axis === 'x' ? { ...cur, gridX: value } : { ...cur, gridZ: value }));
+  private updateTargetStamp(
+    updater: (s: MapSceneGraphState['stamps'][number]) => MapSceneGraphState['stamps'][number],
+  ): void {
+    const targetId =
+      this.selectedPlacedKind() === 'object' ? this.selectedPlacedId() : null;
     this.commitSceneUpdate((cur) => ({
       ...cur,
       revision: cur.revision + 1,
-      stamps: cur.stamps.map((s, idx) => (idx === cur.stamps.length - 1 ? (axis === 'x' ? { ...s, x: value } : { ...s, z: value }) : s)),
+      stamps: cur.stamps.map((s, idx) =>
+        (targetId ? s.id === targetId : idx === cur.stamps.length - 1) ? updater(s) : s,
+      ),
     }));
   }
 
-  onInspectorHeightChange(heightSquares: number): void {
-    this.selectedNode.update((cur) => ({ ...cur, heightSquares, subtitle: `3D Wall · ${heightSquares * 5} ft` }));
+  onInspectorPositionChange(axis: 'x' | 'z', value: number): void {
+    this.selectedNode.update((cur) =>
+      axis === 'x' ? { ...cur, gridX: value } : { ...cur, gridZ: value },
+    );
+    this.updateTargetStamp((s) => (axis === 'x' ? { ...s, x: value } : { ...s, z: value }));
+  }
+
+  onInspectorElevationChange(elevationY: number): void {
+    this.selectedNode.update((cur) => ({ ...cur, elevationY }));
     this.syncGhostCursorToStage();
-    this.commitSceneUpdate((cur) => ({ ...cur, revision: cur.revision + 1, walls: (cur.walls ?? []).map((w) => ({ ...w, heightMeters: heightSquares * 1.5 })) }));
+    this.updateTargetStamp((s) => ({ ...s, offsetY: elevationY }));
+  }
+
+  onInspectorHeightChange(heightSquares: number): void {
+    this.selectedNode.update((cur) => ({
+      ...cur,
+      heightSquares,
+      subtitle: `3D Wall · ${heightSquares * 5} ft`,
+    }));
+    this.syncGhostCursorToStage();
+    const targetWallId =
+      this.selectedPlacedKind() === 'wall' ? this.selectedPlacedId() : null;
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      walls: (cur.walls ?? []).map((w, idx, arr) =>
+        (targetWallId ? w.id === targetWallId : idx === arr.length - 1)
+          ? { ...w, heightMeters: heightSquares * 1.5 }
+          : w,
+      ),
+    }));
   }
 
   onInspectorThicknessChange(thickness: number): void {
     this.selectedNode.update((cur) => ({ ...cur, thickness }));
     this.syncGhostCursorToStage();
-    this.commitSceneUpdate((cur) => ({ ...cur, revision: cur.revision + 1, walls: (cur.walls ?? []).map((w) => ({ ...w, thicknessMeters: 0.45 * thickness })) }));
+    const targetWallId =
+      this.selectedPlacedKind() === 'wall' ? this.selectedPlacedId() : null;
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      walls: (cur.walls ?? []).map((w, idx, arr) =>
+        (targetWallId ? w.id === targetWallId : idx === arr.length - 1)
+          ? { ...w, thicknessMeters: 0.45 * thickness }
+          : w,
+      ),
+    }));
   }
 
   onInspectorRotationChange(rotationDeg: number): void {
     this.selectedNode.update((cur) => ({ ...cur, rotationDeg }));
     this.syncGhostCursorToStage();
     const rad = (rotationDeg * Math.PI) / 180;
-    this.commitSceneUpdate((cur) => ({ ...cur, revision: cur.revision + 1, stamps: cur.stamps.map((s, idx) => (idx === cur.stamps.length - 1 ? { ...s, rotationY: rad } : s)) }));
+    this.updateTargetStamp((s) => ({ ...s, rotationY: rad }));
+  }
+
+  onInspectorTiltChange(tiltDeg: number): void {
+    this.selectedNode.update((cur) => ({ ...cur, tiltDeg }));
+    this.updateTargetStamp((s) => ({ ...s, tiltX: tiltDeg }));
   }
 
   onInspectorScaleChange(scale: number): void {
     this.selectedNode.update((cur) => ({ ...cur, scale }));
     this.syncGhostCursorToStage();
-    this.commitSceneUpdate((cur) => ({ ...cur, revision: cur.revision + 1, stamps: cur.stamps.map((s, idx) => (idx === cur.stamps.length - 1 ? { ...s, scale } : s)) }));
+    this.updateTargetStamp((s) => ({ ...s, scale }));
+  }
+
+  onInspectorAxisScaleChange(axis: 'x' | 'y' | 'z', val: number): void {
+    this.selectedNode.update((cur) =>
+      axis === 'x'
+        ? { ...cur, scaleX: val }
+        : axis === 'y'
+          ? { ...cur, scaleY: val }
+          : { ...cur, scaleZ: val },
+    );
+    this.updateTargetStamp((s) =>
+      axis === 'x'
+        ? { ...s, scaleX: val }
+        : axis === 'y'
+          ? { ...s, scaleY: val }
+          : { ...s, scaleZ: val },
+    );
   }
 
   onInspectorSecretToggle(): void {
     this.selectedNode.update((cur) => ({ ...cur, gmSecretOnly: !cur.gmSecretOnly }));
-    this.render2dViewport();
+    const nextVal = this.selectedNode().gmSecretOnly;
+    this.updateTargetStamp((s) => ({ ...s, gmSecretOnly: nextVal }));
+  }
+
+  onClearWaterSplines(): void {
+    this.recordHistoryBeforeEdit('Clear Water Splines');
+    this.commitSceneUpdate((cur) => ({ ...cur, revision: cur.revision + 1, waterSplines: [] }));
+  }
+
+  onClearScatterClusters(): void {
+    this.recordHistoryBeforeEdit('Clear Scatter Clusters');
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      scatterDensity: 0,
+      scatterClusters: [],
+    }));
   }
 
   onUploadSingleGlb(file: File): void {
@@ -729,7 +1356,13 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private captureCurrentSnapshot(label: string): MapStudioSnapshot {
-    return { label, timestamp: `Rev ${this.sceneGraph().revision}`, sceneGraph: this.sceneGraph(), layers: this.studio.layers(), activeLevelIndex: this.studio.activeLevelIndex() };
+    return {
+      label,
+      timestamp: `Rev ${this.sceneGraph().revision}`,
+      sceneGraph: this.sceneGraph(),
+      layers: this.studio.layers(),
+      activeLevelIndex: this.studio.activeLevelIndex(),
+    };
   }
 
   private recordHistoryBeforeEdit(label: string): void {
@@ -764,19 +1397,33 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   }
 
   saveSceneRevision(): void {
-    this.studio.saveAuthoritativeRevision(this.selectedSceneKey(), this.sceneGraph().revision, this.store.viewerRole(), (newRev) => this.sceneGraph.update((cur) => ({ ...cur, revision: newRev })));
+    this.studio.saveAuthoritativeRevision(
+      this.selectedSceneKey(),
+      this.sceneGraph().revision,
+      this.store.viewerRole(),
+      (newRev) => this.sceneGraph.update((cur) => ({ ...cur, revision: newRev })),
+    );
     this.pngPipelineBanner.set(`Saved '${this.mapTitle()}' (Rev ${this.sceneGraph().revision}).`);
   }
 
   publishMapToCoreCampaign(): void {
     this.saveSceneRevision();
     const campName = this.store.activeCampaign().name;
-    const sessLabel = this.sessions().find((s) => s.id === this.assignSessionId())?.label ?? this.assignSessionId();
-    const encLabel = this.encounters().find((e) => e.id === this.assignEncounterId())?.label ?? this.assignEncounterId();
+    const sessLabel =
+      this.sessions().find((s) => s.id === this.assignSessionId())?.label ?? this.assignSessionId();
+    const encLabel =
+      this.encounters().find((e) => e.id === this.assignEncounterId())?.label ??
+      this.assignEncounterId();
     this.adventureGuide.assignBattlemapToSessionAndPlace({
-      sceneKey: this.selectedSceneKey(), sceneTitle: this.mapTitle(), sessionId: this.assignSessionId(),
-      locationNodeId: this.assignLocationNodeId(), artworkUrl: '/battlemap-showcase.jpg', biome: this.activeTheme(),
+      sceneKey: this.selectedSceneKey(),
+      sceneTitle: this.mapTitle(),
+      sessionId: this.assignSessionId(),
+      locationNodeId: this.assignLocationNodeId(),
+      artworkUrl: '/battlemap-showcase.jpg',
+      biome: this.activeTheme(),
     });
-    this.pngPipelineBanner.set(`Published '${this.mapTitle()}' (${this.dimensionMode().toUpperCase()}) -> ${campName} · ${sessLabel} · ${encLabel}`);
+    this.pngPipelineBanner.set(
+      `Published '${this.mapTitle()}' (${this.dimensionMode().toUpperCase()}) -> ${campName} · ${sessLabel} · ${encLabel}`,
+    );
   }
 }

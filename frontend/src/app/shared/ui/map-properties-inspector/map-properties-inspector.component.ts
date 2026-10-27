@@ -1,12 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { NgpButton } from 'ng-primitives/button';
-import { WallDrawMode } from '../../../features/maps/engine/map-scene-contract';
+import {
+  MapLightFixtureKind,
+  WallDrawMode,
+} from '../../../features/maps/engine/map-scene-contract';
 import { LwIconComponent } from '../icon/icon.component';
 import { LwMapMaterialPreset } from '../map-png-asset-browser/map-png-asset-browser.component';
 
 export type LwTerrainSculptOp = 'raise' | 'lower' | 'flatten';
 export type LwCelestialBodyMode = 'sun' | 'moon';
-export type LwCustomLightKind = 'point' | 'directional' | 'torch';
+export type LwCustomLightKind = MapLightFixtureKind;
 
 export interface LwSelectedSceneNode {
   readonly id: string;
@@ -35,7 +38,11 @@ export interface LwSelectedSceneNode {
   readonly gridZ: number;
   readonly elevationY: number;
   readonly rotationDeg: number;
+  readonly tiltDeg?: number;
   readonly scale: number;
+  readonly scaleX?: number;
+  readonly scaleY?: number;
+  readonly scaleZ?: number;
   readonly gmSecretOnly: boolean;
   readonly blocksMovement: boolean;
   readonly blocksVision: boolean;
@@ -51,6 +58,7 @@ export interface LwSelectedSceneNode {
 })
 export class LwMapPropertiesInspectorComponent {
   readonly activeToolId = input<string>('select');
+  readonly selectedPlacedKind = input<'wall' | 'door' | 'object' | 'light' | null>(null);
   readonly selectedNode = input<LwSelectedSceneNode | null>(null);
   readonly hasPlacedSelection = input<boolean>(false);
   readonly wallInProgress = input<boolean>(false);
@@ -60,17 +68,28 @@ export class LwMapPropertiesInspectorComponent {
   readonly terrainSculptOp = input<LwTerrainSculptOp>('raise');
   readonly terrainBrushRadius = input<number>(4.5);
   readonly terrainBrushDelta = input<number>(1.4);
+  readonly terrainGradualRate = input<number>(55);
+
+  readonly doorWallPositionPct = input<number>(50);
+  readonly doorWidthMeters = input<number>(2.4);
+  readonly doorHeightMeters = input<number>(2.6);
+  readonly doorIsOpen = input<boolean>(false);
 
   readonly celestialMode = input<LwCelestialBodyMode>('sun');
   readonly celestialAzimuthDeg = input<number>(135);
   readonly celestialAltitudeDeg = input<number>(42);
   readonly shadowDarkness = input<number>(72);
-  readonly customLightKind = input<LwCustomLightKind>('point');
+
+  readonly customLightKind = input<LwCustomLightKind>('torch');
   readonly customLightColor = input<string>('#ffae52');
   readonly customLightRange = input<number>(25);
-  readonly torchIntensity = input<number>(115);
+  readonly lightPlacementWidth = input<number>(2.0);
+  readonly lightHeightMeters = input<number>(2.4);
+  readonly torchIntensity = input<number>(125);
+  readonly lightShowFixture = input<boolean>(true);
 
-  readonly scatterDensity = input<number>(0);
+  readonly scatterDensity = input<number>(65);
+  readonly waterWidthMeters = input<number>(3.0);
   readonly waterFlowSpeed = input<number>(1.4);
 
   readonly openAssetModal = output<void>();
@@ -83,56 +102,87 @@ export class LwMapPropertiesInspectorComponent {
   readonly positionXChange = output<number>();
   readonly positionZChange = output<number>();
   readonly rotationChange = output<number>();
+  readonly tiltChange = output<number>();
   readonly scaleChange = output<number>();
+  readonly scaleXChange = output<number>();
+  readonly scaleYChange = output<number>();
+  readonly scaleZChange = output<number>();
   readonly elevationChange = output<number>();
   readonly wallDrawModeChange = output<WallDrawMode>();
   readonly terrainSculptOpChange = output<LwTerrainSculptOp>();
   readonly terrainRadiusChange = output<number>();
   readonly terrainDeltaChange = output<number>();
+  readonly terrainGradualRateChange = output<number>();
+
+  readonly doorPositionPctChange = output<number>();
+  readonly doorWidthChange = output<number>();
+  readonly doorHeightChange = output<number>();
+  readonly doorOpenToggle = output<void>();
+
   readonly celestialModeChange = output<LwCelestialBodyMode>();
   readonly celestialAzimuthChange = output<number>();
   readonly celestialAltitudeChange = output<number>();
   readonly shadowDarknessChange = output<number>();
+
   readonly customLightKindChange = output<LwCustomLightKind>();
   readonly customLightColorChange = output<string>();
   readonly customLightRangeChange = output<number>();
+  readonly lightPlacementWidthChange = output<number>();
+  readonly lightHeightChange = output<number>();
   readonly torchIntensityChange = output<number>();
+  readonly lightShowFixtureToggle = output<void>();
   readonly spawnCustomLight = output<void>();
+
   readonly secretToggle = output<void>();
-  readonly applyToSimilar = output<void>();
-  readonly duplicateNode = output<void>();
   readonly deleteNode = output<void>();
   readonly scatterDensityChange = output<number>();
+  readonly clearScatter = output<void>();
+  readonly waterWidthChange = output<number>();
   readonly waterFlowChange = output<number>();
+  readonly clearWater = output<void>();
+
+  readonly effectiveMode = computed<string>(() => {
+    const tool = this.activeToolId();
+    const placedKind = this.selectedPlacedKind();
+    if (tool === 'select' && placedKind) {
+      if (placedKind === 'wall') return 'wall';
+      if (placedKind === 'door') return 'door';
+      if (placedKind === 'object') return 'objects';
+      if (placedKind === 'light') return 'lighting';
+    }
+    return tool;
+  });
 
   readonly toolHeading = computed<string>(() => {
+    const mode = this.effectiveMode();
+    const isSelected = this.hasPlacedSelection();
     const map: Record<string, string> = {
       select: 'Scene Selection Inspector',
       'floor-bump': 'Flooring Bump/Height Setup',
       terrain: 'Raise / Lower Terrain Brush',
-      wall: '3D Wall Line Placement',
+      wall: isSelected ? 'Selected 3D Wall Properties' : '3D Wall Line Placement',
       room: '3D Wall Shape Placement',
-      door: 'Door & Portal Placement',
-      objects: '3D Object & Floor Stamp Setup',
-      lighting: 'Custom Scene Lights',
+      door: isSelected ? 'Selected Wall Door Properties' : 'Wall-Cutout Door Placement',
+      objects: isSelected ? 'Selected 3D Object Properties' : '3D Object & Stamp Placement',
+      lighting: isSelected ? 'Selected Scene Light Properties' : 'Scene Light Fixture Setup',
       'sun-moon': 'Sun / Moon & Shadow Position',
-      water: 'Water Spline Settings',
-      scatter: '3D Scatter Brush Setup',
+      water: 'Water River & Pool Brush',
+      scatter: '3D Surface Scatter Brush',
       annotate: 'Map Annotation Setup',
     };
-    return map[this.activeToolId()] ?? 'Tool Settings';
+    return map[mode] ?? 'Tool Settings';
   });
 
   readonly usesAssetPicker = computed<boolean>(() => {
-    const t = this.activeToolId();
+    const m = this.effectiveMode();
     return (
-      t === 'floor-bump' ||
-      t === 'wall' ||
-      t === 'room' ||
-      t === 'door' ||
-      t === 'objects' ||
-      t === 'scatter' ||
-      t === 'annotate'
+      m === 'floor-bump' ||
+      m === 'wall' ||
+      m === 'room' ||
+      m === 'door' ||
+      m === 'objects' ||
+      m === 'scatter' ||
+      m === 'annotate'
     );
   });
 

@@ -2,10 +2,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AdventureGuideService } from '../../../core/services/adventure-guide.service';
 import { AuthSessionService } from '../../../core/services/auth-session.service';
 import { LoomWeaverStoreService } from '../../../core/services/loomweaver-store.service';
-import {
-  buildSavingThrows,
-  buildSkillsList,
-} from '../models/character-creator-catalog.data';
+import { buildSavingThrows, buildSkillsList } from '../models/character-creator-catalog.data';
 import {
   AbilityScoreVm,
   CharacterCreatorDraftVm,
@@ -16,11 +13,7 @@ import {
   CharacterStudioViewMode,
   EquipmentLoadoutItemVm,
 } from '../models/character-studio.models';
-import {
-  DEFAULT_CONNECTIONS,
-  buildSeedPartySheets,
-  wizardDefaultEquipment,
-} from '../models/character-studio-seed.data';
+import { DEFAULT_CONNECTIONS, buildSeedPartySheets, wizardDefaultEquipment } from '../models/character-studio-seed.data';
 import { CharacterCompendiumCatalogService } from './character-compendium-catalog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -59,8 +52,9 @@ export class CharacterStudioService {
     selectedSkills: ['Arcana', 'History', 'Investigation', 'Perception'],
     selectedFeatId: 'Warcaster',
     startingPack: 'Starting Equipment',
-    equippedItemIds: ['db-quarterstaff', 'db-arcane-grimoire', 'db-cloak-protection'],
-    backpackItemIds: ['db-scholar-pack', 'db-healing-potion'],
+    equipmentItems: wizardDefaultEquipment('ciaran'),
+    equippedItemIds: ['ciaran-focus', 'ciaran-spellbook', 'ciaran-robe', 'ciaran-belt'],
+    backpackItemIds: ['ciaran-ring', 'ciaran-pack'],
     personalityTrait: 'Methodical, curious, and always cross-referencing inscriptions.',
     ideal: 'Truth should be recorded, not buried beneath politics.',
     bond: 'An ancient manuscript with missing pages that points to forgotten history.',
@@ -128,13 +122,8 @@ export class CharacterStudioService {
       return;
     }
     const owned = this.userOwnedSheets();
-    if (owned.length > 0) {
-      if (!focusKey) this.selectedCharacterKey.set(owned[0].characterKey);
-      this.viewMode.set('viewer');
-    } else {
-      if (!focusKey) this.selectedCharacterKey.set('char-dal');
-      this.viewMode.set('viewer');
-    }
+    if (!focusKey) this.selectedCharacterKey.set(owned.length > 0 ? owned[0].characterKey : 'char-dal');
+    this.viewMode.set('viewer');
   }
 
   selectCharacter(characterKey: string, openViewer = false): void {
@@ -180,6 +169,7 @@ export class CharacterStudioService {
         selectedSkills: fromExisting.skills.filter((s) => s.proficient).map((s) => s.label),
         selectedFeatId: fromExisting.featureCards.find((f) => f.category === 'feat')?.title ?? 'Warcaster',
         startingPack: 'Starting Equipment',
+        equipmentItems: [...fromExisting.equipment],
         equippedItemIds: fromExisting.equipment.filter((e) => e.equipped).map((e) => e.id),
         backpackItemIds: fromExisting.equipment.filter((e) => !e.equipped).map((e) => e.id),
         personalityTrait: fromExisting.personality.personality,
@@ -202,6 +192,7 @@ export class CharacterStudioService {
       this.creatorDraft.update((cur) => ({
         ...cur,
         level: 1,
+        equipmentItems: wizardDefaultEquipment('new'),
         abilities: { STR: 8, DEX: 14, CON: 14, INT: 15, WIS: 12, CHA: 10 },
       }));
     }
@@ -268,29 +259,9 @@ export class CharacterStudioService {
       { code: 'CHA', label: 'Charisma', score: draft.abilities.CHA, modifier: 0 },
     ];
 
-    const dbItems = this.catalog.equipmentDatabase();
-    const existingItems = existingSheet?.equipment ?? [];
-    const allKnownItems = [...existingItems, ...dbItems];
-    const equippedIds = draft.equippedItemIds ?? [];
-    const backpackIds = draft.backpackItemIds ?? [];
-    const resolvedEquipment: EquipmentLoadoutItemVm[] = [];
-    const seenEq = new Set<string>();
-    for (const id of equippedIds) {
-      if (seenEq.has(id)) continue;
-      const found = allKnownItems.find((i) => i.id === id);
-      if (found) {
-        seenEq.add(id);
-        resolvedEquipment.push({ ...found, equipped: true });
-      }
-    }
-    for (const id of backpackIds) {
-      if (seenEq.has(id)) continue;
-      const found = allKnownItems.find((i) => i.id === id);
-      if (found) {
-        seenEq.add(id);
-        resolvedEquipment.push({ ...found, equipped: false });
-      }
-    }
+    const resolvedEquipment: EquipmentLoadoutItemVm[] = draft.equipmentItems?.length
+      ? [...draft.equipmentItems]
+      : [...wizardDefaultEquipment(slug)];
 
     const baseSheet: CharacterSheetVm = {
       compositeKey: `1:Character:${charKey}`,
@@ -460,10 +431,7 @@ export class CharacterStudioService {
                 ? { ...g, spells: [...g.spells, spellEntry] }
                 : g,
             )
-          : [
-              ...sheet.spellGroups,
-              { groupId, label: groupLabel, slotsRemaining: 2, slotsMax: 2, isCantrip, spells: [spellEntry] },
-            ];
+          : [...sheet.spellGroups, { groupId, label: groupLabel, slotsRemaining: 2, slotsMax: 2, isCantrip, spells: [spellEntry] }];
         return { ...sheet, spellGroups };
       }),
     );
@@ -489,11 +457,7 @@ export class CharacterStudioService {
   }
 
   cyclePortrait(): void {
-    const portraits = ['/assets/5e-tools/races/PHB/Elf.webp', '/assets/5e-tools/races/PHB/Human.webp'];
-    const key = this.selectedCharacterKey();
-    this.sheets.update((list) =>
-      list.map((sheet) => (sheet.characterKey === key ? { ...sheet, portraitUrl: portraits[0] } : sheet)),
-    );
+    this.setActiveCharacterPortrait('/assets/5e-tools/races/PHB/Elf.webp');
   }
 
   executeLevelUp(featureName: string, abilityBoost: AbilityScoreVm['code']): void {
@@ -599,8 +563,6 @@ export class CharacterStudioService {
     const maxHp = isWizard ? (4 + conMod) * sheet.level + 2 : (7 + conMod) * sheet.level + 12;
     const primaryStatMod = isWizard ? intMod : Math.max(strMod, dexMod);
     const primaryAttackBonus = primaryStatMod + prof + eqAtk;
-    const economy = '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move';
-
     const proficientSaves = sheet.savingThrows.filter((s) => s.proficient).map((s) => s.code);
     const savingThrows = buildSavingThrows(abilities, prof, proficientSaves.length ? proficientSaves : ['INT', 'WIS']);
     const proficientSkills = sheet.skills.filter((sk) => sk.proficient).map((sk) => sk.label);
@@ -618,7 +580,7 @@ export class CharacterStudioService {
       currentHp: maxHp,
       initiativeBonus: dexMod,
       primaryAttackBonus,
-      actionEconomySummary: economy,
+      actionEconomySummary: '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move',
       metEntities: sheet.metEntities ?? this.catalog.metEntities(),
       campaignHistory: sheet.campaignHistory ?? this.catalog.campaignHistory(),
       levelUpEligible: sheet.currentXp >= sheet.nextLevelXp || sheet.levelUpEligible,

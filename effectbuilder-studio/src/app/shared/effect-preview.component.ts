@@ -54,17 +54,26 @@ export class EffectPreviewComponent implements AfterViewInit, OnDestroy, OnChang
   readonly quality = signal<VisualQualityTier>('high');
   readonly forestMap = signal(true);
   readonly tokens3d = signal(true);
-  readonly moveMapMode = signal(false);
   readonly background = signal(true);
   readonly ambient = signal(0.38);
   readonly bump = signal(2.2);
   readonly relief = signal(0.18);
+
+  @Input() fullscreen = false;
+  @Output() fullscreenChange = new EventEmitter<boolean>();
 
   private native?: BabylonEffectPreview;
   private http = inject(HttpClient);
   readonly summonArtwork = signal('');
   private artworkSource = '';
   private artworkGeneration = 0;
+
+  toggleFullscreen(): void {
+    const next = !this.fullscreen;
+    this.fullscreen = next;
+    this.fullscreenChange.emit(next);
+    setTimeout(() => this.native?.resize(), 30);
+  }
 
   toggleView(): void {
     this.setViewMode(!this.view3d());
@@ -78,18 +87,6 @@ export class EffectPreviewComponent implements AfterViewInit, OnDestroy, OnChang
   setQuality(tier: VisualQualityTier): void {
     this.quality.set(tier);
     this.native?.setQuality(tier);
-  }
-
-  panMap(dxUnits: number, dzUnits: number): void {
-    this.native?.panBy(dxUnits, dzUnits);
-  }
-
-  rotateTerrain(dRad: number): void {
-    this.native?.rotateTerrainBy(dRad);
-  }
-
-  resetTerrain(): void {
-    this.native?.resetTerrainTransform();
   }
 
   projectPoint(p: { x: number; y: number }) {
@@ -109,6 +106,8 @@ export class EffectPreviewComponent implements AfterViewInit, OnDestroy, OnChang
   }
 
   onSurfaceWheel(event: WheelEvent): void {
+    // Camera zoom is locked in normal view and unlocked in Full Screen Preview mode
+    if (!this.fullscreen) return;
     if (typeof window !== 'undefined' && (window.visualViewport?.scale ?? 1) > 1.03 && event.ctrlKey && event.deltaY > 0) {
       return;
     }
@@ -123,61 +122,70 @@ export class EffectPreviewComponent implements AfterViewInit, OnDestroy, OnChang
       this.pathPoint(event);
       return;
     }
-    if (event.button !== 0 || !this.native) return;
+    if (!this.native) return;
 
     const bounds = this.surface.nativeElement.getBoundingClientRect();
     const localX = event.clientX - bounds.left;
     const localY = event.clientY - bounds.top;
 
-    // 1. Check if the user clicked directly on a 3D token model (Sorceress / Goblin 1-3)
-    const pickedRole = this.native.pickDraggableRole(localX, localY);
-    if (!this.moveMapMode() && pickedRole && pickedRole !== 'terrain') {
-      const targetIdx =
-        pickedRole === 'caster'
-          ? -1
-          : pickedRole === 'target-0'
-            ? 0
-            : pickedRole === 'target-1'
-              ? 1
-              : pickedRole === 'target-2'
-                ? 2
-                : -99;
-      if (targetIdx >= -1) {
-        this.drag(event, targetIdx, this.surface.nativeElement);
-        return;
+    // 1. In normal studio view (camera locked), left-clicking a 3D token model drags the token
+    if (!this.fullscreen) {
+      if (event.button !== 0) return;
+      const pickedRole = this.native.pickDraggableRole(localX, localY);
+      if (pickedRole && pickedRole !== 'terrain') {
+        const targetIdx =
+          pickedRole === 'caster'
+            ? -1
+            : pickedRole === 'target-0'
+              ? 0
+              : pickedRole === 'target-1'
+                ? 1
+                : pickedRole === 'target-2'
+                  ? 2
+                  : -99;
+        if (targetIdx >= -1) {
+          this.drag(event, targetIdx, this.surface.nativeElement);
+        }
       }
+      return;
     }
 
-    // 2. If Move Map mode is active, Shift+drag, or dragging empty canvas in 2D mode: pan the scene camera
-    // so the map and all tokens move together in lockstep
-    if (this.moveMapMode() || event.shiftKey || !this.view3d()) {
-      event.preventDefault();
-      const surfaceEl = this.surface.nativeElement;
-      let prevX = localX;
-      let prevY = localY;
-      surfaceEl.setPointerCapture(event.pointerId);
+    // 2. In Full Screen Preview mode: mouse drag on the map adjusts camera rotation and position!
+    // Left-drag (in 3D mode without Shift) orbits/tilts camera; Right-drag, Middle-drag, Shift+Left-drag, or 2D mode pans camera position.
+    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
+    event.preventDefault();
+    const surfaceEl = this.surface.nativeElement;
+    let prevX = localX;
+    let prevY = localY;
+    const isPanGesture = !this.view3d() || event.button === 1 || event.button === 2 || event.shiftKey;
+    surfaceEl.setPointerCapture(event.pointerId);
 
-      const move = (e: PointerEvent) => {
-        if (e.pointerId !== event.pointerId || !this.native) return;
-        const curX = e.clientX - bounds.left;
-        const curY = e.clientY - bounds.top;
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId || !this.native) return;
+      const curX = e.clientX - bounds.left;
+      const curY = e.clientY - bounds.top;
+      const dx = curX - prevX;
+      const dy = curY - prevY;
+      if (isPanGesture || e.shiftKey) {
         this.native.panScreenPixels(prevX, prevY, curX, curY);
-        prevX = curX;
-        prevY = curY;
-      };
-      const end = (e: PointerEvent) => {
-        if (e.pointerId !== event.pointerId) return;
-        surfaceEl.removeEventListener('pointermove', move);
-        surfaceEl.removeEventListener('pointerup', end);
-        surfaceEl.removeEventListener('pointercancel', end);
-        surfaceEl.removeEventListener('lostpointercapture', end);
-        if (surfaceEl.hasPointerCapture(e.pointerId)) surfaceEl.releasePointerCapture(e.pointerId);
-      };
-      surfaceEl.addEventListener('pointermove', move);
-      surfaceEl.addEventListener('pointerup', end);
-      surfaceEl.addEventListener('pointercancel', end);
-      surfaceEl.addEventListener('lostpointercapture', end);
-    }
+      } else {
+        this.native.inspect(dx * 0.0065, -dy * 0.005, 1);
+      }
+      prevX = curX;
+      prevY = curY;
+    };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== event.pointerId) return;
+      surfaceEl.removeEventListener('pointermove', move);
+      surfaceEl.removeEventListener('pointerup', end);
+      surfaceEl.removeEventListener('pointercancel', end);
+      surfaceEl.removeEventListener('lostpointercapture', end);
+      if (surfaceEl.hasPointerCapture(e.pointerId)) surfaceEl.releasePointerCapture(e.pointerId);
+    };
+    surfaceEl.addEventListener('pointermove', move);
+    surfaceEl.addEventListener('pointerup', end);
+    surfaceEl.addEventListener('pointercancel', end);
+    surfaceEl.addEventListener('lostpointercapture', end);
   }
 
   ngOnChanges(): void {

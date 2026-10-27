@@ -296,6 +296,7 @@ export interface CharacterCreatorDraftVm {
   readonly selectedSkills: readonly string[];
   readonly selectedFeatId: string;
   readonly startingPack: string;
+  readonly equipmentItems?: readonly EquipmentLoadoutItemVm[];
   readonly equippedItemIds?: readonly string[];
   readonly backpackItemIds?: readonly string[];
   readonly personalityTrait?: string;

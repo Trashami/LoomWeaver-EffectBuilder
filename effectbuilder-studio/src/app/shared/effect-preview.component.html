@@ -42,19 +42,6 @@
       3D Tokens (Sorceress &amp; 3 Goblins)
     </label>
   }
-  <button
-    type="button"
-    [class.active-mode]="moveMapMode()"
-    [attr.aria-pressed]="moveMapMode()"
-    title="Pan the map and tokens together across the scene (or hold Shift and drag)"
-    (click)="moveMapMode.set(!moveMapMode())"
-  >
-    {{ moveMapMode() ? 'Panning Map (Drag)' : 'Move Map' }}
-  </button>
-  @if (forestMap() && view3d()) {
-    <button type="button" title="Rotate 3D Terrain 45 degrees" (click)="rotateTerrain(0.785398)">Rotate Map</button>
-  }
-  <button type="button" title="Reset Map pan, zoom, and rotation" (click)="resetTerrain()">Reset Map</button>
   @if (!forestMap()) {
     <label>
       <input type="checkbox" [checked]="background()" (change)="background.set($any($event.target).checked)" />
@@ -75,33 +62,24 @@
     Ambient
     <input aria-label="Map ambient light" type="range" min="0.05" max="1" step="0.01" [value]="ambient()" (input)="ambient.set(+$any($event.target).value)" />
   </label>
+  <button
+    type="button"
+    [class.active-mode]="fullscreen"
+    [attr.aria-pressed]="fullscreen"
+    (click)="toggleFullscreen()"
+    title="Full screen preview — unlock mouse camera rotation, panning, and scroll-wheel zoom"
+  >
+    {{ fullscreen ? 'Exit full screen' : 'Full screen preview' }}
+  </button>
 </div>
-@if (view3d()) {
-  <details class="camera-tools" open>
-    <summary>3D Camera</summary>
-    <div>
-      <button (click)="inspect(-0.25)" aria-label="Orbit left">Left</button>
-      <button (click)="inspect(0.25)" aria-label="Orbit right">Right</button>
-      <button (click)="inspect(0, 0.12)">Higher</button>
-      <button (click)="inspect(0, -0.12)">Lower</button>
-      <button (click)="inspect(0, 0, 0.85)" aria-label="Zoom in">+</button>
-      <button (click)="inspect(0, 0, 1.15)" aria-label="Zoom out">-</button>
-      <button (click)="resetCamera()">Reset view</button>
-    </div>
-  </details>
-} @else {
-  <details class="camera-tools" open>
-    <summary>2D Top-Down Pan &amp; Zoom</summary>
-    <div>
-      <button (click)="panMap(-1.2, 0)" aria-label="Pan left">Pan Left</button>
-      <button (click)="panMap(1.2, 0)" aria-label="Pan right">Pan Right</button>
-      <button (click)="panMap(0, -1.0)" aria-label="Pan up">Pan Up</button>
-      <button (click)="panMap(0, 1.0)" aria-label="Pan down">Pan Down</button>
-      <button (click)="inspect(0, 0, 0.85)" aria-label="Zoom in">+</button>
-      <button (click)="inspect(0, 0, 1.15)" aria-label="Zoom out">-</button>
-      <button (click)="resetCamera()">Reset 2D View</button>
-    </div>
-  </details>
+@if (fullscreen) {
+  <div class="fullscreen-camera-bar" role="region" aria-label="Full screen camera controls">
+    <span class="camera-hint">
+      {{ view3d() ? 'Left-drag: Rotate 3D camera · Right-drag or Shift+drag: Pan camera · Scroll: Zoom' : 'Drag: Pan 2D map · Scroll: Zoom' }}
+    </span>
+    <button type="button" (click)="resetCamera()">Reset camera</button>
+    <button type="button" class="exit-fs-btn" (click)="toggleFullscreen()">Exit full screen (Esc)</button>
+  </div>
 }
 @if (definition.previewScene.teleport?.enabled) {
   <div class="teleport-tools">
@@ -113,14 +91,15 @@
   </div>
 }
 <span class="renderer-status" role="status" title="Native Babylon meshes, 3D GLB Riverbank Terrain &amp; tokens, 4K 2D Top-Down mode, shader materials, depth testing and scene lighting.">
-  {{ rendererStatus() }} ({{ view3d() ? '3D' : '2D HD' }} · {{ quality().toUpperCase() }})
+  {{ rendererStatus() }} ({{ view3d() ? '3D' : '2D HD' }} · {{ quality().toUpperCase() }} · {{ fullscreen ? 'FREE CAMERA' : 'LOCKED' }})
 </span>
 <div
   #surface
   class="surface"
-  [class.map-drag-active]="moveMapMode() || !view3d()"
+  [class.map-drag-active]="fullscreen"
   (pointerdown)="onSurfacePointerDown($event)"
   (wheel)="onSurfaceWheel($event)"
+  (contextmenu)="fullscreen ? $event.preventDefault() : null"
   role="img"
   aria-label="Spell animation preview"
 ></div>

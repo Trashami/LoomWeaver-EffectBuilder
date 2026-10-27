@@ -31,6 +31,14 @@ export function spellLights(def:EffectDefinition,time:number,from:FxPoint,to:FxP
    const u=Math.max(0,Math.min(1,p*l.motion.speed*1.25/(1+l.motion.drag*p)));
    points=[clippedFireball(from,to,u,arc,scale,world.walls)];
   }
+  else if(l.kind==='sky_projectile'||l.kind==='sky_beam'||l.kind==='sky_lightning'){
+   const cfg=(l.skyProjectile??l.skyBeam??l.skyLightning) as {skySlantX?:number;skySlantZ?:number;hitOffsetX?:number;hitOffsetZ?:number}|undefined;
+   const base=l.anchor==='caster'?from:l.anchor==='path'?{x:(from.x+to.x)*.5,y:(from.y+to.y)*.5}:to;
+   const hx=base.x+(cfg?.hitOffsetX??0)*scale,hy=base.y+(cfg?.hitOffsetZ??0)*scale;
+   const sx=hx+(cfg?.skySlantX??0)*1.8*scale,sy=hy+(cfg?.skySlantZ??0)*1.8*scale;
+   const u=Math.max(0,Math.min(1,p*l.motion.speed*(l.kind==='sky_projectile'?1.15:3.4)));
+   points=[{x:sx+(hx-sx)*u,y:sy+(hy-sy)*u}];
+  }
   else if(l.kind==='whip'){const lash=f.whipPoints??[];points=[.25,.6,1].map(q=>lash[Math.min(lash.length-1,Math.floor(q*(lash.length-1)))]).filter(Boolean).map(q=>({x:from.x+Math.cos(f.angle)*q.x-Math.sin(f.angle)*q.y,y:from.y+Math.sin(f.angle)*q.x+Math.cos(f.angle)*q.y}));}
   else if(['beam','lightning','tether'].includes(l.kind)||l.cinematic?.style==='beam'){points=[.15,.45,.75,1].map(t=>{const u=t*Math.min(1,p*4*l.motion.speed);return{x:from.x+Math.cos(f.angle)*f.length*u,y:from.y+Math.sin(f.angle)*f.length*u};});}
   else if(l.kind==='cone'||l.cinematic?.style==='cone'){const reach=(l.cinematic?.reachFeet??15)/5*66*scale*Math.min(1,p*4);points=[.2,.5,.8].map(u=>({x:from.x+Math.cos(f.angle)*reach*u,y:from.y+Math.sin(f.angle)*reach*u}));}

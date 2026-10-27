@@ -40,13 +40,18 @@ export class MapPngAssetApiService {
   readonly pngPipelineBanner = signal<string>('');
 
   private normalizeAsset(raw: RawManifestAsset): LwMapPngAssetItem {
+    const rawGlb = raw.glbUrl || raw.modelUrl || '';
+    const resolvedModelUrl =
+      raw.id?.startsWith('obj-') && (!rawGlb || rawGlb.startsWith('/assets/models-3d/'))
+        ? `/assets/object-library/models/${raw.id}.glb`
+        : rawGlb;
     return {
       id: raw.id,
       name: raw.name,
       category: raw.category || 'Props',
       thumbnailUrl:
         raw.pngPreviewUrl || raw.thumbnailUrl || raw.albedoUrl || `/assets/previews-png/${raw.id}.png`,
-      modelUrl: raw.glbUrl || raw.modelUrl || '',
+      modelUrl: resolvedModelUrl,
       albedoUrl: raw.albedoUrl,
       normalUrl: raw.normalUrl,
       heightUrl: raw.heightUrl,

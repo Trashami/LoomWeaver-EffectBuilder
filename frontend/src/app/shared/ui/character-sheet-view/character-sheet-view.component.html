@@ -8,9 +8,7 @@
     </div>
     <div class="lw-char-sheet__switcher">
       @for (member of partyRoster(); track member.characterKey) {
-        <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="member.characterKey === s.characterKey" (click)="characterSelected.emit(member.characterKey)">
-          {{ member.name }}
-        </button>
+        <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="member.characterKey === s.characterKey" (click)="characterSelected.emit(member.characterKey)">{{ member.name }}</button>
       }
       <lw-button variant="guide-action" size="xs" icon="plus" label="New Character" (pressed)="createCharacterRequested.emit()" />
     </div>
@@ -18,21 +16,15 @@
 
   <header class="lw-char-sheet__hero-banner">
     <div class="lw-char-sheet__hero-left">
-      <div class="lw-char-sheet__crest" aria-hidden="true">
-        <lw-icon name="compass" [size]="26" tone="gold" />
-      </div>
+      <div class="lw-char-sheet__crest" aria-hidden="true"><lw-icon name="compass" [size]="26" tone="gold" /></div>
       <div class="lw-char-sheet__identity">
         <div class="lw-char-sheet__title-row">
           <h1>{{ s.name }}</h1>
           <span class="lw-char-sheet__role-badge"><lw-icon name="user" [size]="12" /> {{ s.roleBadge }}</span>
         </div>
-        <p class="lw-char-sheet__subtitle">
-          Level {{ s.level }} · {{ s.ancestryOrClan }} · {{ s.classOrArchetype }} · {{ s.subclass }}
-        </p>
+        <p class="lw-char-sheet__subtitle">Level {{ s.level }} · {{ s.ancestryOrClan }} · {{ s.classOrArchetype }} · {{ s.subclass }}</p>
         <div class="lw-char-sheet__tags">
-          @for (tag of s.tags; track tag) {
-            <span class="lw-char-sheet__tag">{{ tag }}</span>
-          }
+          @for (tag of s.tags; track tag) { <span class="lw-char-sheet__tag">{{ tag }}</span> }
         </div>
       </div>
     </div>
@@ -40,13 +32,11 @@
       <div class="lw-char-sheet__action-row">
         @if (s.levelUpEligible) {
           <button ngpButton type="button" class="lw-char-sheet__levelup-btn" (click)="activeTab.set('abilities')">
-            <lw-icon name="arrow-up" [size]="15" />
-            <span>Level Up Available</span>
+            <lw-icon name="arrow-up" [size]="15" /><span>Level Up Available</span>
           </button>
         }
         <button ngpButton type="button" class="lw-char-sheet__edit-btn" (click)="editCharacterRequested.emit(s)">
-          <lw-icon name="pen" [size]="14" />
-          <span>Edit Character</span>
+          <lw-icon name="pen" [size]="14" /><span>Edit Character</span>
         </button>
       </div>
       <blockquote class="lw-char-sheet__quote">{{ s.quote }}</blockquote>
@@ -55,9 +45,7 @@
 
   <nav ngpTabList class="lw-char-sheet__tabs" role="tablist" aria-label="Character Sheet Sections">
     @for (tab of tabs; track tab.id) {
-      <button ngpButton ngpTabButton [ngpTabButtonValue]="tab.id" type="button" role="tab" class="lw-char-sheet__tab" [class.lw-char-sheet__tab--active]="activeTab() === tab.id" [attr.aria-selected]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
-        {{ tab.label }}
-      </button>
+      <button ngpButton ngpTabButton [ngpTabButtonValue]="tab.id" type="button" role="tab" class="lw-char-sheet__tab" [class.lw-char-sheet__tab--active]="activeTab() === tab.id" [attr.aria-selected]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">{{ tab.label }}</button>
     }
   </nav>
 
@@ -79,13 +67,8 @@
             <p>{{ s.backgroundName }} · {{ s.alignment }}</p>
           </div>
           <div ngpProgress [ngpProgressValue]="s.currentXp" [ngpProgressMax]="s.nextLevelXp" class="lw-char-sheet__xp-block">
-            <div class="lw-char-sheet__xp-head">
-              <span>Experience</span>
-              <strong>{{ s.currentXp.toLocaleString() }} / {{ s.nextLevelXp.toLocaleString() }}</strong>
-            </div>
-            <div ngpProgressTrack class="lw-char-sheet__xp-track">
-              <div ngpProgressIndicator class="lw-char-sheet__xp-fill" [style.width.%]="xpProgressPercent()"></div>
-            </div>
+            <div class="lw-char-sheet__xp-head"><span>Experience</span><strong>{{ s.currentXp.toLocaleString() }} / {{ s.nextLevelXp.toLocaleString() }}</strong></div>
+            <div ngpProgressTrack class="lw-char-sheet__xp-track"><div ngpProgressIndicator class="lw-char-sheet__xp-fill" [style.width.%]="xpProgressPercent()"></div></div>
             <span class="lw-char-sheet__xp-pct">{{ xpProgressPercent() }}%</span>
           </div>
           <div class="lw-char-sheet__stat-rows">
@@ -168,22 +151,17 @@
             <div class="lw-char-sheet__card-head">
               <h2>Level-Up Ability &amp; Perk Selection (Lv.{{ s.level }} &rarr; Lv.{{ s.level + 1 }})</h2>
               <button ngpButton type="button" class="lw-char-sheet__levelup-btn" (click)="triggerLevelUp()">
-                <lw-icon name="arrow-up" [size]="14" />
-                <span>Apply Level-Up (+1 {{ levelUpAbilityCode() }})</span>
+                <lw-icon name="arrow-up" [size]="14" /><span>Apply Level-Up (+1 {{ levelUpAbilityCode() }})</span>
               </button>
             </div>
             <div class="lw-char-sheet__conn-chips">
               @for (ab of s.abilities; track ab.code) {
-                <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="levelUpAbilityCode() === ab.code" (click)="levelUpAbilityCode.set(ab.code)">
-                  +1 {{ ab.code }} ({{ ab.score }} &rarr; {{ ab.score + 1 }})
-                </button>
+                <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="levelUpAbilityCode() === ab.code" (click)="levelUpAbilityCode.set(ab.code)">+1 {{ ab.code }} ({{ ab.score }} &rarr; {{ ab.score + 1 }})</button>
               }
             </div>
             <div class="lw-char-sheet__conn-chips">
               @for (perk of levelUpPerkChoices; track perk) {
-                <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="levelUpPerkName() === perk" (click)="levelUpPerkName.set(perk)">
-                  {{ perk }}
-                </button>
+                <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="levelUpPerkName() === perk" (click)="levelUpPerkName.set(perk)">{{ perk }}</button>
               }
             </div>
           </div>
@@ -296,11 +274,8 @@
             <p class="lw-char-sheet__muted">No spells currently in your Spellbook. Scribe or prepare spells from the 5e Compendium on the right.</p>
           }
         </section>
-
         <section class="lw-char-sheet__card">
-          <header class="lw-char-sheet__card-head">
-            <h2>5e Spell Compendium (Scribe / Prepare)</h2>
-          </header>
+          <header class="lw-char-sheet__card-head"><h2>5e Spell Compendium (Scribe / Prepare)</h2></header>
           <input type="search" class="lw-char-sheet__note-input" placeholder="Search 5e spells by name or school..." [ngModel]="spellSearch()" (ngModelChange)="spellSearch.set($event)" />
           <div class="lw-char-sheet__equip-list">
             @for (sp of filteredSpellCompendium(); track sp.id) {
@@ -325,31 +300,48 @@
       <div class="lw-char-sheet__two-col">
         <section class="lw-char-sheet__card">
           <header class="lw-char-sheet__card-head">
-            <h2>Equipped on {{ s.name }} ({{ equippedItems().length }}) &amp; Backpack ({{ backpackItems().length }})</h2>
+            <h2>Equipped on Character ({{ equippedItems().length }}) &amp; In Backpack ({{ backpackItems().length }})</h2>
             <span class="lw-char-sheet__tag">AC {{ s.armorClass }} · Attack +{{ s.primaryAttackBonus }}</span>
           </header>
-          <div class="lw-char-sheet__equip-list">
-            @for (eq of s.equipment; track eq.id) {
-              <div class="lw-char-sheet__equip-item">
-                <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'shield'" [size]="16" tone="gold" /></span>
-                <div class="lw-char-sheet__equip-copy">
-                  <strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.equipped ? eq.slot : 'Backpack' }}</span></strong>
-                  <small>{{ eq.summary }} · {{ eq.bonusLabel }}</small>
+          <div class="lw-char-sheet__spell-group-block">
+            <div class="lw-char-sheet__spell-group-head"><strong>Equipped on Character ({{ equippedItems().length }})</strong></div>
+            <div class="lw-char-sheet__equip-list">
+              @for (eq of equippedItems(); track eq.id) {
+                <div class="lw-char-sheet__equip-item">
+                  <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'shield'" [size]="16" tone="gold" /></span>
+                  <div class="lw-char-sheet__equip-copy">
+                    <strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong>
+                    <small>{{ eq.summary }} · {{ eq.bonusLabel }}</small>
+                  </div>
+                  <div class="lw-char-sheet__inline-btns">
+                    <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="toggleEquipmentItem(eq)">To Pack</button>
+                    <button ngpButton type="button" class="lw-char-sheet__equip-badge is-remove" (click)="equipmentRemoved.emit(eq.id)">Remove</button>
+                  </div>
                 </div>
-                <div class="lw-char-sheet__inline-btns">
-                  <button ngpButton type="button" class="lw-char-sheet__equip-badge" [class.lw-char-sheet__equip-badge--active]="eq.equipped" (click)="toggleEquipmentItem(eq)">
-                    {{ eq.equipped ? 'Move to Backpack' : 'Equip to Player' }}
-                  </button>
-                  <button ngpButton type="button" class="lw-char-sheet__equip-badge is-remove" (click)="equipmentRemoved.emit(eq.id)">Remove</button>
+              } @empty { <p class="lw-char-sheet__muted">No items equipped yet.</p> }
+            </div>
+          </div>
+          <div class="lw-char-sheet__spell-group-block">
+            <div class="lw-char-sheet__spell-group-head"><strong>In Backpack ({{ backpackItems().length }})</strong></div>
+            <div class="lw-char-sheet__equip-list">
+              @for (eq of backpackItems(); track eq.id) {
+                <div class="lw-char-sheet__equip-item">
+                  <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'layers'" [size]="16" tone="gold" /></span>
+                  <div class="lw-char-sheet__equip-copy">
+                    <strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong>
+                    <small>{{ eq.summary }} · {{ eq.bonusLabel }}</small>
+                  </div>
+                  <div class="lw-char-sheet__inline-btns">
+                    <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="toggleEquipmentItem(eq)">Equip</button>
+                    <button ngpButton type="button" class="lw-char-sheet__equip-badge is-remove" (click)="equipmentRemoved.emit(eq.id)">Remove</button>
+                  </div>
                 </div>
-              </div>
-            }
+              } @empty { <p class="lw-char-sheet__muted">Backpack is empty.</p> }
+            </div>
           </div>
         </section>
         <section class="lw-char-sheet__card">
-          <header class="lw-char-sheet__card-head">
-            <h2>Add Equipment from 5e Database ({{ equipmentDatabase().length }} Items)</h2>
-          </header>
+          <header class="lw-char-sheet__card-head"><h2>Add Equipment from 5e Database ({{ equipmentDatabase().length }} Items)</h2></header>
           <input type="search" class="lw-char-sheet__note-input" placeholder="Search 5e weapons, armor, shields, relics, gear..." [ngModel]="equipmentSearch()" (ngModelChange)="equipmentSearch.set($event)" />
           <div class="lw-char-sheet__equip-list">
             @for (item of filteredEquipmentCatalog(); track item.id) {
@@ -360,7 +352,7 @@
                 </div>
                 <div class="lw-char-sheet__inline-btns">
                   <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="equipmentAdded.emit({ item, equipNow: true })">+ Equip</button>
-                  <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="equipmentAdded.emit({ item, equipNow: false })">+ Backpack</button>
+                  <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="equipmentAdded.emit({ item, equipNow: false })">+ Pack</button>
                 </div>
               </div>
             }
@@ -372,21 +364,38 @@
       <div class="lw-char-sheet__two-col">
         <section class="lw-char-sheet__card">
           <header class="lw-char-sheet__card-head">
-            <h2>Backpack Inventory ({{ backpackItems().length }}) &amp; Equipped ({{ equippedItems().length }})</h2>
+            <h2>Equipped on Character ({{ equippedItems().length }}) &amp; In Backpack ({{ backpackItems().length }})</h2>
+            <lw-button variant="guide-action" size="xs" label="Edit Loadout" (pressed)="editCharacterRequested.emit(s)" />
           </header>
-          <div class="lw-char-sheet__equip-list">
-            @for (eq of s.equipment; track eq.id) {
-              <div class="lw-char-sheet__equip-item">
-                <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'layers'" [size]="15" tone="gold" /></span>
-                <div class="lw-char-sheet__equip-copy">
-                  <strong>{{ eq.name }}</strong>
-                  <small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small>
+          <div class="lw-char-sheet__spell-group-block">
+            <div class="lw-char-sheet__spell-group-head"><strong>Equipped on Character ({{ equippedItems().length }})</strong></div>
+            <div class="lw-char-sheet__equip-list">
+              @for (eq of equippedItems(); track eq.id) {
+                <div class="lw-char-sheet__equip-item">
+                  <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'shield'" [size]="15" tone="gold" /></span>
+                  <div class="lw-char-sheet__equip-copy">
+                    <strong>{{ eq.name }}</strong>
+                    <small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small>
+                  </div>
+                  <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="toggleEquipmentItem(eq)">Equipped (Move to Pack)</button>
                 </div>
-                <button ngpButton type="button" class="lw-char-sheet__equip-badge" [class.lw-char-sheet__equip-badge--active]="eq.equipped" (click)="toggleEquipmentItem(eq)">
-                  {{ eq.equipped ? 'Equipped (Stow)' : 'In Backpack (Equip)' }}
-                </button>
-              </div>
-            }
+              } @empty { <p class="lw-char-sheet__muted">No items equipped.</p> }
+            </div>
+          </div>
+          <div class="lw-char-sheet__spell-group-block">
+            <div class="lw-char-sheet__spell-group-head"><strong>In Backpack ({{ backpackItems().length }})</strong></div>
+            <div class="lw-char-sheet__equip-list">
+              @for (eq of backpackItems(); track eq.id) {
+                <div class="lw-char-sheet__equip-item">
+                  <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'layers'" [size]="15" tone="gold" /></span>
+                  <div class="lw-char-sheet__equip-copy">
+                    <strong>{{ eq.name }}</strong>
+                    <small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small>
+                  </div>
+                  <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="toggleEquipmentItem(eq)">In Backpack (Equip)</button>
+                </div>
+              } @empty { <p class="lw-char-sheet__muted">Backpack is empty.</p> }
+            </div>
           </div>
         </section>
         <section class="lw-char-sheet__card">
@@ -475,9 +484,7 @@
           </div>
           <div class="lw-char-sheet__conn-chips">
             @for (flt of ['All', 'NPC', 'Place']; track flt) {
-              <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="metFilter() === flt" (click)="metFilter.set($any(flt))">
-                {{ flt === 'All' ? 'All Met' : flt + 's' }}
-              </button>
+              <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="metFilter() === flt" (click)="metFilter.set($any(flt))">{{ flt === 'All' ? 'All Met' : flt + 's' }}</button>
             }
           </div>
         </header>
@@ -506,9 +513,7 @@
           </div>
           <div class="lw-char-sheet__conn-chips">
             @for (cat of ['All', 'Session', 'Encounter', 'Quest', 'Milestone']; track cat) {
-              <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="historyFilter() === cat" (click)="historyFilter.set($any(cat))">
-                {{ cat }}
-              </button>
+              <button ngpButton type="button" class="lw-char-sheet__member-pill" [class.lw-char-sheet__member-pill--active]="historyFilter() === cat" (click)="historyFilter.set($any(cat))">{{ cat }}</button>
             }
           </div>
         </header>
@@ -529,7 +534,6 @@
     }
   }
 
-  <!-- Official D&D 5e Spell Preparation Confirmation Modal -->
   @if (pendingSpellPrep(); as prep) {
     <div class="lw-char-sheet__modal-backdrop" (click)="pendingSpellPrep.set(null)">
       <section class="lw-char-sheet__modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
@@ -546,7 +550,6 @@
     </div>
   }
 
-  <!-- Large Place / NPC Met Detail Modal -->
   @if (inspectedMetEntity(); as entity) {
     <div class="lw-char-sheet__modal-backdrop" (click)="inspectedMetEntity.set(null)">
       <section class="lw-char-sheet__modal-card lw-char-sheet__modal-card--large" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
@@ -560,9 +563,7 @@
         <p><strong>Campaign Details:</strong> {{ entity.details }}</p>
         <p class="lw-char-sheet__muted"><strong>Party Observations &amp; Clues:</strong> {{ entity.playerNotesOrClues }}</p>
         <div class="lw-char-sheet__conn-chips">
-          @for (conn of entity.connectedNames; track conn) {
-            <span class="lw-char-sheet__tag">{{ conn }}</span>
-          }
+          @for (conn of entity.connectedNames; track conn) { <span class="lw-char-sheet__tag">{{ conn }}</span> }
         </div>
         <div class="lw-char-sheet__modal-actions">
           <lw-button variant="ghost" size="sm" label="Close" (pressed)="inspectedMetEntity.set(null)" />
@@ -574,7 +575,6 @@
     </div>
   }
 
-  <!-- Universal Reusable Note Composer Web Component -->
   <lw-note-composer-modal
     [(open)]="noteComposerOpen"
     defaultNoteType="character"

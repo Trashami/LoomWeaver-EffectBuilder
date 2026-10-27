@@ -1,4 +1,7 @@
 export const EXTENDED_EFFECT_KINDS = [
+  'sky_projectile',
+  'sky_beam',
+  'sky_lightning',
   'chain_lightning',
   'shield',
   'ground',
@@ -20,6 +23,27 @@ export const EXTENDED_VARIANTS: Record<
   ExtendedEffectKind,
   readonly { id: string; name: string; description: string }[]
 > = {
+  sky_projectile: [
+    { id: 'fireball', name: 'Sky Fireball / Meteor', description: '3D molten fireball projectile descending from the sky onto the target.' },
+    { id: 'comet', name: 'Comet Strike', description: 'Streaming astral comet plunging from the upper atmosphere with coiling wake ribbons.' },
+    { id: 'glacier', name: 'Hail / Ice Meteor', description: 'Faceted crystalline frost sphere crashing down from overhead.' },
+    { id: 'starfall', name: 'Celestial Starfall', description: 'Blazing radiant star-lance descending from the heavens.' },
+    { id: 'void_orb', name: 'Abyssal Falling Orb', description: 'Dark singularity sphere plummeting from a skyward rift.' },
+  ],
+  sky_beam: [
+    { id: 'divine_smite', name: 'Divine Smite Pillar', description: 'Concentrated heavenly beam striking down from the sky onto the target.' },
+    { id: 'sacred_flame', name: 'Sacred Flame Ray', description: 'Radiant golden column descending from an overhead celestial aperture.' },
+    { id: 'moonbeam', name: 'Moonbeam Shaft', description: 'Silvery lunar beam shining down from the night sky with drifting motes.' },
+    { id: 'orbital_lance', name: 'Arcane Sky Lance', description: 'High-energy arcane laser lancing down from above.' },
+    { id: 'shadow_pillar', name: 'Umbral Sky Pillar', description: 'Dark void column descending from an overhead eclipse.' },
+  ],
+  sky_lightning: [
+    { id: 'thunderbolt', name: 'Sky Thunderbolt', description: 'Jagged bolt of sky lightning with customizable arcs, branches, core, and outer emitter.' },
+    { id: 'forked_tempest', name: 'Forked Storm Strike', description: 'Multi-arc sky lightning splitting into wide secondary branches.' },
+    { id: 'chain_sky', name: 'High-Voltage Surge', description: 'Intense flickering electrical discharge with dense ozone spark emitters.' },
+    { id: 'divine_wrath', name: 'Wrathful Sky Bolt', description: 'Radiant golden-white storm bolt crashing from the heavens.' },
+    { id: 'eldritch_storm', name: 'Eldritch Sky Bolt', description: 'Crackling arcane-violet lightning descending from a storm cloud.' },
+  ],
   chain_lightning: [
     { id: 'arc_jump', name: 'Jumping arc', description: 'Branching electrical bolt jumping sequentially across targets 1, 2, and 3.' },
     { id: 'storm_chain', name: 'Storm chain', description: 'Tempest lightning chaining between targets with residual ozone sparks.' },
@@ -130,6 +154,9 @@ export interface ExtractedCatalogSpec {
 }
 
 export const EXTRACTED_CORE_PRESET_SPECS: readonly ExtractedCatalogSpec[] = [
+  { id: 'ext:sky-projectile', title: 'Sky Ball Projectile (Fireball)', description: '3D ball/meteor projectile descending from the sky with adjustable sky origin and target hit point.', category: 'Extracted core layers', kind: 'sky_projectile', variant: 'fireball', anchor: 'target', color: '#ff5b16', secondaryColor: '#fff1bd', size: 24, duration: 1350 },
+  { id: 'ext:sky-beam', title: 'Sky Beam (Divine Smite)', description: 'Heavenly beam descending from the sky with adjustable sky origin, hit offset, width, and wave.', category: 'Extracted core layers', kind: 'sky_beam', variant: 'divine_smite', anchor: 'target', color: '#ffd978', secondaryColor: '#ffffff', size: 22, duration: 1300 },
+  { id: 'ext:sky-lightning', title: 'Sky Lightning Strike', description: 'After Effects-style sky lightning with customizable arcs, branches, jaggedness, core color, and outer emitter.', category: 'Extracted core layers', kind: 'sky_lightning', variant: 'thunderbolt', anchor: 'target', color: '#7ab8ff', secondaryColor: '#ffffff', size: 18, duration: 1150 },
   { id: 'ext:projectile', title: 'Projectile', description: 'Independent curved or straight glowing spell projectile.', category: 'Extracted core layers', kind: 'projectile', variant: 'orb', anchor: 'path', color: '#ff7a2e', secondaryColor: '#fff2c2', size: 12, duration: 1100 },
   { id: 'ext:volley', title: 'Projectile Volley', description: 'Staggered multi-projectile barrage with spread and curved paths.', category: 'Extracted core layers', kind: 'projectile', variant: 'swarm', anchor: 'path', color: '#b48cff', secondaryColor: '#f3ebff', size: 9, duration: 1400 },
   { id: 'ext:object-proj', title: 'Object Projectile', description: 'Spinning physical projectile (tooth, dagger, or stone) along the path.', category: 'Extracted core layers', kind: 'trail', variant: 'spinning_tooth', anchor: 'path', color: '#f2e8d5', secondaryColor: '#7be8b5', size: 14, duration: 1100 },
