@@ -107,7 +107,7 @@ export class MapPngAssetApiService {
 
   triggerPythonBatchPngSync(): void {
     this.batchBusy.set(true);
-    this.pngPipelineBanner.set('Running Python batch 3D-to-PNG thumbnail generator...');
+    this.pngPipelineBanner.set('Refreshing 3D asset preview catalog...');
     this.http
       .post<{
         totalAssets: number;

@@ -15,9 +15,9 @@
         </div>
 
         <div class="lw-asset-modal__header-actions">
-          <label class="lw-asset-modal__upload-btn" title="Upload a new .glb 3D model">
+          <label class="lw-asset-modal__upload-btn" title="Upload a new 3D asset">
             <lw-icon name="upload" />
-            <span>Upload 3D .GLB</span>
+            <span>Upload 3D Asset</span>
             <input type="file" accept=".glb" hidden (change)="onFileSelected($event)" />
           </label>
           <button
@@ -63,7 +63,7 @@
               [class.lw-asset-modal__chip--active]="formatFilter() === '3d-glb'"
               (click)="selectFormatFilter('3d-glb')"
             >
-              3D Models (.GLB)
+              3D Assets
             </button>
             <button
               type="button"
@@ -185,7 +185,7 @@
             <div class="lw-asset-modal__thumb-box">
               <img [src]="asset.thumbnailUrl" [alt]="asset.name" loading="lazy" />
               <span class="lw-asset-modal__badge">
-                {{ asset.modelUrl ? '3D GLB' : asset.isFloor ? 'FLOOR' : '2D STAMP' }}
+                {{ asset.modelUrl ? '3D ASSET' : asset.isFloor ? 'FLOOR' : '2D STAMP' }}
               </span>
             </div>
             <div class="lw-asset-modal__card-body">

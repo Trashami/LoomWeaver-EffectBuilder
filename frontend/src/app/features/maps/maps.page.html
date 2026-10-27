@@ -1,6 +1,7 @@
 @if (showLandingHub()) {
   <lw-map-studio-landing
     [existingMaps]="existingMaps()"
+    [marketplaceMaps]="marketplaceMaps()"
     [campaigns]="campaigns()"
     [sessions]="sessions()"
     [encounters]="encounters()"
@@ -8,6 +9,8 @@
     (campaignChange)="store.setCampaign($event)"
     (createNewMap)="onCreateMapFromLanding($event)"
     (openExistingMap)="onOpenExistingMapFromLanding($event)"
+    (applyMarketplaceMap)="onApplyMarketplaceMap($event)"
+    (purchaseMarketplaceMap)="onPurchaseMarketplaceMap($event)"
   />
 } @else {
   <div class="lw-maps-studio">
@@ -70,11 +73,11 @@
             <canvas
               #babylonCanvas
               class="lw-maps-studio__canvas"
-              aria-label="Babylon.js 3D Tactical Scene Canvas"
+              aria-label="3D Tactical Scene Canvas"
             ></canvas>
             <div class="lw-maps-studio__pane-tag">
               <span>
-                Babylon.js 3D · {{ celestialMode() === 'sun' ? 'Sunlight' : 'Moonlight' }} ({{
+                3D Scene View · {{ celestialMode() === 'sun' ? 'Sunlight' : 'Moonlight' }} ({{
                   celestialAzimuthDeg()
                 }}° / {{ celestialAltitudeDeg() }}°) · Rev {{ sceneGraph().revision }}
               </span>

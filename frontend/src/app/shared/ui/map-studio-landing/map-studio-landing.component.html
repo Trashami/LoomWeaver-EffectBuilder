@@ -1,16 +1,12 @@
 <section class="lw-map-landing" aria-label="LoomMaps Studio Hub">
+  <!-- Single Full-Width Long Hero Card with Map Options -->
   <div class="lw-map-landing__hero">
-    <div class="lw-map-landing__hero-copy">
-      <div class="lw-map-landing__eyebrow-row">
-        <lw-badge tone="emerald">LoomMaps Studio · maps.loom-weaver.com</lw-badge>
-        <lw-badge tone="gold">Authoritative 2D Bump/Height &amp; 3D Babylon.js Scene Engine</lw-badge>
-      </div>
+    <div class="lw-map-landing__hero-main">
       <h1 class="lw-map-landing__title">Craft Tactical Battlemaps &amp; Living World Atlases.</h1>
       <p class="lw-map-landing__subtitle">
-        Start a new map or open an existing scene for your campaign. Choose between our classic
-        <strong>2D Bump/Height Map Builder</strong> or our full <strong>3D Map Studio</strong> with
-        2D bump-mapped flooring, real-time terrain elevation sculpting, gapless 3D wall lines &amp; shapes,
-        ghost cursor placement, and directional Sun &amp; Moon shadows.
+        Start a new <strong>3D Tactical Map</strong> or <strong>2D Bump/Height Map</strong>, open any of your saved
+        campaign maps below, or browse the <strong>LoomMaps Marketplace</strong> to apply free or purchased creator
+        maps directly to your active campaign session.
       </p>
 
       <div class="lw-map-landing__cta-row">
@@ -20,8 +16,8 @@
           class="lw-map-landing__primary-btn"
           (click)="openNewMapModal('3d')"
         >
-          <lw-icon name="add_circle" [size]="18" />
-          <span>Create a New Map (2D or 3D)</span>
+          <lw-icon name="view_in_ar" [size]="18" />
+          <span>Create 3D Map</span>
         </button>
 
         <button
@@ -31,56 +27,63 @@
           (click)="openNewMapModal('2d')"
         >
           <lw-icon name="map" [size]="17" />
-          <span>Quick New 2D Bump Map</span>
+          <span>Create 2D Map</span>
         </button>
 
-        <label class="lw-map-landing__campaign-filter">
-          <span>Campaign:</span>
-          <select [value]="activeCampaignId()" (change)="onCampaignSelect($event)">
-            @for (c of campaigns(); track c.id) {
-              <option [value]="c.id">{{ c.name }}</option>
-            }
-          </select>
-        </label>
+        <button
+          ngpButton
+          type="button"
+          class="lw-map-landing__market-btn"
+          (click)="openMarketplaceBrowser()"
+        >
+          <lw-icon name="globe" [size]="17" />
+          <span>Browse Marketplace Maps ({{ resolvedMarketplaceMaps().length }})</span>
+        </button>
+
+        <div class="lw-map-landing__session-selectors">
+          <label class="lw-map-landing__campaign-filter">
+            <span>Campaign:</span>
+            <select [value]="activeCampaignId()" (change)="onCampaignSelect($event)">
+              @for (c of campaigns(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="lw-map-landing__campaign-filter">
+            <span>Session:</span>
+            <select [ngModel]="draftSessionId()" (ngModelChange)="draftSessionId.set($event)">
+              @for (s of sessions(); track s.id) {
+                <option [value]="s.id">{{ s.label }}</option>
+              }
+            </select>
+          </label>
+        </div>
       </div>
-    </div>
-
-    <div class="lw-map-landing__mode-cards">
-      <article class="lw-mode-card" (click)="openNewMapModal('2d')">
-        <div class="lw-mode-card__header">
-          <lw-icon name="layers" [size]="22" />
-          <lw-badge tone="emerald">2D Bump / Height Engine</lw-badge>
-        </div>
-        <h2>Build a 2D Map</h2>
-        <p>
-          Classic top-down tactical map workflow powered exclusively by our 382 verified
-          <strong>Albedo + Normal + Height</strong> bump assets with dynamic light relief and ghost stamp placement.
-        </p>
-        <span class="lw-mode-card__action">Launch 2D Map Studio &rarr;</span>
-      </article>
-
-      <article class="lw-mode-card lw-mode-card--featured" (click)="openNewMapModal('3d')">
-        <div class="lw-mode-card__header">
-          <lw-icon name="view_in_ar" [size]="22" />
-          <lw-badge tone="gold">Babylon.js 3D + Bump Flooring</lw-badge>
-        </div>
-        <h2>Build a 3D Map</h2>
-        <p>
-          Paint 2D bump/height maps onto 3D flooring, raise or lower terrain heightfields, draw gapless 3D wall lines
-          and room shapes, place 3D objects with ghost previews, and position the Sun or Moon for live shadows.
-        </p>
-        <span class="lw-mode-card__action">Launch 3D Map Studio &rarr;</span>
-      </article>
     </div>
   </div>
 
+  <!-- Player / GM Maps Section Underneath -->
   <div class="lw-map-landing__existing">
     <header class="lw-map-landing__section-header">
       <div>
-        <h2>Select an Existing Map</h2>
-        <p>Open any saved campaign battlemap. Left and right studio docks start collapsed for maximum canvas space.</p>
+        <h2>Your Campaign &amp; Session Maps</h2>
+        <p>
+          Select any map to open it in the studio, or browse the Marketplace to add free or purchased community maps to your session.
+        </p>
       </div>
-      <span class="lw-map-landing__count">{{ existingMaps().length }} Saved Maps</span>
+      <div class="lw-map-landing__section-actions">
+        <span class="lw-map-landing__count">{{ existingMaps().length }} Maps in Library</span>
+        <button
+          ngpButton
+          type="button"
+          class="lw-map-landing__inline-market-btn"
+          (click)="openMarketplaceBrowser()"
+        >
+          <lw-icon name="globe" [size]="14" />
+          <span>Browse Market Maps</span>
+        </button>
+      </div>
     </header>
 
     <div class="lw-map-landing__grid">
@@ -90,14 +93,36 @@
             <img [src]="map.previewUrl" [alt]="map.name" loading="lazy" />
             <div class="lw-existing-card__badges">
               <lw-badge [tone]="map.dimensionMode === '3d' ? 'gold' : 'emerald'">
-                {{ map.dimensionMode === '3d' ? '3D Map' : '2D Bump Map' }}
+                {{ map.dimensionMode === '3d' ? '3D Map' : '2D Map' }}
               </lw-badge>
-              <lw-badge tone="neutral">Rev {{ map.revision }}</lw-badge>
+              <lw-badge
+                [tone]="
+                  map.accessKind === 'purchased'
+                    ? 'gold'
+                    : map.accessKind === 'free'
+                      ? 'emerald'
+                      : 'neutral'
+                "
+              >
+                {{ map.priceLabel }}
+              </lw-badge>
             </div>
           </div>
 
           <div class="lw-existing-card__body">
             <h3>{{ map.name }}</h3>
+
+            <div class="lw-existing-card__creator-row">
+              <span class="lw-existing-card__creator" title="Creator Account Name">
+                <lw-icon name="person" [size]="13" />
+                <strong>{{ map.creatorAccount }}</strong>
+              </span>
+              <span class="lw-existing-card__popularity" title="Community Popularity Rating">
+                <lw-icon name="trending_up" [size]="13" />
+                <span>{{ map.popularityRating }}</span>
+              </span>
+            </div>
+
             <p class="lw-existing-card__meta">
               {{ map.gridSummary }} · Floor: {{ map.floorBumpName }}
             </p>
@@ -106,7 +131,7 @@
               <span>Planned: <strong>{{ map.sessionLabel }} · {{ map.encounterLabel }}</strong></span>
             </div>
             <div class="lw-existing-card__footer">
-              <small>{{ map.updatedLabel }}</small>
+              <small>{{ map.updatedLabel }} · Rev {{ map.revision }}</small>
               <button ngpButton type="button" class="lw-existing-card__open-btn">
                 Open Map
               </button>
@@ -117,6 +142,7 @@
     </div>
   </div>
 
+  <!-- Create New Map Modal -->
   @if (showCreatePrompt()) {
     <div class="lw-map-modal-backdrop" (click)="showCreatePrompt.set(false)">
       <div
@@ -152,7 +178,7 @@
             <lw-icon name="map" [size]="22" />
             <div>
               <strong>2D Map (Bump / Height Assets)</strong>
-              <small>Top-down tactical builder restricted to verified 2D bump/normal/height assets.</small>
+              <small>Top-down tactical builder with normal &amp; height relief flooring and stamps.</small>
             </div>
           </button>
 
@@ -165,8 +191,8 @@
           >
             <lw-icon name="view_in_ar" [size]="22" />
             <div>
-              <strong>3D Map (Babylon.js + Bump Flooring)</strong>
-              <small>2D bump flooring, terrain raise/lower tool, gapless 3D wall lines/shapes, 3D objects &amp; Sun/Moon shadows.</small>
+              <strong>3D Map (Full 3D Scene &amp; Bump Flooring)</strong>
+              <small>Seamless bump flooring, terrain raise/lower tool, gapless 3D wall lines/shapes, 3D objects &amp; Sun/Moon shadows.</small>
             </div>
           </button>
         </div>
@@ -245,6 +271,221 @@
             <span>Open {{ selectedDimension() === '3d' ? '3D' : '2D' }} Map Studio</span>
           </button>
         </footer>
+      </div>
+    </div>
+  }
+
+  <!-- Marketplace Maps Browser Modal -->
+  @if (showMarketplaceModal()) {
+    <div class="lw-map-modal-backdrop" (click)="showMarketplaceModal.set(false)">
+      <div
+        class="lw-market-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Browse Marketplace Maps"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="lw-market-modal__header">
+          <div>
+            <span class="lw-market-modal__eyebrow">LoomMaps Creator Marketplace · 85/15 Creator Split</span>
+            <h2>Browse &amp; Apply Marketplace Maps</h2>
+            <p>
+              Apply free or purchased community maps directly to your selected campaign session, or unlock paid creator maps.
+            </p>
+          </div>
+          <button
+            ngpButton
+            type="button"
+            class="lw-map-modal__close"
+            (click)="showMarketplaceModal.set(false)"
+          >
+            <lw-icon name="close" [size]="18" />
+          </button>
+        </header>
+
+        <!-- Target Session Bar -->
+        <div class="lw-market-modal__session-bar">
+          <span class="lw-market-modal__session-label">Apply Selected Map To:</span>
+          <label class="lw-map-landing__campaign-filter">
+            <span>Campaign:</span>
+            <select [value]="activeCampaignId()" (change)="onCampaignSelect($event)">
+              @for (c of campaigns(); track c.id) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="lw-map-landing__campaign-filter">
+            <span>Session:</span>
+            <select [ngModel]="draftSessionId()" (ngModelChange)="draftSessionId.set($event)">
+              @for (s of sessions(); track s.id) {
+                <option [value]="s.id">{{ s.label }}</option>
+              }
+            </select>
+          </label>
+          <label class="lw-map-landing__campaign-filter">
+            <span>Encounter:</span>
+            <select [ngModel]="draftEncounterId()" (ngModelChange)="draftEncounterId.set($event)">
+              @for (e of encounters(); track e.id) {
+                <option [value]="e.id">{{ e.label }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <!-- Search & Filter Row -->
+        <div class="lw-market-modal__filters">
+          <div class="lw-market-modal__search">
+            <lw-icon name="search" [size]="15" />
+            <input
+              type="search"
+              placeholder="Search marketplace maps by title, biome, or @creator account..."
+              [value]="marketSearchQuery()"
+              (input)="onMarketSearchInput($event)"
+            />
+          </div>
+
+          <div class="lw-market-modal__tabs">
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketFilterTab() === 'all'"
+              (click)="marketFilterTab.set('all')"
+            >
+              All Maps ({{ resolvedMarketplaceMaps().length }})
+            </button>
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketFilterTab() === 'free'"
+              (click)="marketFilterTab.set('free')"
+            >
+              Free Maps
+            </button>
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketFilterTab() === 'purchased'"
+              (click)="marketFilterTab.set('purchased')"
+            >
+              Purchased / Owned
+            </button>
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketFilterTab() === 'paid'"
+              (click)="marketFilterTab.set('paid')"
+            >
+              Paid Storefront
+            </button>
+          </div>
+
+          <div class="lw-market-modal__tabs">
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketDimensionFilter() === 'all'"
+              (click)="marketDimensionFilter.set('all')"
+            >
+              2D &amp; 3D
+            </button>
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketDimensionFilter() === '3d'"
+              (click)="marketDimensionFilter.set('3d')"
+            >
+              3D Only
+            </button>
+            <button
+              ngpButton
+              type="button"
+              class="lw-market-modal__tab"
+              [class.lw-market-modal__tab--active]="marketDimensionFilter() === '2d'"
+              (click)="marketDimensionFilter.set('2d')"
+            >
+              2D Only
+            </button>
+          </div>
+        </div>
+
+        <!-- Marketplace Maps Grid -->
+        <div class="lw-market-modal__grid">
+          @for (item of filteredMarketplaceMaps(); track item.id) {
+            <article class="lw-market-card">
+              <div class="lw-market-card__preview">
+                <img [src]="item.previewUrl" [alt]="item.name" loading="lazy" />
+                <div class="lw-market-card__badges">
+                  <lw-badge [tone]="item.dimensionMode === '3d' ? 'gold' : 'emerald'">
+                    {{ item.dimensionMode === '3d' ? '3D Map' : '2D Map' }}
+                  </lw-badge>
+                  <span
+                    class="lw-market-card__price-pill"
+                    [class.lw-market-card__price-pill--free]="item.accessKind === 'free'"
+                    [class.lw-market-card__price-pill--purchased]="item.accessKind === 'purchased'"
+                    [class.lw-market-card__price-pill--paid]="item.accessKind === 'paid'"
+                  >
+                    {{ item.priceLabel }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="lw-market-card__body">
+                <div class="lw-market-card__title-row">
+                  <h3>{{ item.name }}</h3>
+                  <span class="lw-market-card__biome">{{ item.biomeTag }}</span>
+                </div>
+
+                <div class="lw-existing-card__creator-row">
+                  <span class="lw-existing-card__creator" title="Creator Account Name">
+                    <lw-icon name="person" [size]="13" />
+                    <strong>{{ item.creatorAccount }}</strong>
+                  </span>
+                  <span class="lw-existing-card__popularity" title="Public Popularity Rating">
+                    <lw-icon name="trending_up" [size]="13" />
+                    <span>{{ item.popularityRating }} · {{ item.tablesRunLabel }}</span>
+                  </span>
+                </div>
+
+                <p class="lw-market-card__desc">{{ item.description }}</p>
+                <p class="lw-existing-card__meta">
+                  {{ item.gridSummary }} · Floor: {{ item.floorBumpName }}
+                </p>
+
+                <div class="lw-market-card__footer">
+                  <span class="lw-market-card__price-tag">
+                    @if (item.accessKind === 'free') {
+                      <strong>Free Public Map</strong>
+                    } @else if (item.accessKind === 'purchased') {
+                      <strong>Owned ({{ item.priceLabel }})</strong>
+                    } @else {
+                      <strong>Price: ${{ item.priceUsd.toFixed(2) }}</strong>
+                    }
+                  </span>
+
+                  <button
+                    ngpButton
+                    type="button"
+                    class="lw-market-card__apply-btn"
+                    [class.lw-market-card__apply-btn--paid]="item.accessKind === 'paid'"
+                    (click)="onMarketAction(item)"
+                  >
+                    @if (item.accessKind === 'paid') {
+                      <span>Purchase &amp; Apply (${{ item.priceUsd.toFixed(2) }})</span>
+                    } @else {
+                      <span>Apply to Current Session</span>
+                    }
+                  </button>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
       </div>
     </div>
   }

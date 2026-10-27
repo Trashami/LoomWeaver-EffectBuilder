@@ -13,28 +13,38 @@ import {
 import { FormsModule } from '@angular/forms';
 import { AdventureGuideService } from '../../core/services/adventure-guide.service';
 import { LoomWeaverStoreService } from '../../core/services/loomweaver-store.service';
+import { LwIconComponent } from '../../shared/ui/icon/icon.component';
+import { LwMapAssetPickerModalComponent } from '../../shared/ui/map-asset-picker-modal/map-asset-picker-modal.component';
 import {
-  LwCelestialBodyMode,
-  LwCreateMapLaunchIntent,
-  LwCustomLightKind,
-  LwExistingMapSummary,
-  LwIconComponent,
-  LwMapAssetPickerModalComponent,
-  LwMapCameraView,
-  LwMapDimensionMode,
   LwMapMaterialPreset,
   LwMapPngAssetItem,
+} from '../../shared/ui/map-png-asset-browser/map-png-asset-browser.component';
+import {
+  LwCelestialBodyMode,
+  LwCustomLightKind,
   LwMapPropertiesInspectorComponent,
-  LwMapQualityPreset,
-  LwMapStudioLandingComponent,
-  LwMapStudioSubbarComponent,
-  LwMapToolDockComponent,
-  LwMapViewportBarComponent,
   LwSelectedSceneNode,
   LwTerrainSculptOp,
-  LwToastNotificationComponent,
+} from '../../shared/ui/map-properties-inspector/map-properties-inspector.component';
+import {
+  LwApplyMarketplaceMapIntent,
+  LwCreateMapLaunchIntent,
+  LwExistingMapSummary,
+  LwMapDimensionMode,
+  LwMapStudioLandingComponent,
+  LwMarketplaceMapItem,
+} from '../../shared/ui/map-studio-landing/map-studio-landing.component';
+import {
+  LwMapStudioSubbarComponent,
   MapEditorModeTab,
-} from '../../shared/ui/public-api';
+} from '../../shared/ui/map-studio-subbar/map-studio-subbar.component';
+import { LwMapToolDockComponent } from '../../shared/ui/map-tool-dock/map-tool-dock.component';
+import {
+  LwMapCameraView,
+  LwMapQualityPreset,
+  LwMapViewportBarComponent,
+} from '../../shared/ui/map-viewport-bar/map-viewport-bar.component';
+import { LwToastNotificationComponent } from '../../shared/ui/toast-notification/toast-notification.component';
 import { MapHistoryEngineService } from './application/map-history-engine.service';
 import { MapPngAssetApiService } from './application/map-png-asset-api.service';
 import { MapStudioStoreService } from './application/map-studio-store.service';
@@ -51,6 +61,7 @@ import {
   DEFAULT_CAMPAIGN_SESSIONS,
   DEFAULT_EXISTING_MAPS,
   DEFAULT_MAP_MATERIALS,
+  DEFAULT_MARKETPLACE_MAPS,
   INITIAL_SELECTED_WALL_NODE,
 } from './engine/map-studio-presets';
 import {
@@ -108,6 +119,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   readonly showPlayerSafeOnly = signal<boolean>(false);
 
   readonly existingMaps = signal<readonly LwExistingMapSummary[]>(DEFAULT_EXISTING_MAPS);
+  readonly marketplaceMaps = signal<readonly LwMarketplaceMapItem[]>(DEFAULT_MARKETPLACE_MAPS);
   readonly campaigns = computed(() =>
     this.store.campaigns().map((c) => ({ id: c.id, name: c.name })),
   );
@@ -353,6 +365,63 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.mountStudioViewports();
   }
 
+  onApplyMarketplaceMap(intent: LwApplyMarketplaceMapIntent): void {
+    const mkt = intent.marketMap;
+    const campaignObj =
+      this.campaigns().find((c) => c.id === intent.campaignId) ?? {
+        id: intent.campaignId,
+        name: 'Shadow of the Mountain',
+      };
+    const sessionObj =
+      this.sessions().find((s) => s.id === intent.sessionId) ?? this.sessions()[0];
+    const encounterObj =
+      this.encounters().find((e) => e.id === intent.encounterId) ?? this.encounters()[0];
+
+    const summary: LwExistingMapSummary = {
+      sceneKey: mkt.sceneKey,
+      name: mkt.name,
+      dimensionMode: mkt.dimensionMode,
+      campaignId: campaignObj.id,
+      campaignName: campaignObj.name,
+      sessionLabel: sessionObj?.label ?? 'Session 15 — The Forgotten Crypt',
+      encounterLabel: encounterObj?.label ?? 'Lord of Cinth Vampire Gala',
+      gridSummary: mkt.gridSummary,
+      floorBumpName: mkt.floorBumpName,
+      previewUrl: mkt.previewUrl,
+      updatedLabel: `Applied from Marketplace · ${mkt.creatorAccount}`,
+      revision: 1,
+      creatorAccount: mkt.creatorAccount,
+      popularityRating: `${mkt.popularityRating} · ${mkt.tablesRunLabel}`,
+      priceLabel: mkt.accessKind === 'free' ? 'Free Market Map' : mkt.priceLabel,
+      accessKind: mkt.accessKind,
+    };
+
+    this.existingMaps.update((cur) => [
+      summary,
+      ...cur.filter((m) => m.sceneKey !== summary.sceneKey),
+    ]);
+    this.assignSessionId.set(intent.sessionId);
+    this.assignEncounterId.set(intent.encounterId);
+    this.onOpenExistingMapFromLanding(summary);
+    this.pngPipelineBanner.set(
+      `Applied '${mkt.name}' (${mkt.creatorAccount}) to ${sessionObj?.label ?? 'current session'}.`,
+    );
+  }
+
+  onPurchaseMarketplaceMap(item: LwMarketplaceMapItem): void {
+    this.marketplaceMaps.update((cur) =>
+      cur.map((m) =>
+        m.id === item.id
+          ? {
+              ...m,
+              accessKind: 'purchased',
+              priceLabel: `Purchased ($${item.priceUsd.toFixed(2)})`,
+            }
+          : m,
+      ),
+    );
+  }
+
   onOpenExistingMapFromLanding(summary: LwExistingMapSummary): void {
     this.selectedSceneKey.set(summary.sceneKey);
     this.mapTitle.set(summary.name);
@@ -442,7 +511,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       name: asset.name,
       kind: isDoor ? 'door' : isWall ? 'wall' : 'prop',
       subtitle: asset.modelUrl
-        ? `3D .GLB · ${asset.category}`
+        ? `3D Asset · ${asset.category}`
         : asset.isFloor
           ? 'Seamless 2D Bump/Height Flooring'
           : `2D Floor Stamp · ${asset.category}`,
@@ -812,7 +881,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
           id: st.id,
           name: st.label,
           kind: 'prop',
-          subtitle: st.modelUrl ? 'Placed 3D .GLB Object' : 'Placed 2D Floor Stamp',
+          subtitle: st.modelUrl ? 'Placed 3D Object' : 'Placed 2D Floor Stamp',
           thumbnailUrl: st.thumbnailUrl || st.albedoUrl || cur.thumbnailUrl,
           modelUrl: st.modelUrl,
           albedoUrl: st.albedoUrl,
