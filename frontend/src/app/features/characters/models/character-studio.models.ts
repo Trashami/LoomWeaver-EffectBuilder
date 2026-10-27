@@ -13,6 +13,65 @@ export type CharacterSheetTab =
   | 'connections'
   | 'history';
 
+export type LwNoteCategory =
+  | 'character'
+  | 'session'
+  | 'npc'
+  | 'location'
+  | 'quest'
+  | 'lore'
+  | 'combat';
+
+export type LwNoteVisibility = 'private' | 'dm-only' | 'global';
+
+export interface LwNoteMentionTagVm {
+  readonly compositeKey: string;
+  readonly name: string;
+  readonly entityType: string;
+  readonly routeLink: string;
+}
+
+export interface CharacterRichNoteVm {
+  readonly id: string;
+  readonly title: string;
+  readonly noteType: LwNoteCategory;
+  readonly visibility: LwNoteVisibility;
+  readonly authorUsername: string;
+  readonly createdAtLabel: string;
+  readonly contentHtml: string;
+  readonly contentText: string;
+  readonly sourceEntityKey: string;
+  readonly sourceEntityName: string;
+  readonly mentionedEntities: readonly LwNoteMentionTagVm[];
+}
+
+export interface CharacterMetEntityVm {
+  readonly id: string;
+  readonly compositeKey: string;
+  readonly name: string;
+  readonly entityType: 'NPC' | 'Place';
+  readonly roleOrRegion: string;
+  readonly dispositionOrStatus: string;
+  readonly sessionMet: string;
+  readonly summary: string;
+  readonly details: string;
+  readonly playerNotesOrClues: string;
+  readonly routeLink: string;
+  readonly connectedNames: readonly string[];
+}
+
+export interface CharacterCampaignHistoryEventVm {
+  readonly id: string;
+  readonly category: 'Session' | 'Encounter' | 'Quest' | 'Milestone';
+  readonly title: string;
+  readonly sessionLabel: string;
+  readonly locationName: string;
+  readonly summary: string;
+  readonly outcomeOrReward: string;
+  readonly routeLink: string;
+  readonly compositeKey: string;
+}
+
 export interface AbilityScoreVm {
   readonly code: 'STR' | 'DEX' | 'CON' | 'INT' | 'WIS' | 'CHA';
   readonly label: string;
@@ -44,6 +103,12 @@ export interface CharacterSpellVm {
   readonly tone: 'emerald' | 'gold' | 'crimson' | 'neutral';
   readonly actionCost: string;
   readonly summary: string;
+  readonly level?: number;
+  readonly prepared?: boolean;
+  readonly range?: string;
+  readonly duration?: string;
+  readonly concentration?: boolean;
+  readonly ritual?: boolean;
 }
 
 export interface CharacterSpellGroupVm {
@@ -66,6 +131,10 @@ export interface EquipmentLoadoutItemVm {
   readonly equipped: boolean;
   readonly entitlement: 'free' | 'included' | 'purchased' | 'locked';
   readonly icon?: string;
+  readonly weightLb?: number;
+  readonly valueGp?: number;
+  readonly rarity?: string;
+  readonly source?: string;
 }
 
 export interface CharacterFeatureCardVm {
@@ -139,6 +208,9 @@ export interface CharacterSheetVm {
   readonly personality: CharacterPersonalityVm;
   readonly connections: CharacterConnectionsVm;
   readonly notes: readonly string[];
+  readonly richNotes?: readonly CharacterRichNoteVm[];
+  readonly metEntities?: readonly CharacterMetEntityVm[];
+  readonly campaignHistory?: readonly CharacterCampaignHistoryEventVm[];
   readonly historyEvents: readonly string[];
 }
 
@@ -165,6 +237,8 @@ export interface CreatorAncestryOptionVm {
   readonly source: 'PHB' | 'SRD 5.1' | 'Homebrew';
   readonly portraitUrl: string;
   readonly galleryPortraits: readonly string[];
+  readonly speedFeet?: number;
+  readonly abilityBonuses?: Readonly<Partial<Record<AbilityScoreVm['code'], number>>>;
   readonly traits: readonly CreatorTraitVm[];
   readonly subraces: readonly CreatorSubraceOptionVm[];
 }
@@ -173,6 +247,7 @@ export interface CreatorClassOptionVm {
   readonly id: string;
   readonly name: string;
   readonly subclassDefault: string;
+  readonly subclasses?: readonly string[];
   readonly tagline: string;
   readonly hitDie: number;
   readonly primaryAbility: AbilityScoreVm['code'];
@@ -186,9 +261,24 @@ export interface CreatorBackgroundOptionVm {
   readonly name: string;
   readonly tagline: string;
   readonly summary: string;
+  readonly source?: string;
+  readonly recommendedClasses?: readonly string[];
+  readonly recommendedAncestries?: readonly string[];
   readonly skillProficiencies: readonly string[];
+  readonly toolProficiencies?: readonly string[];
+  readonly featureName?: string;
   readonly defaultQuote: string;
   readonly personality: CharacterPersonalityVm;
+}
+
+export interface CreatorFeatOptionVm {
+  readonly id: string;
+  readonly name: string;
+  readonly category: string;
+  readonly source: string;
+  readonly prerequisite: string;
+  readonly abilityBonus: string;
+  readonly summary: string;
 }
 
 export interface CharacterCreatorDraftVm {
@@ -197,6 +287,7 @@ export interface CharacterCreatorDraftVm {
   readonly alignment: string;
   readonly quote: string;
   readonly portraitUrl: string;
+  readonly level?: number;
   readonly ancestryId: string;
   readonly subraceId: string;
   readonly classId: string;
@@ -205,5 +296,11 @@ export interface CharacterCreatorDraftVm {
   readonly selectedSkills: readonly string[];
   readonly selectedFeatId: string;
   readonly startingPack: string;
+  readonly equippedItemIds?: readonly string[];
+  readonly backpackItemIds?: readonly string[];
+  readonly personalityTrait?: string;
+  readonly ideal?: string;
+  readonly bond?: string;
+  readonly flaw?: string;
   readonly abilities: Readonly<Record<AbilityScoreVm['code'], number>>;
 }

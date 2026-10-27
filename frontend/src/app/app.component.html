@@ -118,24 +118,30 @@
         </nav>
       }
 
-      <main class="lw-main">
-        <lw-scroll-area
-          tone="emerald"
-          [scrollbarWidth]="4"
-          thumbColor="#49e892"
-          trackColor="rgba(6, 22, 16, 0.78)"
-          padding="0.9rem 1rem 1.2rem"
-        >
+      <main class="lw-main" [class.lw-main--vtt]="isFullBleedVttRoute()">
+        @if (isFullBleedVttRoute()) {
           <router-outlet />
-        </lw-scroll-area>
+        } @else {
+          <lw-scroll-area
+            tone="emerald"
+            [scrollbarWidth]="4"
+            thumbColor="#49e892"
+            trackColor="rgba(6, 22, 16, 0.78)"
+            padding="0.9rem 1rem 1.2rem"
+          >
+            <router-outlet />
+          </lw-scroll-area>
+        }
       </main>
 
-      <lw-inspector-drawer
-        [generativeAiEnabled]="store.weaveEnabled()"
-        [(collapsed)]="rightGuideCollapsed"
-        collapsedWidth="16px"
-        expandedWidth="356px"
-      />
+      @if (!isFullBleedVttRoute()) {
+        <lw-inspector-drawer
+          [generativeAiEnabled]="store.weaveEnabled()"
+          [(collapsed)]="rightGuideCollapsed"
+          collapsedWidth="16px"
+          expandedWidth="356px"
+        />
+      }
     </div>
   </div>
   <lw-auth-modal />

@@ -390,6 +390,10 @@ export class LoomWeaverStoreService {
     ]);
   }
 
+  registerGraphEdge(edge: GraphEdgeVm): void {
+    this.rawEdges.update((list) => [edge, ...list]);
+  }
+
   approveDraftEntity(compositeKey: string): void {
     if (this.viewerRole() !== 'gm') return;
     this.rawEntities.update((list) =>

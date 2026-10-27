@@ -37,9 +37,7 @@ export class MapPngAssetApiService {
   readonly pngAssets = this.pngAssets3d;
   readonly bumpHeightAssets2d = signal<readonly LwMapPngAssetItem[]>(FALLBACK_BUMP_HEIGHT_ITEMS);
   readonly batchBusy = signal<boolean>(false);
-  readonly pngPipelineBanner = signal<string>(
-    '526 3D (.glb) models & 382 2D Bump/Height assets indexed.',
-  );
+  readonly pngPipelineBanner = signal<string>('');
 
   private normalizeAsset(raw: RawManifestAsset): LwMapPngAssetItem {
     return {
@@ -66,9 +64,6 @@ export class MapPngAssetApiService {
         const list = res?.assets ?? res?.items ?? [];
         if (list.length > 0) {
           this.pngAssets3d.set(list.map((a) => this.normalizeAsset(a)));
-          this.pngPipelineBanner.set(
-            `Loaded ${list.length} 3D PNG previews & ${this.bumpHeightAssets2d().length} 2D Bump/Height assets.`,
-          );
         } else {
           this.loadStaticManifestFallback();
         }

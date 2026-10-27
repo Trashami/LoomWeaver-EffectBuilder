@@ -7,7 +7,7 @@
       title="Return to LoomMaps Landing Hub (Create New or Open Existing Map)"
       (click)="backRequested.emit()"
     >
-      <lw-icon name="arrow-left" [size]="16" />
+      <lw-icon name="arrow-left" [size]="15" />
     </button>
 
     <button
@@ -21,58 +21,53 @@
       <lw-icon name="menu" [size]="15" />
     </button>
 
-    <div class="lw-subbar__identity">
-      <div class="lw-subbar__title-row">
-        @if (editingTitle()) {
-          <input
-            type="text"
-            class="lw-subbar__title-input"
-            [ngModel]="mapTitle()"
-            (ngModelChange)="titleChanged.emit($event)"
-            (blur)="editingTitle.set(false)"
-            (keydown.enter)="editingTitle.set(false)"
-            aria-label="Map Title"
-          />
-        } @else {
-          <h1 class="lw-subbar__title" (click)="toggleTitleEdit()">{{ mapTitle() }}</h1>
-        }
-        <button
-          ngpButton
-          type="button"
-          class="lw-subbar__edit-btn"
-          title="Rename Map"
-          (click)="toggleTitleEdit()"
-        >
-          <lw-icon name="pen" [size]="12" />
-        </button>
-        <lw-badge [tone]="dimensionMode() === '3d' ? 'gold' : 'emerald'">
-          {{ dimensionMode() === '3d' ? '3D Map' : '2D Bump Map' }}
-        </lw-badge>
-      </div>
+    <div class="lw-subbar__title-group">
+      @if (editingTitle()) {
+        <input
+          type="text"
+          class="lw-subbar__title-input"
+          [ngModel]="mapTitle()"
+          (ngModelChange)="titleChanged.emit($event)"
+          (blur)="editingTitle.set(false)"
+          (keydown.enter)="editingTitle.set(false)"
+          aria-label="Map Title"
+        />
+      } @else {
+        <h1 class="lw-subbar__title" (click)="toggleTitleEdit()">{{ mapTitle() }}</h1>
+      }
+      <button
+        ngpButton
+        type="button"
+        class="lw-subbar__edit-btn"
+        title="Rename Map"
+        (click)="toggleTitleEdit()"
+      >
+        <lw-icon name="pen" [size]="12" />
+      </button>
+      <span class="lw-subbar__grid-meta">
+        {{ gridCols() }}×{{ gridRows() }} · Rev {{ revision() }}
+      </span>
+    </div>
 
-      <div class="lw-subbar__meta-row">
-        <span>{{ gridCols() }} x {{ gridRows() }} · {{ gridCellFeet() }}ft grid · Rev {{ revision() }}</span>
-        <div class="lw-subbar__dim-switch" role="group" aria-label="2D or 3D Map Mode">
-          <button
-            ngpButton
-            type="button"
-            class="lw-subbar__dim-pill"
-            [class.lw-subbar__dim-pill--active]="dimensionMode() === '2d'"
-            (click)="dimensionModeChanged.emit('2d')"
-          >
-            2D Bump Map
-          </button>
-          <button
-            ngpButton
-            type="button"
-            class="lw-subbar__dim-pill"
-            [class.lw-subbar__dim-pill--active]="dimensionMode() === '3d'"
-            (click)="dimensionModeChanged.emit('3d')"
-          >
-            3D Map
-          </button>
-        </div>
-      </div>
+    <div class="lw-subbar__dim-switch" role="group" aria-label="2D or 3D Map Mode">
+      <button
+        ngpButton
+        type="button"
+        class="lw-subbar__dim-pill"
+        [class.lw-subbar__dim-pill--active]="dimensionMode() === '2d'"
+        (click)="dimensionModeChanged.emit('2d')"
+      >
+        2D Bump
+      </button>
+      <button
+        ngpButton
+        type="button"
+        class="lw-subbar__dim-pill"
+        [class.lw-subbar__dim-pill--active]="dimensionMode() === '3d'"
+        (click)="dimensionModeChanged.emit('3d')"
+      >
+        3D Map
+      </button>
     </div>
   </div>
 
@@ -130,7 +125,7 @@
         title="Undo (Ctrl+Z)"
         (click)="undoRequested.emit()"
       >
-        <lw-icon name="undo" [size]="15" />
+        <lw-icon name="undo" [size]="14" />
       </button>
       <button
         ngpButton
@@ -140,7 +135,7 @@
         title="Redo (Ctrl+Y)"
         (click)="redoRequested.emit()"
       >
-        <lw-icon name="redo" [size]="15" />
+        <lw-icon name="redo" [size]="14" />
       </button>
     </div>
 
@@ -151,7 +146,7 @@
       [disabled]="saving()"
       (click)="saveRequested.emit()"
     >
-      <lw-icon name="save" [size]="15" />
+      <lw-icon name="save" [size]="14" />
       <span>Save Draft</span>
     </button>
 
@@ -162,7 +157,7 @@
       title="Publish and attach this map to the selected Campaign, Session, and Encounter in LoomWeaver"
       (click)="publishRequested.emit()"
     >
-      <lw-icon name="upload" [size]="15" />
+      <lw-icon name="upload" [size]="14" />
       <span>Publish to Campaign</span>
     </button>
 
@@ -171,10 +166,10 @@
       type="button"
       class="lw-subbar__icon-btn"
       [class.lw-subbar__icon-btn--active]="!rightCollapsed()"
-      title="Toggle Right Assets & Properties Inspector Panel"
+      title="Toggle Right Properties Inspector Panel"
       (click)="toggleRightDock.emit()"
     >
-      <lw-icon name="layers" [size]="15" />
+      <lw-icon name="layers" [size]="14" />
     </button>
   </div>
 </header>

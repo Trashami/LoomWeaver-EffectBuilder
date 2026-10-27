@@ -11,11 +11,21 @@ namespace LoomWeaver.Modules.Encounters;
 public static class CombatEncounterEndpoints
 {
     private static readonly List<VttTokenDto> ActiveTokens = SeedVttTokens();
+    private static readonly List<object> SavedEncounters = [];
 
     public static void MapCombatEncounterEndpoints(this IEndpointRouteBuilder group)
     {
         group.MapGet("/campaigns/{campaignId:int}/vtt-tokens", (int campaignId) =>
             Results.Ok(ActiveTokens));
+
+        group.MapGet("/campaigns/{campaignId:int}/encounters", (int campaignId) =>
+            Results.Ok(SavedEncounters));
+
+        group.MapPost("/campaigns/{campaignId:int}/encounters", (int campaignId, object encounterPayload) =>
+        {
+            SavedEncounters.Insert(0, encounterPayload);
+            return Results.Ok(encounterPayload);
+        });
 
         group.MapPost("/campaigns/{campaignId:int}/combat/resolve", (
             int campaignId,

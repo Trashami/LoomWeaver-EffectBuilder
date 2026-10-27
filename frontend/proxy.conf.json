@@ -9,5 +9,10 @@
     "secure": false,
     "changeOrigin": true,
     "ws": true
+  },
+  "/assets/object-library/models": {
+    "target": "https://loom-weaver.com",
+    "secure": true,
+    "changeOrigin": true
   }
 }

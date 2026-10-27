@@ -87,6 +87,8 @@
   border-radius: 11px; border: 1px solid rgba(55, 110, 84, 0.34);
   background: rgba(7, 18, 14, 0.88); padding: 0.85rem;
   display: flex; flex-direction: column; gap: 0.65rem; min-width: 0;
+  max-height: calc(100vh - 188px);
+  overflow-y: auto;
 }
 
 .lw-creator-wizard__col-head {
@@ -330,3 +332,44 @@
   border: 1px solid rgba(55, 110, 84, 0.45); background: rgba(4, 12, 9, 0.92);
   color: #f3e7cf; font-size: 0.8rem;
 }
+
+.lw-creator-wizard__rec-tag {
+  display: inline-block; margin-left: 0.35rem; padding: 0.08rem 0.42rem;
+  border-radius: 999px; background: rgba(73, 232, 146, 0.16);
+  border: 1px solid rgba(73, 232, 146, 0.45); color: #49e892;
+  font-size: 0.64rem; font-weight: 700; vertical-align: middle;
+}
+
+.lw-creator-wizard__point-budget-box {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 0.55rem 0.7rem; border-radius: 9px;
+  border: 1px solid rgba(217, 183, 122, 0.38); background: rgba(11, 28, 21, 0.88);
+}
+
+.lw-creator-wizard__budget-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.75rem; color: #b7c8bf;
+  strong { color: #f3e7cf; }
+  &--total {
+    padding-top: 0.28rem; border-top: 1px solid rgba(55, 110, 84, 0.32);
+    strong { color: #49e892; &.is-over { color: #ff7b7b; } }
+  }
+}
+
+.lw-creator-wizard__db-item-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.48rem 0.6rem; border-radius: 9px;
+  border: 1px solid rgba(55, 110, 84, 0.28); background: rgba(9, 22, 17, 0.84);
+}
+
+.lw-creator-wizard__db-item-actions { display: inline-flex; gap: 0.3rem; flex-shrink: 0; }
+
+.lw-creator-wizard__mini-btn {
+  padding: 0.24rem 0.5rem; border-radius: 6px;
+  border: 1px solid rgba(217, 183, 122, 0.35); background: rgba(12, 30, 22, 0.9);
+  color: #f0d59c; font-size: 0.7rem; font-weight: 600; cursor: pointer;
+  &.is-equip { border-color: #49e892; background: rgba(73, 232, 146, 0.16); color: #49e892; }
+  &.is-danger { border-color: rgba(255, 110, 110, 0.4); color: #ff9494; }
+}
+
+.lw-creator-wizard__empty-note { margin: 0; font-size: 0.74rem; color: #8ea59a; font-style: italic; }

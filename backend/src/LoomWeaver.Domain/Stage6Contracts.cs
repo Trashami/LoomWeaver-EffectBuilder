@@ -101,7 +101,10 @@ public sealed record CompendiumEntryContract(
     string LevelOrTier,
     string ActionEconomy,
     string Summary,
-    string MechanicalPayload
+    string MechanicalPayload,
+    string? ImagePath = null,
+    string? SourceBook = null,
+    string? DefaultEffectId = null
 );
 
 public sealed record HeightmapSculptRequest(

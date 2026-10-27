@@ -15,7 +15,7 @@ export interface ActionRuleVm {
   readonly id: string;
   readonly name: string;
   readonly category: string;
-  readonly actionCost: '1 Action' | '1 Bonus Action' | '1 Reaction';
+  readonly actionCost: '1 Action' | '1 Bonus Action' | '1 Reaction' | 'Free Action';
   readonly rangeFeet: number;
   readonly triggerWhen: string;
   readonly conditionIf: string;

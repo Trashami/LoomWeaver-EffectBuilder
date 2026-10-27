@@ -1,62 +1,411 @@
-<div class="lw-page">
-  <lw-panel
-    eyebrow="Module 3 · Encounter Authoring & Threat Budgeting"
-    title="Encounter Builder & Bestiary Roster"
-    subtitle="Compose balanced encounters, spawn creatures directly onto the Babylon.js VTT stage, and automate XP rewards upon completion."
-    icon="swords"
-    [elevated]="true">
-    <div panelActions>
-      <a class="lw-action-link" routerLink="/arcane-screen">Open Live Arcane Screen</a>
-      <a class="lw-action-link" routerLink="/maps">Bind Scene in LoomMaps</a>
-      <a class="lw-action-link" routerLink="/effects">Open Action & Effect Builder</a>
-    </div>
+<div class="lw-enc-page">
+  @if (pageMode() === 'create' || pageMode() === 'edit') {
+    <lw-encounter-builder
+      [campaignId]="store.activeCampaignId()"
+      [campaignName]="store.activeCampaign().name"
+      [initialEncounter]="pageMode() === 'edit' ? selectedEncounter() : null"
+      [isCreateMode]="pageMode() === 'create'"
+      [sessions]="vtt.sessionsForActiveCampaign()"
+      [availableScenes]="store.authorizedScenes()"
+      [bestiaryCreatures]="vtt.creatures()"
+      [tokenAssets]="vtt.monsterTokenAssets()"
+      [defaultParty]="vtt.defaultPartyRoster()"
+      [defaultSessionNpcs]="vtt.defaultSessionNpcs()"
+      (cancelled)="pageMode.set('view')"
+      (saved)="onEncounterSaved($event)"
+      (savedAndLaunch)="onEncounterSavedAndLaunched($event)"
+      (sessionCreated)="onSessionCreated($event)" />
+  } @else {
+    <header class="lw-enc-topbar">
+      <div ngpTabset class="lw-enc-topbar__filters">
+        <div ngpTabList class="lw-enc-filter-list">
+          @for (ft of filterTabs; track ft.id) {
+            <button ngpTabButton ngpButton type="button" class="lw-enc-filter-pill" [class.lw-enc-filter-pill--active]="activeFilterTab() === ft.id" [ngpTabButtonValue]="ft.id" (click)="activeFilterTab.set(ft.id)">
+              {{ ft.label }}
+            </button>
+          }
+        </div>
+      </div>
 
-    <div class="lw-encounter-grid">
-      @for (enc of vtt.encounters(); track enc.id) {
-        <lw-encounter-card
-          [encounter]="enc"
-          [active]="vtt.activeEncounterId() === enc.id"
-          (encounterSelected)="store.inspectEntity(enc.compositeKey)"
-          (startRequested)="launchEncounter($event)" />
-      }
-    </div>
-  </lw-panel>
+      <div class="lw-enc-topbar__right">
+        <label class="lw-enc-session-select" aria-label="Filter Encounters by Campaign Session">
+          <span>Session ({{ store.activeCampaign().name }}):</span>
+          <select [ngModel]="activeSessionFilter()" (ngModelChange)="activeSessionFilter.set($event)">
+            <option value="all">All Campaign Sessions ({{ vtt.sessionsForActiveCampaign().length }})</option>
+            @for (ses of vtt.sessionsForActiveCampaign(); track ses.id) {
+              <option [value]="ses.id">{{ ses.title }}</option>
+            }
+          </select>
+        </label>
+        <a class="lw-enc-vtt-switch" routerLink="/arcane-screen">Open Live VTT Screen</a>
+        <button ngpButton type="button" class="lw-enc-new-btn" (click)="openCreateEncounterPage()">+ New Encounter</button>
+      </div>
+    </header>
 
-  <lw-panel
-    eyebrow="Reusable lw-creature-card Component"
-    title="Adversary & Boss Statblocks"
-    subtitle="Click Spawn into VTT on any creature to place its token into the active Arcane Screen combat session."
-    icon="shield">
-    <div class="lw-card-grid">
-      @for (creature of vtt.creatures(); track creature.id) {
-        <lw-creature-card
-          [creature]="creature"
-          mode="detailed"
-          (creatureSelected)="store.inspectEntity('1:Encounter:enc-cinth-vampires')"
-          (spawnRequested)="spawnCreatureAndOpenVtt($event)" />
-      }
-    </div>
-  </lw-panel>
+    @if (selectedEncounter(); as enc) {
+      <div class="lw-enc-workspace" [class.lw-enc-workspace--collapsed]="leftSubmenuCollapsed()">
+        @if (!leftSubmenuCollapsed()) {
+          <aside class="lw-enc-submenu" aria-label="Encounters Sub-Menu">
+            <div class="lw-enc-submenu__head">
+              <h3>Encounters</h3>
+              <button ngpButton type="button" class="lw-enc-submenu__close" aria-label="Collapse Encounters Menu" (click)="leftSubmenuCollapsed.set(true)">
+                <lw-icon name="close" [size]="15" />
+              </button>
+            </div>
 
-  <lw-panel
-    eyebrow="Reusable lw-npc-card Component"
-    title="Key Scene NPCs & Role-Isolated Secrets"
-    subtitle="GM secret fields are only rendered when GM View is active in the top bar."
-    icon="users">
-    <div panelActions>
-      <lw-badge
-        [label]="store.viewerRole() === 'gm' ? 'GM Secrets Visible' : 'Player-Safe View'"
-        [tone]="store.viewerRole() === 'gm' ? 'gm' : 'emerald'" />
-    </div>
-    <div class="lw-card-grid">
-      @for (npc of vtt.npcs(); track npc.compositeKey) {
-        <lw-npc-card
-          [npc]="npc"
-          variant="detailed"
-          [showGmSecret]="store.viewerRole() === 'gm'"
-          (npcSelected)="store.inspectEntity($event.compositeKey)"
-          (spawnRequested)="openArcaneScreen()" />
-      }
-    </div>
-  </lw-panel>
+            <div class="lw-enc-submenu__search">
+              <div class="lw-enc-search-box">
+                <lw-icon name="search" [size]="15" />
+                <input type="text" placeholder="Search encounters..." [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" />
+              </div>
+              <button ngpButton type="button" class="lw-enc-filter-icon-btn" title="Reset Filters" (click)="activeFilterTab.set('all'); activeSessionFilter.set('all'); searchQuery.set('')">
+                <lw-icon name="filter_list" [size]="15" />
+              </button>
+            </div>
+
+            <lw-scroll-area tone="emerald" [scrollbarWidth]="4" thumbColor="#49e892" trackColor="rgba(6, 22, 16, 0.78)" padding="0 0.15rem 0 0">
+              <div class="lw-enc-submenu__list">
+                @for (item of filteredEncounters(); track item.id) {
+                  <div class="lw-enc-menu-item" [class.lw-enc-menu-item--active]="enc.id === item.id" (click)="selectEncounterFromMenu(item)">
+                    <img [src]="item.thumbnailUrl" [alt]="item.name" class="lw-enc-menu-item__thumb" />
+                    <div class="lw-enc-menu-item__icon"><lw-icon [name]="encounterTypeIcon(item.encounterType)" [size]="16" /></div>
+                    <div class="lw-enc-menu-item__text">
+                      <strong>{{ item.name }}</strong>
+                      <span>{{ item.encounterType }} · {{ item.actLabel }}</span>
+                    </div>
+                    <button ngpButton type="button" class="lw-enc-menu-item__more" title="Edit Encounter" (click)="$event.stopPropagation(); openEditEncounterPage(item)">
+                      <lw-icon name="more_vert" [size]="15" />
+                    </button>
+                  </div>
+                }
+              </div>
+            </lw-scroll-area>
+          </aside>
+        } @else {
+          <aside class="lw-enc-submenu-rail" aria-label="Collapsed Encounters Menu">
+            <button ngpButton type="button" class="lw-enc-rail-expand" title="Expand Encounters Sub-Menu" (click)="leftSubmenuCollapsed.set(false)">
+              <lw-icon name="chevron-right" [size]="16" />
+              <span>Encounters ({{ filteredEncounters().length }})</span>
+            </button>
+          </aside>
+        }
+
+        <section class="lw-enc-detail" aria-label="Selected Encounter Details">
+          <header class="lw-enc-detail__header">
+            <div class="lw-enc-detail__title-group">
+              @if (leftSubmenuCollapsed()) {
+                <button ngpButton type="button" class="lw-enc-expand-pill" (click)="leftSubmenuCollapsed.set(false)">
+                  <lw-icon name="menu" [size]="15" />
+                  <span>All Encounters</span>
+                </button>
+              }
+              <div class="lw-enc-detail__crest"><lw-icon [name]="encounterTypeIcon(enc.encounterType)" [size]="24" /></div>
+              <div>
+                <div class="lw-enc-detail__title-row">
+                  <h1>{{ enc.name }}</h1>
+                  <span class="lw-enc-status-pill" [class.lw-enc-status-pill--completed]="enc.completed">{{ enc.completed ? 'Completed' : enc.status }}</span>
+                </div>
+                <p class="lw-enc-detail__subtitle">{{ enc.encounterType }} Encounter · {{ enc.actLabel }} · {{ enc.sessionTitle }} · Map: {{ enc.sceneName }}</p>
+              </div>
+            </div>
+
+            <div class="lw-enc-detail__actions">
+              <button ngpButton type="button" class="lw-enc-edit-btn" (click)="openEditEncounterPage(enc)">Edit Encounter</button>
+              <button ngpButton type="button" class="lw-enc-run-btn" (click)="runEncounterInVtt(enc)">Run Encounter</button>
+            </div>
+          </header>
+
+          <nav ngpTabset class="lw-enc-subtabs" aria-label="Encounter Detail Sections">
+            <div ngpTabList class="lw-enc-subtab-list">
+              @for (tab of detailTabs; track tab.id) {
+                <button ngpTabButton ngpButton type="button" class="lw-enc-subtab" [class.lw-enc-subtab--active]="activeDetailTab() === tab.id" [ngpTabButtonValue]="tab.id" (click)="activeDetailTab.set(tab.id)">
+                  <span>{{ tab.label }}</span>
+                  @if (tab.id === 'creatures') { <span class="lw-enc-subtab__count">{{ enc.monsters.length }}</span> }
+                  @else if (tab.id === 'traps') { <span class="lw-enc-subtab__count">{{ enc.traps.length }}</span> }
+                  @else if (tab.id === 'links') { <span class="lw-enc-subtab__count">{{ enc.relatedLinks.length }}</span> }
+                </button>
+              }
+            </div>
+          </nav>
+
+          @switch (activeDetailTab()) {
+            @case ('overview') {
+              <div class="lw-enc-overview-grid">
+                <div class="lw-enc-col">
+                  <div class="lw-enc-card">
+                    <h3>Description</h3>
+                    <p class="lw-enc-prose">{{ enc.description }}</p>
+                    @if (enc.readAloudText) { <blockquote class="lw-enc-readaloud">{{ enc.readAloudText }}</blockquote> }
+                    <h4>Encounter Details</h4>
+                    <dl class="lw-enc-kv">
+                      <div><dt>Type</dt><dd>{{ enc.encounterType }}</dd></div>
+                      <div><dt>Attached Campaign</dt><dd>{{ store.activeCampaign().name }}</dd></div>
+                      <div><dt>Attached Session</dt><dd>{{ enc.sessionTitle }}</dd></div>
+                      <div><dt>Selected Map</dt><dd>{{ enc.sceneName }}</dd></div>
+                      <div><dt>Environment</dt><dd>{{ enc.environment }}</dd></div>
+                      <div><dt>Difficulty</dt><dd>{{ enc.difficulty }} (Party Level {{ enc.partyLevel }})</dd></div>
+                      <div><dt>Estimated Duration</dt><dd>{{ enc.estimatedDuration }}</dd></div>
+                      <div><dt>Total XP Budget</dt><dd>{{ enc.totalXp.toLocaleString() }} XP</dd></div>
+                    </dl>
+                    <h4>Objectives</h4>
+                    <ul class="lw-enc-objectives">
+                      @for (obj of enc.objectives; track obj.id) {
+                        <li [class.done]="obj.completed" (click)="vtt.toggleObjective(enc.id, obj.id)">
+                          <span class="lw-enc-check">{{ obj.completed ? 'x' : '' }}</span>
+                          <span>{{ obj.text }}</span>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+
+                  <div class="lw-enc-card">
+                    <div class="lw-enc-card__head">
+                      <h3>Traps & Hazards ({{ enc.traps.length }})</h3>
+                      <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Manage Traps</button>
+                    </div>
+                    @if (enc.traps.length === 0) { <p class="lw-enc-muted">No traps configured for this encounter. Click Manage Traps to author one.</p> }
+                    <div class="lw-enc-stack">
+                      @for (trap of enc.traps; track trap.id) {
+                        <div class="lw-enc-trap-row">
+                          <div class="lw-enc-trap-row__top">
+                            <strong>{{ trap.name }}</strong>
+                            <div class="lw-enc-trap-row__badges">
+                              <lw-badge [label]="trap.category" tone="crimson" />
+                              <lw-badge [label]="trap.armed ? 'Armed' : 'Disarmed'" [tone]="trap.armed ? 'gold' : 'neutral'" />
+                            </div>
+                          </div>
+                          <p>{{ trap.trigger }}</p>
+                          <span class="lw-enc-trap-meta">Spot DC {{ trap.perceptionDc }} · Disarm DC {{ trap.disarmDc }} · {{ trap.saveOrAttack }} · {{ trap.damageFormula }}</span>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                <div class="lw-enc-col">
+                  <div class="lw-enc-card">
+                    <div class="lw-enc-card__head">
+                      <h3>Creatures ({{ enc.monsters.length }})</h3>
+                      <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Manage</button>
+                    </div>
+                    @if (enc.monsters.length === 0) { <p class="lw-enc-muted">No monsters assigned to this encounter.</p> }
+                    <div class="lw-enc-stack">
+                      @for (m of enc.monsters; track m.slotId) {
+                        <div class="lw-enc-creature-row">
+                          <img [src]="m.tokenPreviewUrl" [alt]="m.name" class="lw-enc-creature-row__avatar" />
+                          <div class="lw-enc-creature-row__body">
+                            <strong>{{ m.count > 1 ? m.count + ' x ' + m.name : m.name }}</strong>
+                            <span>{{ m.creatureType }} · AC {{ m.armorClass }} · HP {{ m.maxHp }} · {{ m.tokenKind.toUpperCase() }} Token</span>
+                          </div>
+                          <span class="lw-enc-cr">CR {{ m.challengeRating }}</span>
+                          <button ngpButton type="button" class="lw-enc-row-more" title="Change Token or Edit Monster" (click)="openEditEncounterPage(enc)">
+                            <lw-icon name="more_vert" [size]="15" />
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="lw-enc-card">
+                    <div class="lw-enc-card__head">
+                      <h3>Players & Session NPCs</h3>
+                      <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Manage Roster</button>
+                    </div>
+                    <h4>Party Members in Encounter ({{ enc.partyMembers.length }})</h4>
+                    <div class="lw-enc-stack">
+                      @for (p of enc.partyMembers; track p.compositeKey) {
+                        @if (p.includedInEncounter) {
+                          <div class="lw-enc-creature-row">
+                            <img [src]="p.avatarUrl" [alt]="p.name" class="lw-enc-creature-row__avatar lw-enc-creature-row__avatar--party" />
+                            <div class="lw-enc-creature-row__body">
+                              <strong>{{ p.name }}</strong>
+                              <span>{{ p.classSummary }} · Lv {{ p.level }}</span>
+                            </div>
+                            <span class="lw-enc-cr">HP {{ p.currentHp }}/{{ p.maxHp }}</span>
+                          </div>
+                        }
+                      }
+                    </div>
+
+                    <h4>Session NPCs ({{ enc.sessionNpcs.length }})</h4>
+                    @if (enc.sessionNpcs.length === 0) { <p class="lw-enc-muted">No session NPCs attached yet. Click Manage Roster to add NPCs from {{ enc.sessionTitle }}.</p> }
+                    <div class="lw-enc-stack">
+                      @for (npc of enc.sessionNpcs; track npc.compositeKey) {
+                        <div class="lw-enc-creature-row">
+                          <img [src]="npc.avatarUrl" [alt]="npc.name" class="lw-enc-creature-row__avatar" />
+                          <div class="lw-enc-creature-row__body">
+                            <strong>{{ npc.name }}</strong>
+                            <span>{{ npc.role }} · {{ npc.locationName }}</span>
+                          </div>
+                          <lw-badge [label]="npc.disposition" tone="gold" />
+                        </div>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="lw-enc-card">
+                    <h3>Session & Encounter Notes</h3>
+                    <p class="lw-enc-prose">{{ enc.sessionNotes || 'No session notes recorded yet.' }}</p>
+                  </div>
+                </div>
+              </div>
+            }
+
+            @case ('creatures') {
+              <div class="lw-enc-card">
+                <div class="lw-enc-card__head">
+                  <h3>Encounter Monsters & Assigned 2D/3D Token Assets</h3>
+                  <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Add / Edit Monsters & Tokens</button>
+                </div>
+                <div class="lw-enc-stack">
+                  @for (m of enc.monsters; track m.slotId) {
+                    <div class="lw-enc-creature-row">
+                      <img [src]="m.tokenPreviewUrl" [alt]="m.name" class="lw-enc-creature-row__avatar" />
+                      <div class="lw-enc-creature-row__body">
+                        <strong>{{ m.count }} x {{ m.name }} (CR {{ m.challengeRating }})</strong>
+                        <span>{{ m.creatureType }} · AC {{ m.armorClass }} · HP {{ m.maxHp }} · Speed {{ m.speedFeet }}ft · {{ m.signatureAttack }} ({{ m.damageFormula }})</span>
+                        <span>Token Asset: {{ m.tokenName }} ({{ m.tokenKind.toUpperCase() }})</span>
+                      </div>
+                      <lw-badge [label]="m.tokenKind === '3d' ? '3D GLB' : '2D PNG'" [tone]="m.tokenKind === '3d' ? 'emerald' : 'gold'" />
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @case ('party-npcs') {
+              <div class="lw-enc-overview-grid">
+                <div class="lw-enc-card">
+                  <div class="lw-enc-card__head">
+                    <h3>Players in Encounter ({{ store.activeCampaign().name }})</h3>
+                    <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Edit Players</button>
+                  </div>
+                  <div class="lw-enc-stack">
+                    @for (p of enc.partyMembers; track p.compositeKey) {
+                      <div class="lw-enc-creature-row">
+                        <img [src]="p.avatarUrl" [alt]="p.name" class="lw-enc-creature-row__avatar lw-enc-creature-row__avatar--party" />
+                        <div class="lw-enc-creature-row__body">
+                          <strong>{{ p.name }}</strong>
+                          <span>{{ p.classSummary }} · Level {{ p.level }} · AC {{ p.armorClass }} · HP {{ p.currentHp }}/{{ p.maxHp }}</span>
+                        </div>
+                        <lw-badge [label]="p.includedInEncounter ? 'Active' : 'Excluded'" [tone]="p.includedInEncounter ? 'emerald' : 'neutral'" />
+                      </div>
+                    }
+                  </div>
+                </div>
+
+                <div class="lw-enc-card">
+                  <div class="lw-enc-card__head">
+                    <h3>Session NPCs ({{ enc.sessionTitle }})</h3>
+                    <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Add / Edit Session NPCs</button>
+                  </div>
+                  <div class="lw-enc-stack">
+                    @for (npc of enc.sessionNpcs; track npc.compositeKey) {
+                      <div class="lw-enc-creature-row">
+                        <img [src]="npc.avatarUrl" [alt]="npc.name" class="lw-enc-creature-row__avatar" />
+                        <div class="lw-enc-creature-row__body">
+                          <strong>{{ npc.name }}</strong>
+                          <span>{{ npc.role }} · {{ npc.summary }}</span>
+                        </div>
+                        <lw-badge [label]="npc.disposition" tone="gold" />
+                      </div>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+
+            @case ('traps') {
+              <div class="lw-enc-card">
+                <div class="lw-enc-card__head">
+                  <h3>Encounter Traps & Environmental Hazards</h3>
+                  <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">+ Create or Edit Traps</button>
+                </div>
+                <div class="lw-enc-stack">
+                  @for (trap of enc.traps; track trap.id) {
+                    <div class="lw-enc-trap-row">
+                      <div class="lw-enc-trap-row__top">
+                        <strong>{{ trap.name }}</strong>
+                        <lw-badge [label]="trap.category" tone="crimson" />
+                      </div>
+                      <p><strong>Trigger:</strong> {{ trap.trigger }}</p>
+                      <p><strong>Effect:</strong> {{ trap.effectSummary }}</p>
+                      <span class="lw-enc-trap-meta">Spot DC {{ trap.perceptionDc }} · Disarm DC {{ trap.disarmDc }} · {{ trap.saveOrAttack }} · Damage: {{ trap.damageFormula }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @case ('map') {
+              <div class="lw-enc-card">
+                <div class="lw-enc-card__head">
+                  <h3>Assigned Battlemap & Environment</h3>
+                  <div class="lw-enc-detail__actions">
+                    <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Change Assigned Map</button>
+                    <a class="lw-enc-vtt-switch" routerLink="/maps">Open in LoomMaps Studio</a>
+                  </div>
+                </div>
+                <dl class="lw-enc-kv">
+                  <div><dt>Selected Map</dt><dd>{{ enc.sceneName }} ({{ enc.sceneKey }})</dd></div>
+                  <div><dt>Environment</dt><dd>{{ enc.environment }}</dd></div>
+                  <div><dt>Attached Session</dt><dd>{{ enc.sessionTitle }}</dd></div>
+                </dl>
+              </div>
+            }
+
+            @case ('read-aloud') {
+              <div class="lw-enc-card">
+                <h3>Read-Aloud Boxed Text</h3>
+                <blockquote class="lw-enc-readaloud">{{ enc.readAloudText }}</blockquote>
+                <lw-button variant="gold" size="sm" (pressed)="advGuide.shareWithPlayers(enc.id, enc.name, 'All Party')">Share Read-Aloud with Party</lw-button>
+              </div>
+            }
+
+            @case ('rewards') {
+              <div class="lw-enc-card">
+                <div class="lw-enc-card__head">
+                  <h3>Rewards & Automated XP ({{ enc.totalXp.toLocaleString() }} XP)</h3>
+                  <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Manage Rewards</button>
+                </div>
+                <div class="lw-enc-stack">
+                  @for (rew of enc.rewards; track rew.id) {
+                    <div class="lw-enc-creature-row">
+                      <div class="lw-enc-creature-row__body"><strong>{{ rew.label }}</strong><span>{{ rew.kind }}</span></div>
+                      <lw-badge [label]="rew.awarded ? 'Awarded' : 'Pending'" [tone]="rew.awarded ? 'emerald' : 'gold'" />
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @case ('links') {
+              <div class="lw-enc-card">
+                <h3>Connected Story Nodes ({{ enc.relatedLinks.length }})</h3>
+                <div class="lw-enc-stack">
+                  @for (lnk of enc.relatedLinks; track lnk.compositeKey) {
+                    <a class="lw-enc-creature-row" [routerLink]="lnk.routeLink">
+                      <img [src]="lnk.artworkUrl" [alt]="lnk.title" class="lw-enc-creature-row__avatar" />
+                      <div class="lw-enc-creature-row__body"><strong>{{ lnk.title }}</strong><span>{{ lnk.roleLabel }}</span></div>
+                      <lw-badge [label]="lnk.roleLabel" tone="gold" />
+                    </a>
+                  }
+                </div>
+              </div>
+            }
+
+            @case ('notes') {
+              <div class="lw-enc-card">
+                <div class="lw-enc-card__head">
+                  <h3>Session & Encounter GM Notes</h3>
+                  <button ngpButton type="button" class="lw-enc-manage-btn" (click)="openEditEncounterPage(enc)">Edit Notes</button>
+                </div>
+                <p class="lw-enc-prose">{{ enc.sessionNotes }}</p>
+              </div>
+            }
+          }
+        </section>
+      </div>
+    }
+  }
 </div>

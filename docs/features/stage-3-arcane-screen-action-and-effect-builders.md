@@ -4,11 +4,12 @@
 - **Status:** Verified
 - **Module owner:** `features/arcane-screen`, `features/encounters`, `features/effects` / `LoomWeaver.Modules.Encounters`, `LoomWeaver.Modules.Actions`
 - **System support:** D&D 5e (`dnd5e`), Pathfinder 2e (`pf2e`), Vampire V5 (`vampire_v5`)
-- **First written / Last updated:** 2026-10-25
+- **First written / Last updated:** 2026-10-25 / 2026-10-27
 - **Authoritative code paths:**
   - `frontend/src/app/shared/ui/npc-card/`
   - `frontend/src/app/shared/ui/creature-card/`
   - `frontend/src/app/shared/ui/encounter-card/`
+  - `frontend/src/app/shared/ui/encounter-builder/`
   - `frontend/src/app/features/arcane-screen/`
   - `frontend/src/app/features/encounters/`
   - `frontend/src/app/features/effects/`

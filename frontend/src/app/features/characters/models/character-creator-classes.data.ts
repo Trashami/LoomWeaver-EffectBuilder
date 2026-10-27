@@ -1,69 +1,115 @@
-import {
-  CharacterSkillVm,
-  CreatorBackgroundOptionVm,
-  CreatorClassOptionVm,
-  SavingThrowVm,
-} from './character-studio.models';
+import { CreatorClassOptionVm } from './character-studio.models';
 
 export const CREATOR_CLASSES: readonly CreatorClassOptionVm[] = [
   {
     id: 'wizard',
     name: 'Wizard',
     subclassDefault: 'School of Evocation',
+    subclasses: ['School of Evocation', 'School of Abjuration', 'School of Divination', 'School of Illusion', 'Bladesinging', 'Order of Scribes', 'Chronurgy Magic'],
     tagline: 'Scholarly arcane mastery and sculpted spellcraft.',
     hitDie: 6,
     primaryAbility: 'INT',
     savingThrows: ['INT', 'WIS'],
     features: [
-      { id: 'feat-spellcasting', title: 'Spellcasting', category: 'class', summary: 'Draws on innate magic through study.', icon: 'zap', tone: 'gold' },
-      { id: 'feat-arcane-recovery', title: 'Arcane Recovery', category: 'class', summary: 'Recover spell slots during a short rest.', icon: 'clock', tone: 'emerald' },
-      { id: 'feat-evocation-savant', title: 'Evocation Savant', category: 'class', summary: 'Add your Int modifier to evocation spell damage.', icon: 'book-open', tone: 'emerald' },
-      { id: 'feat-sculpt-spells', title: 'Sculpt Spells', category: 'class', summary: 'Shape destructive magic to spare allies.', icon: 'shield', tone: 'crimson' },
+      { id: 'cf-wiz-cast', title: 'Spellcasting (Spellbook & Preparation)', category: 'class', summary: 'Prepare INT modifier + Wizard level spells after a Long Rest (1 min/spell level).', icon: 'book-open', tone: 'gold' },
+      { id: 'cf-wiz-rec', title: 'Arcane Recovery', category: 'class', summary: 'Recover expended spell slots (up to half Wizard level) during a Short Rest.', icon: 'zap', tone: 'emerald' },
+      { id: 'cf-wiz-mem', title: 'Memorize Spell (Lv. 5+)', category: 'class', summary: 'Replace one prepared Wizard spell from your Spellbook after a Short Rest or 1-minute study.', icon: 'clock', tone: 'gold' },
     ],
     startingSpells: [
       {
         groupId: 'cantrips',
-        label: 'At Will / Cantrips',
-        slotsRemaining: 5,
-        slotsMax: 5,
+        label: 'Cantrips (Always Prepared)',
+        slotsRemaining: 0,
+        slotsMax: 0,
         isCantrip: true,
         spells: [
-          { id: 'sp-fire-bolt', name: 'Fire Bolt', school: 'Evocation', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: 'Ranged spell attack dealing 2d10 fire damage (120 ft).' },
-          { id: 'sp-mage-hand', name: 'Mage Hand', school: 'Conjuration', icon: 'wand', tone: 'emerald', actionCost: '1 Action', summary: 'Spectral floating hand manipulates objects up to 30 ft away.' },
-          { id: 'sp-prestidigitation', name: 'Prestidigitation', school: 'Transmutation', icon: 'book-open', tone: 'gold', actionCost: '1 Action', summary: 'Minor arcane trick, sensory effect, or glyph mark.' },
+          { id: 'sp-fire-bolt', name: 'Fire Bolt', school: 'Evocation', icon: 'flame', tone: 'crimson', actionCost: '1 Action', summary: '120 ft ranged spell attack for 1d10 Fire damage.', level: 0, prepared: true },
+          { id: 'sp-mage-hand', name: 'Mage Hand', school: 'Conjuration', icon: 'hand', tone: 'gold', actionCost: '1 Action', summary: 'Spectral floating hand manipulates objects within 30 ft.', level: 0, prepared: true },
+          { id: 'sp-prestidigitation', name: 'Prestidigitation', school: 'Transmutation', icon: 'wand', tone: 'emerald', actionCost: '1 Action', summary: 'Minor arcane sensory effects and utility.', level: 0, prepared: true },
         ],
       },
       {
         groupId: 'level-1',
-        label: '1st Level',
-        slotsRemaining: 4,
-        slotsMax: 4,
-        spells: [
-          { id: 'sp-magic-missile', name: 'Magic Missile', school: 'Evocation', icon: 'target', tone: 'emerald', actionCost: '1 Action', summary: 'Three glowing darts automatically strike targets for 1d4+1 force each.' },
-          { id: 'sp-shield', name: 'Shield', school: 'Abjuration', icon: 'shield', tone: 'gold', actionCost: '1 Reaction', summary: '+5 bonus to AC until the start of your next turn, negating Magic Missile.' },
-          { id: 'sp-detect-magic', name: 'Detect Magic', school: 'Divination', icon: 'eye', tone: 'emerald', actionCost: '1 Action (Ritual)', summary: 'Sense the presence and school of magic within 30 feet.' },
-          { id: 'sp-mage-armor', name: 'Mage Armor', school: 'Abjuration', icon: 'shield-check', tone: 'emerald', actionCost: '1 Action', summary: 'Base AC becomes 13 + Dexterity modifier for 8 hours.' },
-        ],
-      },
-      {
-        groupId: 'level-2',
-        label: '2nd Level',
-        slotsRemaining: 3,
-        slotsMax: 3,
-        spells: [
-          { id: 'sp-misty-step', name: 'Misty Step', school: 'Conjuration', icon: 'compass', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Teleport up to 30 feet to an unoccupied space you can see.' },
-          { id: 'sp-scorching-ray', name: 'Scorching Ray', school: 'Evocation', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: 'Hurl three rays of fire, each dealing 2d6 fire damage on a hit.' },
-          { id: 'sp-invisibility', name: 'Invisibility', school: 'Illusion', icon: 'eye-off', tone: 'neutral', actionCost: '1 Action', summary: 'A creature you touch becomes invisible for up to 1 hour.' },
-        ],
-      },
-      {
-        groupId: 'level-3',
-        label: '3rd Level',
+        label: '1st-Level Spells (Spellbook)',
         slotsRemaining: 2,
         slotsMax: 2,
         spells: [
-          { id: 'sp-counterspell', name: 'Counterspell', school: 'Abjuration', icon: 'shield', tone: 'gold', actionCost: '1 Reaction', summary: 'Interrupt a creature in the process of casting a spell.' },
-          { id: 'sp-fireball', name: 'Fireball', school: 'Evocation', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: '20-ft radius blossom of flame dealing 8d6 fire damage (DEX save).' },
+          { id: 'sp-magic-missile', name: 'Magic Missile', school: 'Evocation', icon: 'zap', tone: 'gold', actionCost: '1 Action', summary: 'Three glowing darts automatically strike for 1d4+1 Force each.', level: 1, prepared: true },
+          { id: 'sp-shield', name: 'Shield', school: 'Abjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Reaction', summary: '+5 AC until the start of your next turn and blocks Magic Missile.', level: 1, prepared: true },
+          { id: 'sp-mage-armor', name: 'Mage Armor', school: 'Abjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Action', summary: 'Base AC becomes 13 + DEX modifier for 8 hours.', level: 1, prepared: true },
+          { id: 'sp-detect-magic', name: 'Detect Magic', school: 'Divination', icon: 'eye', tone: 'gold', actionCost: '1 Action (Ritual)', summary: 'Sense magical auras within 30 feet.', level: 1, prepared: false, ritual: true },
+          { id: 'sp-find-familiar', name: 'Find Familiar', school: 'Conjuration', icon: 'feather', tone: 'emerald', actionCost: '1 Hour (Ritual)', summary: 'Summon a fey, celestial, or drake spirit companion.', level: 1, prepared: false, ritual: true },
+          { id: 'sp-identify', name: 'Identify', school: 'Divination', icon: 'book-open', tone: 'gold', actionCost: '1 Minute (Ritual)', summary: 'Learn the properties and attunement requirements of a magic item.', level: 1, prepared: false, ritual: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fighter',
+    name: 'Fighter',
+    subclassDefault: 'Battle Master',
+    subclasses: ['Battle Master', 'Champion', 'Eldritch Knight', 'Echo Knight', 'Psi Warrior', 'Rune Knight', 'Samurai'],
+    tagline: 'Unbreakable martial discipline and tactical mastery.',
+    hitDie: 10,
+    primaryAbility: 'STR',
+    savingThrows: ['STR', 'CON'],
+    features: [
+      { id: 'cf-fgt-wind', title: 'Second Wind', category: 'class', summary: 'Bonus Action self-heal for 1d10 + Fighter level.', icon: 'heart', tone: 'emerald' },
+      { id: 'cf-fgt-surge', title: 'Action Surge', category: 'class', summary: 'Take one additional Action on your turn.', icon: 'zap', tone: 'gold' },
+      { id: 'cf-fgt-mastery', title: 'Weapon Mastery', category: 'class', summary: 'Unlock tactical mastery properties on your chosen weapons.', icon: 'swords', tone: 'emerald' },
+    ],
+    startingSpells: [],
+  },
+  {
+    id: 'rogue',
+    name: 'Rogue',
+    subclassDefault: 'Arcane Trickster',
+    subclasses: ['Arcane Trickster', 'Assassin', 'Thief', 'Swashbuckler', 'Soulknife', 'Phantom', 'Scout'],
+    tagline: 'Precision strikes, uncanny evasion, and cunning.',
+    hitDie: 8,
+    primaryAbility: 'DEX',
+    savingThrows: ['DEX', 'INT'],
+    features: [
+      { id: 'cf-rog-sneak', title: 'Sneak Attack', category: 'class', summary: 'Deal extra precision damage when striking with advantage or an ally adjacent.', icon: 'swords', tone: 'crimson' },
+      { id: 'cf-rog-cunning', title: 'Cunning Action & Expertise', category: 'class', summary: 'Dash, Disengage, or Hide as a Bonus Action; double proficiency in two skills.', icon: 'zap', tone: 'emerald' },
+    ],
+    startingSpells: [],
+  },
+  {
+    id: 'cleric',
+    name: 'Cleric',
+    subclassDefault: 'Twilight Domain (Ekkos)',
+    subclasses: ['Life Domain', 'Light Domain', 'Twilight Domain (Ekkos)', 'Tempest Domain', 'War Domain', 'Knowledge Domain', 'Trickery Domain'],
+    tagline: 'Divine conduit of sacred light, healing, and protection.',
+    hitDie: 8,
+    primaryAbility: 'WIS',
+    savingThrows: ['WIS', 'CHA'],
+    features: [
+      { id: 'cf-clr-cast', title: 'Divine Spellcasting (Prepared)', category: 'class', summary: 'Prepare WIS modifier + Cleric level spells from the full Cleric spell list after a Long Rest.', icon: 'book-open', tone: 'gold' },
+      { id: 'cf-clr-div', title: 'Channel Divinity', category: 'class', summary: 'Turn Undead, Divine Spark, or invoke your Domain sacred power.', icon: 'shield', tone: 'emerald' },
+    ],
+    startingSpells: [
+      {
+        groupId: 'cantrips',
+        label: 'Cantrips (Always Prepared)',
+        slotsRemaining: 0,
+        slotsMax: 0,
+        isCantrip: true,
+        spells: [
+          { id: 'sp-sacred-flame', name: 'Sacred Flame', school: 'Evocation', icon: 'flame', tone: 'gold', actionCost: '1 Action', summary: 'DEX save or take 1d8 Radiant damage; ignores cover.', level: 0, prepared: true },
+          { id: 'sp-guidance', name: 'Guidance', school: 'Divination', icon: 'compass', tone: 'emerald', actionCost: '1 Action', summary: 'Touch a willing creature to add +1d4 to an ability check.', level: 0, prepared: true },
+        ],
+      },
+      {
+        groupId: 'level-1',
+        label: '1st-Level Cleric Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-cure-wounds', name: 'Cure Wounds', school: 'Abjuration', icon: 'heart', tone: 'emerald', actionCost: '1 Action', summary: 'Restore 2d8 + WIS modifier HP to a creature you touch.', level: 1, prepared: true },
+          { id: 'sp-healing-word', name: 'Healing Word', school: 'Abjuration', icon: 'heart', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Heal a creature within 60 ft for 2d4 + WIS modifier.', level: 1, prepared: true },
+          { id: 'sp-bless', name: 'Bless', school: 'Enchantment', icon: 'shield', tone: 'gold', actionCost: '1 Action', summary: 'Up to 3 creatures add +1d4 to attack rolls and saving throws.', level: 1, prepared: true, concentration: true },
+          { id: 'sp-guiding-bolt', name: 'Guiding Bolt', school: 'Evocation', icon: 'zap', tone: 'gold', actionCost: '1 Action', summary: '4d6 Radiant damage and grants advantage on the next attack against target.', level: 1, prepared: false },
         ],
       },
     ],
@@ -72,48 +118,213 @@ export const CREATOR_CLASSES: readonly CreatorClassOptionVm[] = [
     id: 'ranger',
     name: 'Ranger',
     subclassDefault: 'Horizon Walker',
+    subclasses: ['Hunter', 'Beast Master', 'Gloom Stalker', 'Horizon Walker', 'Fey Wanderer', 'Drakewarden', 'Swarmkeeper'],
     tagline: 'Pattern scout, archer, and borderland warden.',
     hitDie: 10,
     primaryAbility: 'DEX',
     savingThrows: ['STR', 'DEX'],
     features: [
-      { id: 'feat-pattern-scout', title: 'Pattern Danger Sense', category: 'class', summary: 'Reads ambush geometry and hidden hazards before combat erupts.', icon: 'compass', tone: 'emerald' },
-      { id: 'feat-extra-attack', title: 'Multiattack Volley', category: 'class', summary: 'Strike twice whenever you take the Attack action on your turn.', icon: 'swords', tone: 'gold' },
+      { id: 'cf-rng-enemy', title: 'Favored Enemy & Hunter Mark', category: 'class', summary: 'Mark quarry for +1d6 bonus weapon damage and tracking advantage.', icon: 'compass', tone: 'emerald' },
+      { id: 'cf-rng-deft', title: 'Deft Explorer', category: 'class', summary: 'Gain Expertise in one skill and two additional languages.', icon: 'shield', tone: 'gold' },
     ],
     startingSpells: [
       {
         groupId: 'level-1',
-        label: '1st Level',
-        slotsRemaining: 4,
-        slotsMax: 4,
+        label: '1st-Level Ranger Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
         spells: [
-          { id: 'sp-hunters-mark', name: "Hunter's Mark", school: 'Divination', icon: 'target', tone: 'gold', actionCost: '1 Bonus Action', summary: 'Deal an extra 1d6 damage to the marked quarry on every weapon hit.' },
-          { id: 'sp-ensnaring-strike', name: 'Ensnaring Strike', school: 'Conjuration', icon: 'link', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Thorny vines restrain the target on hit.' },
+          { id: 'sp-hunters-mark', name: "Hunter's Mark", school: 'Divination', icon: 'compass', tone: 'emerald', actionCost: '1 Bonus Action', summary: '+1d6 damage on weapon hits and advantage to track quarry.', level: 1, prepared: true, concentration: true },
+          { id: 'sp-ensnaring-strike', name: 'Ensnaring Strike', school: 'Conjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Thorny vines restrain the target on hit (STR save).', level: 1, prepared: false, concentration: true },
         ],
       },
     ],
   },
   {
-    id: 'rogue',
-    name: 'Rogue',
-    subclassDefault: 'Fey Trickster',
-    tagline: 'Precision strikes, uncanny evasion, and sideways fey logic.',
-    hitDie: 8,
-    primaryAbility: 'DEX',
-    savingThrows: ['DEX', 'INT'],
+    id: 'paladin',
+    name: 'Paladin',
+    subclassDefault: 'Oath of Devotion',
+    subclasses: ['Oath of Devotion', 'Oath of Vengeance', 'Oath of the Ancients', 'Oath of Glory', 'Oath of Watchers', 'Oathbreaker'],
+    tagline: 'Oath-sworn champion of radiant justice and courage.',
+    hitDie: 10,
+    primaryAbility: 'STR',
+    savingThrows: ['WIS', 'CHA'],
     features: [
-      { id: 'feat-sneak-attack', title: 'Fey Slingshot Sneak Attack', category: 'class', summary: 'Exploit a foe distraction to deal +4d6 precision damage.', icon: 'target', tone: 'crimson' },
-      { id: 'feat-cunning-action', title: 'Cunning Action', category: 'class', summary: 'Dash, Disengage, or Hide as a Bonus Action.', icon: 'compass', tone: 'emerald' },
+      { id: 'cf-pal-hands', title: 'Lay on Hands', category: 'class', summary: 'Pool of healing power equal to 5 × Paladin level.', icon: 'heart', tone: 'emerald' },
+      { id: 'cf-pal-smite', title: 'Divine Smite', category: 'class', summary: 'Expend a spell slot on melee hit to deal +2d8 Radiant damage.', icon: 'zap', tone: 'gold' },
+    ],
+    startingSpells: [
+      {
+        groupId: 'level-1',
+        label: '1st-Level Paladin Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-divine-smite', name: 'Divine Smite', school: 'Evocation', icon: 'zap', tone: 'gold', actionCost: '1 Bonus Action (On Hit)', summary: 'Deal +2d8 Radiant damage (+1d8 vs Undead/Fiends).', level: 1, prepared: true },
+          { id: 'sp-shield-of-faith', name: 'Shield of Faith', school: 'Abjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Grant +2 AC to a creature within 60 feet.', level: 1, prepared: false, concentration: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bard',
+    name: 'Bard',
+    subclassDefault: 'College of Lore',
+    subclasses: ['College of Lore', 'College of Valor', 'College of Eloquence', 'College of Glamour', 'College of Swords', 'College of Whispers'],
+    tagline: 'Weaver of words, music, inspiration, and ancient memory.',
+    hitDie: 8,
+    primaryAbility: 'CHA',
+    savingThrows: ['DEX', 'CHA'],
+    features: [
+      { id: 'cf-brd-insp', title: 'Bardic Inspiration (d6)', category: 'class', summary: 'Bonus Action to grant an ally a Bardic Inspiration die (CHA mod uses/rest).', icon: 'feather', tone: 'gold' },
+      { id: 'cf-brd-jack', title: 'Jack of All Trades', category: 'class', summary: 'Add half Proficiency Bonus to any ability check you lack proficiency in.', icon: 'book-open', tone: 'emerald' },
     ],
     startingSpells: [
       {
         groupId: 'cantrips',
-        label: 'At Will / Cantrips',
-        slotsRemaining: 3,
-        slotsMax: 3,
+        label: 'Cantrips (Always Prepared)',
+        slotsRemaining: 0,
+        slotsMax: 0,
         isCantrip: true,
         spells: [
-          { id: 'sp-minor-illusion', name: 'Minor Illusion', school: 'Illusion', icon: 'eye', tone: 'gold', actionCost: '1 Action', summary: 'Create a sound or image of an object within range for 1 minute.' },
+          { id: 'sp-vicious-mockery', name: 'Vicious Mockery', school: 'Enchantment', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: 'WIS save or take 1d6 Psychic damage and disadvantage on next attack.', level: 0, prepared: true },
+        ],
+      },
+      {
+        groupId: 'level-1',
+        label: '1st-Level Bard Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-dissonant-whispers', name: 'Dissonant Whispers', school: 'Enchantment', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: '3d6 Psychic damage and forces target to use reaction to flee.', level: 1, prepared: true },
+          { id: 'sp-faerie-fire', name: 'Faerie Fire', school: 'Evocation', icon: 'flame', tone: 'gold', actionCost: '1 Action', summary: 'Outlines creatures in light; attacks against them have advantage.', level: 1, prepared: false, concentration: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'barbarian',
+    name: 'Barbarian',
+    subclassDefault: 'Path of the Berserker',
+    subclasses: ['Path of the Berserker', 'Path of the Wild Heart (Totem)', 'Path of the World Tree', 'Path of the Zealot', 'Path of the Ancestral Guardian'],
+    tagline: 'Primal fury, unarmored resilience, and unstoppable might.',
+    hitDie: 12,
+    primaryAbility: 'STR',
+    savingThrows: ['STR', 'CON'],
+    features: [
+      { id: 'cf-brb-rage', title: 'Rage', category: 'class', summary: 'Bonus Action for resistance to Bludgeoning/Piercing/Slashing and bonus melee damage.', icon: 'flame', tone: 'crimson' },
+      { id: 'cf-brb-def', title: 'Unarmored Defense', category: 'class', summary: 'While unarmored, your AC equals 10 + DEX modifier + CON modifier.', icon: 'shield', tone: 'emerald' },
+    ],
+    startingSpells: [],
+  },
+  {
+    id: 'druid',
+    name: 'Druid',
+    subclassDefault: 'Circle of the Moon',
+    subclasses: ['Circle of the Moon', 'Circle of the Land', 'Circle of the Stars', 'Circle of the Sea', 'Circle of Wildfire', 'Circle of Spores'],
+    tagline: 'Warden of root and river, wild shape, and primal nature.',
+    hitDie: 8,
+    primaryAbility: 'WIS',
+    savingThrows: ['INT', 'WIS'],
+    features: [
+      { id: 'cf-drd-wild', title: 'Wild Shape', category: 'class', summary: 'Bonus Action to magically assume the shape of a beast.', icon: 'compass', tone: 'emerald' },
+      { id: 'cf-drd-cast', title: 'Primal Spellcasting (Prepared)', category: 'class', summary: 'Prepare WIS modifier + Druid level spells after a Long Rest.', icon: 'book-open', tone: 'gold' },
+    ],
+    startingSpells: [
+      {
+        groupId: 'cantrips',
+        label: 'Cantrips (Always Prepared)',
+        slotsRemaining: 0,
+        slotsMax: 0,
+        isCantrip: true,
+        spells: [
+          { id: 'sp-shillelagh', name: 'Shillelagh', school: 'Transmutation', icon: 'wand', tone: 'emerald', actionCost: '1 Bonus Action', summary: 'Imbue club or staff to use WIS for attacks and deal 1d8 damage.', level: 0, prepared: true },
+        ],
+      },
+      {
+        groupId: 'level-1',
+        label: '1st-Level Druid Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-entangle', name: 'Entangle', school: 'Conjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Action', summary: 'Grasping weeds and vines restrain creatures in a 20-ft square.', level: 1, prepared: true, concentration: true },
+          { id: 'sp-thunderwave', name: 'Thunderwave', school: 'Evocation', icon: 'zap', tone: 'gold', actionCost: '1 Action', summary: '2d8 Thunder damage and pushes creatures 10 ft away.', level: 1, prepared: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'monk',
+    name: 'Monk',
+    subclassDefault: 'Warrior of the Open Hand',
+    subclasses: ['Warrior of the Open Hand', 'Warrior of Shadow', 'Warrior of the Elements', 'Way of Mercy', 'Way of the Astral Self'],
+    tagline: 'Master of martial arts, focus energy, and lightning speed.',
+    hitDie: 8,
+    primaryAbility: 'DEX',
+    savingThrows: ['STR', 'DEX'],
+    features: [
+      { id: 'cf-mnk-arts', title: 'Martial Arts & Unarmored Defense', category: 'class', summary: 'AC = 10 + DEX + WIS; Bonus Action unarmed strike.', icon: 'zap', tone: 'emerald' },
+      { id: 'cf-mnk-focus', title: 'Monk Focus (Ki)', category: 'class', summary: 'Flurry of Blows, Patient Defense, and Step of the Wind.', icon: 'shield', tone: 'gold' },
+    ],
+    startingSpells: [],
+  },
+  {
+    id: 'sorcerer',
+    name: 'Sorcerer',
+    subclassDefault: 'Draconic Sorcery',
+    subclasses: ['Draconic Sorcery', 'Wild Magic Sorcery', 'Aberrant Sorcery', 'Clockwork Sorcery', 'Divine Soul', 'Shadow Magic'],
+    tagline: 'Innate arcane bloodline shaped by Metamagic.',
+    hitDie: 6,
+    primaryAbility: 'CHA',
+    savingThrows: ['CON', 'CHA'],
+    features: [
+      { id: 'cf-src-innate', title: 'Innate Sorcery & Font of Magic', category: 'class', summary: 'Channel Sorcery Points and increase Spell Save DC by +1.', icon: 'flame', tone: 'crimson' },
+      { id: 'cf-src-meta', title: 'Metamagic', category: 'class', summary: 'Twin, Quicken, Subtle, or Empower your spells on the fly.', icon: 'zap', tone: 'gold' },
+    ],
+    startingSpells: [
+      {
+        groupId: 'level-1',
+        label: '1st-Level Sorcerer Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-chromatic-orb', name: 'Chromatic Orb', school: 'Evocation', icon: 'flame', tone: 'crimson', actionCost: '1 Action', summary: '3d8 elemental damage of your chosen type (Acid, Cold, Fire, Lightning, Poison, Thunder).', level: 1, prepared: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'warlock',
+    name: 'Warlock',
+    subclassDefault: 'The Archfey Patron',
+    subclasses: ['The Archfey Patron', 'The Fiend Patron', 'The Great Old One', 'The Hexblade', 'The Celestial', 'The Undying'],
+    tagline: 'Pact-bound wielder of Eldritch Invocations and forbidden truth.',
+    hitDie: 8,
+    primaryAbility: 'CHA',
+    savingThrows: ['WIS', 'CHA'],
+    features: [
+      { id: 'cf-wlk-pact', title: 'Pact Magic', category: 'class', summary: 'Spell slots automatically scale to highest level and recharge on a Short Rest.', icon: 'zap', tone: 'gold' },
+      { id: 'cf-wlk-inv', title: 'Eldritch Invocations', category: 'class', summary: 'Agonizing Blast, Pact of the Blade/Tome/Chain, and Devil Sight.', icon: 'eye', tone: 'emerald' },
+    ],
+    startingSpells: [
+      {
+        groupId: 'cantrips',
+        label: 'Cantrips (Always Prepared)',
+        slotsRemaining: 0,
+        slotsMax: 0,
+        isCantrip: true,
+        spells: [
+          { id: 'sp-eldritch-blast', name: 'Eldritch Blast', school: 'Evocation', icon: 'zap', tone: 'crimson', actionCost: '1 Action', summary: '120 ft beam of crackling energy for 1d10 Force damage.', level: 0, prepared: true },
+        ],
+      },
+      {
+        groupId: 'level-1',
+        label: 'Pact Magic Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
+        spells: [
+          { id: 'sp-hex', name: 'Hex', school: 'Enchantment', icon: 'eye', tone: 'crimson', actionCost: '1 Bonus Action', summary: '+1d6 Necrotic damage on hits and disadvantage on chosen ability checks.', level: 1, prepared: true, concentration: true },
+          { id: 'sp-armor-of-agathys', name: 'Armor of Agathys', school: 'Abjuration', icon: 'shield', tone: 'emerald', actionCost: '1 Action', summary: 'Gain 5 Temp HP; melee attackers take 5 Cold damage.', level: 1, prepared: false },
         ],
       },
     ],
@@ -121,137 +332,27 @@ export const CREATOR_CLASSES: readonly CreatorClassOptionVm[] = [
   {
     id: 'artificer',
     name: 'Artificer',
-    subclassDefault: 'Cinth Clockwork Savant',
+    subclassDefault: 'Cinth Battle Smith',
+    subclasses: ['Alchemist', 'Armorer', 'Artillerist', 'Battle Smith (Cinth Guild)'],
     tagline: 'Mechanical and runic answers to unchecked magical power.',
     hitDie: 8,
     primaryAbility: 'INT',
     savingThrows: ['CON', 'INT'],
     features: [
-      { id: 'feat-infuse-item', title: 'Cinth Guild Infusions', category: 'class', summary: 'Imbue mundane gear with phosphor-bronze condensers and runic wards.', icon: 'settings', tone: 'gold' },
+      { id: 'cf-art-infuse', title: 'Infuse Item & Magical Tinkering', category: 'class', summary: 'Imbue non-magical gear with phosphor-bronze rune infusions (+1 AC/Weapon).', icon: 'wrench', tone: 'gold' },
+      { id: 'cf-art-cast', title: 'Artificer Spellcasting (Prepared)', category: 'class', summary: 'Prepare INT modifier + half Artificer level spells after a Long Rest.', icon: 'book-open', tone: 'emerald' },
     ],
     startingSpells: [
       {
-        groupId: 'cantrips',
-        label: 'At Will / Cantrips',
-        slotsRemaining: 3,
-        slotsMax: 3,
-        isCantrip: true,
+        groupId: 'level-1',
+        label: '1st-Level Artificer Spells',
+        slotsRemaining: 2,
+        slotsMax: 2,
         spells: [
-          { id: 'sp-mending', name: 'Mending', school: 'Transmutation', icon: 'settings', tone: 'emerald', actionCost: '1 Minute', summary: 'Repairs a single break or tear in an object or construct.' },
+          { id: 'sp-faerie-fire-art', name: 'Faerie Fire (Arc Lens)', school: 'Evocation', icon: 'zap', tone: 'gold', actionCost: '1 Action', summary: 'Illuminates targets and grants advantage on attacks.', level: 1, prepared: true, concentration: true },
+          { id: 'sp-cure-wounds-art', name: 'Cure Wounds (Alchemical)', school: 'Abjuration', icon: 'heart', tone: 'emerald', actionCost: '1 Action', summary: 'Restore 2d8 + INT modifier HP.', level: 1, prepared: false },
         ],
       },
     ],
   },
-  {
-    id: 'fighter',
-    name: 'Fighter',
-    subclassDefault: 'Frontline Champion',
-    tagline: 'Unbreakable martial discipline and physical courage.',
-    hitDie: 10,
-    primaryAbility: 'STR',
-    savingThrows: ['STR', 'CON'],
-    features: [
-      { id: 'feat-action-surge', title: 'Action Surge', category: 'class', summary: 'Push beyond normal limits to take one additional action on your turn.', icon: 'zap', tone: 'gold' },
-      { id: 'feat-second-wind', title: 'Second Wind', category: 'class', summary: 'Regain 1d10 + Fighter level HP as a bonus action.', icon: 'shield', tone: 'emerald' },
-    ],
-    startingSpells: [],
-  },
 ];
-
-export const CREATOR_BACKGROUNDS: readonly CreatorBackgroundOptionVm[] = [
-  {
-    id: 'sage',
-    name: 'Sage',
-    tagline: 'Arcane Scholar · Member of the Circle',
-    summary: 'Your character has spent years in study, poring over ancient texts and seeking forgotten knowledge.',
-    skillProficiencies: ['Arcana', 'History'],
-    defaultQuote: '"Knowledge preserves what time would otherwise forget."',
-    personality: {
-      personality: 'Thoughtful, curious, and precise.',
-      ideals: 'Knowledge should be preserved and shared.',
-      bonds: 'The lost library of Cinth.',
-      flaws: 'Can be overly cautious when others act rashly.',
-    },
-  },
-  {
-    id: 'outlander',
-    name: 'Edhellain Exile',
-    tagline: 'Borderland Wayfinder · Unclaimed Lineage',
-    summary: 'Raised on the old roads and taught to live within the world rather than rule above it.',
-    skillProficiencies: ['Perception', 'Survival'],
-    defaultQuote: '"The road remembers who walked it before the banners fell."',
-    personality: {
-      personality: 'Watchful, measured, and quietly protective of the party.',
-      ideals: 'Duty is proven in who you shelter, not the crown you claim.',
-      bonds: 'The cliffside house near Vandia and the missing pages of Edhellain.',
-      flaws: 'Carries every ambush as a personal failure of foresight.',
-    },
-  },
-  {
-    id: 'artificer-guild',
-    name: 'Cinth Artificers Guild',
-    tagline: 'Post-Moonlight Wars Craftsperson',
-    summary: 'Trained in Cinth workshops where non-magical craft answers wizardry and ancient monsters alike.',
-    skillProficiencies: ['Investigation', 'Sleight of Hand'],
-    defaultQuote: '"If a god left a trap in the bedrock, bring a bigger wrench."',
-    personality: {
-      personality: 'Pragmatic, inventive, and skeptical of Council decrees.',
-      ideals: 'Craft and intellect belong to everyone, not just the high towers.',
-      bonds: 'The workshops of Cinth and Captain Kutler skyship schematics.',
-      flaws: 'Cannot resist dismantling a dangerous relic to see how it ticks.',
-    },
-  },
-];
-
-export function buildSavingThrows(
-  abilities: readonly { code: SavingThrowVm['code']; label: string; modifier: number }[],
-  profBonus: number,
-  proficientCodes: readonly SavingThrowVm['code'][],
-): readonly SavingThrowVm[] {
-  return abilities.map((a) => {
-    const proficient = proficientCodes.includes(a.code);
-    return {
-      code: a.code,
-      label: a.label,
-      proficient,
-      bonus: a.modifier + (proficient ? profBonus : 0),
-    };
-  });
-}
-
-export function buildSkillsList(
-  abilities: readonly { code: SavingThrowVm['code']; modifier: number }[],
-  profBonus: number,
-  proficientSkills: readonly string[],
-): readonly CharacterSkillVm[] {
-  const modOf = (code: SavingThrowVm['code']) =>
-    abilities.find((a) => a.code === code)?.modifier ?? 0;
-  const defs: readonly { id: string; label: string; code: SavingThrowVm['code'] }[] = [
-    { id: 'acrobatics', label: 'Acrobatics', code: 'DEX' },
-    { id: 'arcana', label: 'Arcana', code: 'INT' },
-    { id: 'athletics', label: 'Athletics', code: 'STR' },
-    { id: 'deception', label: 'Deception', code: 'CHA' },
-    { id: 'history', label: 'History', code: 'INT' },
-    { id: 'insight', label: 'Insight', code: 'WIS' },
-    { id: 'investigation', label: 'Investigation', code: 'INT' },
-    { id: 'medicine', label: 'Medicine', code: 'WIS' },
-    { id: 'nature', label: 'Nature', code: 'INT' },
-    { id: 'perception', label: 'Perception', code: 'WIS' },
-    { id: 'persuasion', label: 'Persuasion', code: 'CHA' },
-    { id: 'sleight-of-hand', label: 'Sleight of Hand', code: 'DEX' },
-    { id: 'stealth', label: 'Stealth', code: 'DEX' },
-    { id: 'survival', label: 'Survival', code: 'WIS' },
-  ];
-  return defs.map((d) => {
-    const proficient = proficientSkills.some(
-      (s) => s.toLowerCase() === d.label.toLowerCase() || s.toLowerCase() === d.id,
-    );
-    return {
-      id: d.id,
-      label: d.label,
-      abilityCode: d.code,
-      proficient,
-      bonus: modOf(d.code) + (proficient ? profBonus : 0),
-    };
-  });
-}

@@ -1,0 +1,409 @@
+<section class="lw-eb-shell" aria-label="Encounter Builder Workspace">
+  <header class="lw-eb-header">
+    <div class="lw-eb-header__left">
+      <button ngpButton type="button" class="lw-eb-back-btn" (click)="cancelled.emit()">
+        <lw-icon name="chevron-left" [size]="16" />
+        <span>Back to Encounters</span>
+      </button>
+      <div class="lw-eb-header__titles">
+        <div class="lw-eb-header__eyebrow">
+          <span>{{ isCreateMode() ? 'Create New Encounter' : 'Edit Encounter Details' }}</span>
+          <span>·</span><span>Campaign: {{ campaignName() }}</span><span>·</span><span>{{ selectedSession().title }}</span>
+        </div>
+        <h2>{{ name() || 'Untitled Encounter' }}</h2>
+      </div>
+    </div>
+
+    <div class="lw-eb-header__actions">
+      <lw-badge [label]="'Est. XP: ' + computedTotalXp().toLocaleString()" tone="gold" />
+      <lw-badge [label]="computedEnemyCount() + ' Monsters · ' + traps().length + ' Traps'" tone="emerald" />
+      <lw-button variant="secondary" size="sm" (pressed)="cancelled.emit()">Cancel</lw-button>
+      <lw-button variant="gold" size="sm" (pressed)="submitSave()">Save Encounter</lw-button>
+      <lw-button variant="primary" size="sm" (pressed)="submitSaveAndLaunch()">Save & Run in Live VTT</lw-button>
+    </div>
+  </header>
+
+  <nav ngpTabset class="lw-eb-tabs" aria-label="Encounter Builder Sections">
+    <div ngpTabList class="lw-eb-tab-list">
+      @for (tab of stepTabs; track tab.id) {
+        <button ngpTabButton ngpButton type="button" class="lw-eb-tab-btn" [class.lw-eb-tab-btn--active]="activeStep() === tab.id" [ngpTabButtonValue]="tab.id" (click)="activeStep.set(tab.id)">
+          {{ tab.label }}
+        </button>
+      }
+    </div>
+  </nav>
+
+  <div class="lw-eb-body">
+    @switch (activeStep()) {
+      @case ('general') {
+        <div class="lw-eb-grid-2">
+          <div class="lw-eb-card">
+            <div class="lw-eb-card__head">
+              <h3>Campaign & Session Binding</h3>
+              <button ngpButton type="button" class="lw-eb-inline-btn" (click)="showNewSessionInline.set(!showNewSessionInline())">
+                {{ showNewSessionInline() ? 'Close New Session' : '+ Create Session for Campaign' }}
+              </button>
+            </div>
+            <p class="lw-eb-hint">Every encounter is attached to a Session, and every session belongs to the active global campaign ({{ campaignName() }}).</p>
+
+            @if (showNewSessionInline()) {
+              <div class="lw-eb-subform">
+                <div class="lw-eb-row-3">
+                  <label class="lw-eb-field"><span>Session #</span><input type="number" [ngModel]="newSessionNumber()" (ngModelChange)="newSessionNumber.set(+$event)" /></label>
+                  <label class="lw-eb-field"><span>Act</span><input type="text" [ngModel]="newSessionAct()" (ngModelChange)="newSessionAct.set($event)" /></label>
+                  <label class="lw-eb-field"><span>Session Title</span><input type="text" placeholder="e.g. Gates of Edhellain" [ngModel]="newSessionTitle()" (ngModelChange)="newSessionTitle.set($event)" /></label>
+                </div>
+                <lw-button variant="gold" size="sm" (pressed)="createInlineSession()">Attach New Session to {{ campaignName() }}</lw-button>
+              </div>
+            }
+
+            <div class="lw-eb-session-list">
+              @for (ses of sessions(); track ses.id) {
+                <button ngpButton type="button" class="lw-eb-session-item" [class.lw-eb-session-item--active]="sessionId() === ses.id" (click)="sessionId.set(ses.id); actLabel.set(ses.actLabel)">
+                  <div>
+                    <strong>{{ ses.title }}</strong>
+                    <span>{{ ses.actLabel }} · {{ ses.locationName }} · {{ ses.dateLabel }}</span>
+                  </div>
+                  <lw-badge [label]="ses.status.toUpperCase()" [tone]="ses.status === 'live' ? 'emerald' : 'gold'" />
+                </button>
+              }
+            </div>
+
+            <div class="lw-eb-row-2">
+              <label class="lw-eb-field"><span>Encounter Title</span><input type="text" [ngModel]="name()" (ngModelChange)="name.set($event)" /></label>
+              <label class="lw-eb-field"><span>Act Label</span><input type="text" [ngModel]="actLabel()" (ngModelChange)="actLabel.set($event)" /></label>
+            </div>
+
+            <div class="lw-eb-row-3">
+              <label class="lw-eb-field">
+                <span>Encounter Type</span>
+                <select [ngModel]="encounterType()" (ngModelChange)="encounterType.set($event)">
+                  <option value="Combat">Combat</option><option value="Boss">Boss</option><option value="Social">Social</option><option value="Exploration">Exploration</option><option value="Mixed">Mixed</option>
+                </select>
+              </label>
+              <label class="lw-eb-field">
+                <span>Difficulty</span>
+                <select [ngModel]="difficulty()" (ngModelChange)="difficulty.set($event)">
+                  <option value="Moderate">Moderate</option><option value="Hard">Hard</option><option value="Deadly">Deadly</option><option value="Mythic">Mythic</option>
+                </select>
+              </label>
+              <label class="lw-eb-field">
+                <span>Status</span>
+                <select [ngModel]="status()" (ngModelChange)="status.set($event)">
+                  <option value="Upcoming">Upcoming</option><option value="Ready">Ready</option><option value="Completed">Completed</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="lw-eb-row-3">
+              <label class="lw-eb-field"><span>Party Level</span><input type="number" [ngModel]="partyLevel()" (ngModelChange)="partyLevel.set(+$event)" /></label>
+              <label class="lw-eb-field"><span>Estimated Duration</span><input type="text" [ngModel]="estimatedDuration()" (ngModelChange)="estimatedDuration.set($event)" /></label>
+              <label class="lw-eb-field"><span>Environment</span><input type="text" [ngModel]="environment()" (ngModelChange)="environment.set($event)" /></label>
+            </div>
+          </div>
+
+          <div class="lw-eb-card">
+            <h3>Encounter Description & Objectives</h3>
+            <label class="lw-eb-field">
+              <span>Description & Tactical Overview</span>
+              <textarea rows="4" [ngModel]="description()" (ngModelChange)="description.set($event)"></textarea>
+            </label>
+
+            <div class="lw-eb-objectives">
+              <div class="lw-eb-card__head"><h4>Encounter Objectives ({{ objectives().length }})</h4></div>
+              <div class="lw-eb-add-inline">
+                <input type="text" placeholder="Add an encounter objective or win condition..." [ngModel]="newObjectiveText()" (ngModelChange)="newObjectiveText.set($event)" (keyup.enter)="addObjective()" />
+                <lw-button variant="gold" size="sm" (pressed)="addObjective()">Add Goal</lw-button>
+              </div>
+              <div class="lw-eb-obj-list">
+                @for (obj of objectives(); track obj.id) {
+                  <div class="lw-eb-obj-item">
+                    <span>{{ obj.text }}</span>
+                    <button ngpButton type="button" class="lw-eb-del-btn" (click)="removeObjective(obj.id)">Remove</button>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      @case ('map') {
+        <div class="lw-eb-card">
+          <div class="lw-eb-card__head">
+            <div>
+              <h3>Select Battlemap for Encounter</h3>
+              <p class="lw-eb-hint">Choose the battlemap from {{ campaignName() }} to load when running this encounter in the Live VTT.</p>
+            </div>
+            <a class="lw-eb-link-pill" routerLink="/maps">Open LoomMaps Studio</a>
+          </div>
+
+          <div class="lw-eb-map-grid">
+            @for (sc of availableScenes(); track sc.sceneKey) {
+              <button ngpButton type="button" class="lw-eb-map-card" [class.lw-eb-map-card--selected]="sceneKey() === sc.sceneKey" (click)="sceneKey.set(sc.sceneKey); environment.set(sc.biome)">
+                <div class="lw-eb-map-card__top">
+                  <strong>{{ sc.name }}</strong>
+                  <lw-badge [label]="sceneKey() === sc.sceneKey ? 'Selected Map' : sc.modeSupport" [tone]="sceneKey() === sc.sceneKey ? 'emerald' : 'gold'" />
+                </div>
+                <p>{{ sc.regionName }} · Biome: {{ sc.biome }}</p>
+                <div class="lw-eb-map-card__meta">
+                  <span>Grid: {{ sc.gridCols }}x{{ sc.gridRows }}</span>
+                  <span>Lighting: {{ sc.lightingProfile }}</span>
+                  <span>Weather: {{ sc.weatherPreset }}</span>
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      @case ('monsters') {
+        <div class="lw-eb-grid-2">
+          <div class="lw-eb-card">
+            <div class="lw-eb-card__head">
+              <h3>Monsters in Encounter ({{ computedEnemyCount() }})</h3>
+              <lw-badge [label]="'Total Monster XP: ' + computedTotalXp().toLocaleString()" tone="gold" />
+            </div>
+            <p class="lw-eb-hint">Configure monster counts and click "Select 2D/3D Token" on any monster to assign a 2D Top-Down Token or 3D GLB Miniature from our asset catalog.</p>
+
+            @if (monsters().length === 0) {
+              <div class="lw-eb-empty">No monsters added yet. Select monsters from the Bestiary or Custom Creator on the right.</div>
+            }
+
+            <div class="lw-eb-monster-list">
+              @for (m of monsters(); track m.slotId) {
+                <div class="lw-eb-monster-row" [class.lw-eb-monster-row--picking]="activeTokenPickerSlotId() === m.slotId">
+                  <img [src]="m.tokenPreviewUrl" [alt]="m.tokenName" class="lw-eb-monster-row__thumb" />
+                  <div class="lw-eb-monster-row__info">
+                    <div class="lw-eb-monster-row__title">
+                      <strong>{{ m.count }}x {{ m.name }}</strong>
+                      <lw-badge [label]="'CR ' + m.challengeRating" tone="crimson" />
+                      <lw-badge [label]="m.tokenKind === '3d' ? '3D GLB Token' : '2D Token'" [tone]="m.tokenKind === '3d' ? 'emerald' : 'gold'" />
+                    </div>
+                    <span>{{ m.creatureType }} · AC {{ m.armorClass }} · HP {{ m.maxHp }} · {{ m.signatureAttack }}</span>
+                    <span class="lw-eb-monster-row__token-label">Assigned Asset: {{ m.tokenName }}</span>
+                  </div>
+                  <div class="lw-eb-monster-row__controls">
+                    <div class="lw-eb-qty">
+                      <button ngpButton type="button" (click)="adjustMonsterCount(m.slotId, -1)">-</button>
+                      <span>{{ m.count }}</span>
+                      <button ngpButton type="button" (click)="adjustMonsterCount(m.slotId, 1)">+</button>
+                    </div>
+                    <button ngpButton type="button" class="lw-eb-token-btn" (click)="activeTokenPickerSlotId.set(activeTokenPickerSlotId() === m.slotId ? null : m.slotId)">
+                      {{ activeTokenPickerSlotId() === m.slotId ? 'Picking Token...' : 'Select 2D/3D Token' }}
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+
+            @if (activeTokenPickerSlotId(); as slotId) {
+              <div class="lw-eb-token-picker">
+                <div class="lw-eb-card__head">
+                  <h4>Assign 2D or 3D Monster Token Asset</h4>
+                  <div class="lw-eb-filter-pills">
+                    <button ngpButton type="button" [class.active]="tokenDimensionFilter() === 'all'" (click)="tokenDimensionFilter.set('all')">All ({{ tokenAssets().length }})</button>
+                    <button ngpButton type="button" [class.active]="tokenDimensionFilter() === '3d'" (click)="tokenDimensionFilter.set('3d')">3D Models (GLB)</button>
+                    <button ngpButton type="button" [class.active]="tokenDimensionFilter() === '2d'" (click)="tokenDimensionFilter.set('2d')">2D Tokens (PNG)</button>
+                  </div>
+                </div>
+                <input type="text" class="lw-eb-search" placeholder="Search 2D or 3D monster tokens (e.g., Goblin, Dragon, Vampire, Wraith)..." [ngModel]="tokenSearchQuery()" (ngModelChange)="tokenSearchQuery.set($event)" />
+                <div class="lw-eb-token-grid">
+                  @for (asset of filteredTokenAssets(); track asset.id) {
+                    <button ngpButton type="button" class="lw-eb-token-card" (click)="assignTokenToMonster(slotId, asset)">
+                      <img [src]="asset.previewUrl" [alt]="asset.name" />
+                      <div class="lw-eb-token-card__meta">
+                        <strong>{{ asset.name }}</strong>
+                        <span>{{ asset.kind.toUpperCase() }} · {{ asset.category }} · {{ asset.sizeLabel }}</span>
+                      </div>
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="lw-eb-card">
+            <h3>Add Monsters from Bestiary</h3>
+            <div class="lw-eb-bestiary-list">
+              @for (creat of bestiaryCreatures(); track creat.id) {
+                <div class="lw-eb-bestiary-item">
+                  <div>
+                    <strong>{{ creat.name }}</strong>
+                    <span>{{ creat.creatureType }} · CR {{ creat.challengeRating }} · AC {{ creat.armorClass }} · HP {{ creat.maxHp }}</span>
+                  </div>
+                  <lw-button variant="gold" size="sm" (pressed)="addCreatureFromBestiary(creat)">+ Add Monster</lw-button>
+                </div>
+              }
+            </div>
+
+            <div class="lw-eb-subform">
+              <h4>Or Create Custom Monster</h4>
+              <div class="lw-eb-row-2">
+                <label class="lw-eb-field"><span>Monster Name</span><input type="text" placeholder="e.g. Ashen Crypt Stalker" [ngModel]="customMonsterName()" (ngModelChange)="customMonsterName.set($event)" /></label>
+                <label class="lw-eb-field"><span>Signature Attack</span><input type="text" [ngModel]="customMonsterAttack()" (ngModelChange)="customMonsterAttack.set($event)" /></label>
+              </div>
+              <div class="lw-eb-row-3">
+                <label class="lw-eb-field"><span>CR</span><input type="text" [ngModel]="customMonsterCr()" (ngModelChange)="customMonsterCr.set($event)" /></label>
+                <label class="lw-eb-field"><span>AC</span><input type="number" [ngModel]="customMonsterAc()" (ngModelChange)="customMonsterAc.set(+$event)" /></label>
+                <label class="lw-eb-field"><span>Max HP</span><input type="number" [ngModel]="customMonsterHp()" (ngModelChange)="customMonsterHp.set(+$event)" /></label>
+              </div>
+              <lw-button variant="secondary" size="sm" (pressed)="addCustomMonster()">+ Create & Add Custom Monster</lw-button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @case ('participants') {
+        <div class="lw-eb-grid-2">
+          <div class="lw-eb-card">
+            <h3>Players in Encounter ({{ campaignName() }})</h3>
+            <p class="lw-eb-hint">Review the campaign party members participating in this encounter. Included players are automatically placed into the VTT initiative order.</p>
+            <div class="lw-eb-participant-list">
+              @for (p of partyMembers(); track p.compositeKey) {
+                <div class="lw-eb-participant-row" [class.lw-eb-participant-row--included]="p.includedInEncounter">
+                  <img [src]="p.avatarUrl" [alt]="p.name" class="lw-eb-avatar" />
+                  <div class="lw-eb-participant-row__info">
+                    <strong>{{ p.name }}</strong>
+                    <span>{{ p.classSummary }} · Level {{ p.level }} · AC {{ p.armorClass }} · HP {{ p.currentHp }}/{{ p.maxHp }}</span>
+                  </div>
+                  <lw-button [variant]="p.includedInEncounter ? 'primary' : 'secondary'" size="sm" (pressed)="togglePartyMember(p.compositeKey)">
+                    {{ p.includedInEncounter ? 'In Encounter' : 'Excluded' }}
+                  </lw-button>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="lw-eb-card">
+            <div class="lw-eb-card__head">
+              <h3>Session NPCs ({{ selectedSession().title }})</h3>
+              <button ngpButton type="button" class="lw-eb-inline-btn" (click)="showAllCampaignNpcs.set(!showAllCampaignNpcs())">
+                {{ showAllCampaignNpcs() ? 'Filter by Selected Session' : 'Show All Campaign NPCs' }}
+              </button>
+            </div>
+            <p class="lw-eb-hint">See and attach NPCs from this session into the encounter, or create a new session NPC below.</p>
+
+            <div class="lw-eb-participant-list">
+              @for (n of visibleSessionNpcs(); track n.compositeKey) {
+                <div class="lw-eb-participant-row" [class.lw-eb-participant-row--included]="n.includedInEncounter">
+                  <img [src]="n.avatarUrl" [alt]="n.name" class="lw-eb-avatar" />
+                  <div class="lw-eb-participant-row__info">
+                    <div class="lw-eb-monster-row__title">
+                      <strong>{{ n.name }}</strong>
+                      <lw-badge [label]="n.disposition" [tone]="n.disposition === 'Allied' ? 'emerald' : 'gold'" />
+                    </div>
+                    <span>{{ n.role }} · {{ n.locationName }}</span>
+                    <small>{{ n.summary }}</small>
+                  </div>
+                  <lw-button [variant]="n.includedInEncounter ? 'gold' : 'secondary'" size="sm" (pressed)="toggleSessionNpc(n.compositeKey)">
+                    {{ n.includedInEncounter ? 'Attached' : '+ Add to Encounter' }}
+                  </lw-button>
+                </div>
+              }
+            </div>
+
+            <div class="lw-eb-subform">
+              <h4>Add New NPC to Session & Encounter</h4>
+              <div class="lw-eb-row-3">
+                <label class="lw-eb-field"><span>NPC Name</span><input type="text" placeholder="e.g. Sister Elowen" [ngModel]="newNpcName()" (ngModelChange)="newNpcName.set($event)" /></label>
+                <label class="lw-eb-field"><span>Role / Title</span><input type="text" [ngModel]="newNpcRole()" (ngModelChange)="newNpcRole.set($event)" /></label>
+                <label class="lw-eb-field">
+                  <span>Disposition</span>
+                  <select [ngModel]="newNpcDisposition()" (ngModelChange)="newNpcDisposition.set($event)">
+                    <option value="Allied">Allied</option><option value="Neutral">Neutral</option><option value="Deceptive">Deceptive</option><option value="Hostile">Hostile</option>
+                  </select>
+                </label>
+              </div>
+              <label class="lw-eb-field">
+                <span>Session Summary / Motive</span>
+                <input type="text" placeholder="What role do they play in this session?" [ngModel]="newNpcSummary()" (ngModelChange)="newNpcSummary.set($event)" />
+              </label>
+              <lw-button variant="gold" size="sm" (pressed)="addNewSessionNpc()">+ Create & Attach Session NPC</lw-button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @case ('traps') {
+        <div class="lw-eb-grid-2">
+          <div class="lw-eb-card">
+            <h3>Configured Traps & Hazards ({{ traps().length }})</h3>
+            <p class="lw-eb-hint">Traps and hazards authored here carry directly into the Encounter Details and Live VTT DM Toolkit.</p>
+            @if (traps().length === 0) {
+              <div class="lw-eb-empty">No traps configured yet. Use the Trap Builder on the right to add one.</div>
+            }
+            <div class="lw-eb-trap-list">
+              @for (trap of traps(); track trap.id) {
+                <div class="lw-eb-trap-card">
+                  <div class="lw-eb-trap-card__head">
+                    <div><strong>{{ trap.name }}</strong><lw-badge [label]="trap.category" tone="crimson" /></div>
+                    <button ngpButton type="button" class="lw-eb-del-btn" (click)="removeTrap(trap.id)">Remove</button>
+                  </div>
+                  <p><strong>Trigger:</strong> {{ trap.trigger }}</p>
+                  <div class="lw-eb-trap-card__stats">
+                    <span>Spot DC {{ trap.perceptionDc }}</span><span>Disarm DC {{ trap.disarmDc }}</span><span>{{ trap.saveOrAttack }}</span><span>Damage: {{ trap.damageFormula }}</span>
+                  </div>
+                  <p class="lw-eb-trap-card__effect">{{ trap.effectSummary }}</p>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="lw-eb-card">
+            <h3>Create Trap or Hazard</h3>
+            <div class="lw-eb-row-2">
+              <label class="lw-eb-field"><span>Trap Name</span><input type="text" placeholder="e.g. Altar Necrotic Glyph" [ngModel]="newTrapName()" (ngModelChange)="newTrapName.set($event)" /></label>
+              <label class="lw-eb-field">
+                <span>Trap Category</span>
+                <select [ngModel]="newTrapCategory()" (ngModelChange)="newTrapCategory.set($event)">
+                  <option value="Mechanical Trap">Mechanical Trap</option><option value="Arcane Ward">Arcane Ward</option><option value="Environmental Hazard">Environmental Hazard</option><option value="Cursed Relic">Cursed Relic</option>
+                </select>
+              </label>
+            </div>
+            <label class="lw-eb-field"><span>Trigger Condition</span><input type="text" [ngModel]="newTrapTrigger()" (ngModelChange)="newTrapTrigger.set($event)" /></label>
+            <div class="lw-eb-row-2">
+              <label class="lw-eb-field"><span>Perception / Spot DC</span><input type="number" [ngModel]="newTrapPerceptionDc()" (ngModelChange)="newTrapPerceptionDc.set(+$event)" /></label>
+              <label class="lw-eb-field"><span>Thieves’ Tools / Disarm DC</span><input type="number" [ngModel]="newTrapDisarmDc()" (ngModelChange)="newTrapDisarmDc.set(+$event)" /></label>
+            </div>
+            <div class="lw-eb-row-2">
+              <label class="lw-eb-field"><span>Save DC or Attack Bonus</span><input type="text" [ngModel]="newTrapSave()" (ngModelChange)="newTrapSave.set($event)" /></label>
+              <label class="lw-eb-field"><span>Damage Formula</span><input type="text" [ngModel]="newTrapDamage()" (ngModelChange)="newTrapDamage.set($event)" /></label>
+            </div>
+            <label class="lw-eb-field"><span>Effect & Resolution Summary</span><textarea rows="3" [ngModel]="newTrapEffect()" (ngModelChange)="newTrapEffect.set($event)"></textarea></label>
+            <lw-button variant="gold" size="sm" (pressed)="addTrap()">+ Add Trap to Encounter</lw-button>
+          </div>
+        </div>
+      }
+
+      @case ('narrative') {
+        <div class="lw-eb-grid-2">
+          <div class="lw-eb-card">
+            <h3>Read-Aloud Boxed Text & Session Notes</h3>
+            <label class="lw-eb-field"><span>Read-Aloud Text (Shared with Table on Trigger)</span><textarea rows="4" [ngModel]="readAloudText()" (ngModelChange)="readAloudText.set($event)"></textarea></label>
+            <label class="lw-eb-field"><span>GM Encounter & Session Notes</span><textarea rows="4" [ngModel]="sessionNotes()" (ngModelChange)="sessionNotes.set($event)"></textarea></label>
+          </div>
+
+          <div class="lw-eb-card">
+            <h3>Encounter Rewards & Loot</h3>
+            <div class="lw-eb-add-inline">
+              <input type="text" placeholder="e.g. 250 gp & Lineage Ledger" [ngModel]="newRewardLabel()" (ngModelChange)="newRewardLabel.set($event)" />
+              <select [ngModel]="newRewardKind()" (ngModelChange)="newRewardKind.set($event)">
+                <option value="Relic / Item">Relic / Item</option><option value="Gold & Coin">Gold & Coin</option><option value="XP">XP</option><option value="Story Grant">Story Grant</option>
+              </select>
+              <lw-button variant="gold" size="sm" (pressed)="addReward()">+ Add</lw-button>
+            </div>
+            <div class="lw-eb-obj-list">
+              @for (rew of rewards(); track rew.id) {
+                <div class="lw-eb-obj-item">
+                  <div><strong>{{ rew.label }}</strong><span> · {{ rew.kind }}</span></div>
+                  <button ngpButton type="button" class="lw-eb-del-btn" (click)="removeReward(rew.id)">Remove</button>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    }
+  </div>
+</section>

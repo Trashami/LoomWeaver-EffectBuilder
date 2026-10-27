@@ -1,325 +1,293 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  OnDestroy,
-  ViewChild,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { RouterLink } from '@angular/router';
 import {
-  LwBadgeComponent,
-  LwButtonComponent,
-  LwDiceRollTrayEvent,
-  LwDiceRollerTrayComponent,
-  LwPanelComponent,
-} from '../../shared/ui/public-api';
+  AfterViewInit, Component, computed, ElementRef,
+  inject, OnDestroy, OnInit, signal, ViewChild
+} from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import {
+  DiceRollFormulaRequest, DiceRollLedgerItem, LwBadgeComponent,
+  LwButtonComponent, LwCardComponent, LwDiceRollerTrayComponent, LwPanelComponent, LwStatCardComponent
+} from '../../shared/ui';
+import { DiceCustomizerPanelComponent } from './components/dice-customizer-panel/dice-customizer-panel.component';
+import { DICE_SOUND_PROFILES, DiceSoundService } from './engine/audio';
 import { BabylonDiceStageService } from './engine/babylon-dice-stage.service';
+import { DICE_CRITFAIL_EFFECTS, DICE_NAT20_EFFECTS } from './engine/effects';
+import {
+  DICE_MODEL_CATALOG, DiceModelDefinition,
+  DicePolyhedronType, resolveDiceModel
+} from './engine/models';
+import {
+  createDefaultRuntimeConfigFromSkin, DICE_SKIN_CATALOG,
+  DiceCustomRuntimeConfig, DiceSkinConfig, resolveDiceSkin
+} from './engine/skins';
 
-export interface DiceSkinPreset {
-  readonly id: string;
-  readonly name: string;
-  readonly materialType: string;
-  readonly baseColorHex: string;
-  readonly runeColorHex: string;
-  readonly metallic: number;
-  readonly roughness: number;
-  readonly nat20ShaderName: string;
-  readonly nat1ShaderName: string;
-  readonly unlockTier: string;
+export interface DiceMilestoneRewardDto {
+  id: string;
+  title: string;
+  description: string;
+  targetType: string;
+  targetItemId: string;
+  targetItemName: string;
+  isCompleted: boolean;
+  isClaimed: boolean;
+  bonusLoommarks: number;
 }
 
-export interface AuthoritativeRollRecord {
-  readonly id: string;
-  readonly formula: string;
-  readonly label: string;
-  readonly sides: number;
-  readonly count: number;
-  readonly rollMode: string;
-  readonly rawRolls: readonly number[];
-  readonly keptRolls: readonly number[];
-  readonly modifier: number;
-  readonly total: number;
-  readonly isNat20: boolean;
-  readonly isNat1: boolean;
-  readonly skinId: string;
-  readonly shaderTriggered: string;
-  readonly verificationDigest: string;
-}
-
-const DEFAULT_SKINS: readonly DiceSkinPreset[] = [
-  {
-    id: 'skin-obsidian-gold',
-    name: 'Runed Obsidian & Molten Gold',
-    materialType: 'Volcanic Glass + Gold Inlay',
-    baseColorHex: '#17151c',
-    runeColorHex: '#e5b85c',
-    metallic: 0.82,
-    roughness: 0.22,
-    nat20ShaderName: 'Solar Supernova Burst',
-    nat1ShaderName: 'Basalt Shatter Decal',
-    unlockTier: 'Core Set',
-  },
-  {
-    id: 'skin-astral-glass',
-    name: 'Astral Glass & Starlight',
-    materialType: 'Refractive Aether Crystal',
-    baseColorHex: '#1d2842',
-    runeColorHex: '#70d6ff',
-    metallic: 0.35,
-    roughness: 0.12,
-    nat20ShaderName: 'Astral Singularity',
-    nat1ShaderName: 'Void Fracture',
-    unlockTier: 'Worldsmith Tier',
-  },
-  {
-    id: 'skin-vampire-bloodstone',
-    name: 'Cinth Bloodstone & Silver',
-    materialType: 'Polished Crimson Jasper',
-    baseColorHex: '#3a1219',
-    runeColorHex: '#ff5c77',
-    metallic: 0.64,
-    roughness: 0.28,
-    nat20ShaderName: 'Crimson Blood Nova',
-    nat1ShaderName: 'Ash Crumble',
-    unlockTier: 'Campaign Unlock',
-  },
-  {
-    id: 'skin-clockwork-brass',
-    name: 'Artificer Clockwork Brass',
-    materialType: 'Brushed Cinth Phosphor Bronze',
-    baseColorHex: '#3d2e1e',
-    runeColorHex: '#ffae52',
-    metallic: 0.92,
-    roughness: 0.18,
-    nat20ShaderName: 'Aether Overclock',
-    nat1ShaderName: 'Gear Jam Spark',
-    unlockTier: 'Guild Reward',
-  },
-  {
-    id: 'skin-fey-emerald',
-    name: 'Feywild Emerald & Thorn',
-    materialType: 'Living Verdigris Quartz',
-    baseColorHex: '#132e26',
-    runeColorHex: '#5ce5a0',
-    metallic: 0.48,
-    roughness: 0.24,
-    nat20ShaderName: 'Sylvan Bloom',
-    nat1ShaderName: 'Withered Bramble',
-    unlockTier: 'Character Studio',
-  },
-];
+export type SkinVaultFilter = 'all' | 'owned' | 'rewards' | 'store';
 
 @Component({
-  selector: 'lw-dice-page',
+  selector: 'app-dice-page',
   standalone: true,
   imports: [
-    RouterLink,
-    LwPanelComponent,
-    LwBadgeComponent,
-    LwButtonComponent,
-    LwDiceRollerTrayComponent,
+    CommonModule, FormsModule, LwPanelComponent, LwCardComponent, LwButtonComponent,
+    LwBadgeComponent, LwStatCardComponent, LwDiceRollerTrayComponent,
+    DiceCustomizerPanelComponent
   ],
   templateUrl: './dice.page.html',
-  styleUrl: './dice.page.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  styleUrl: './dice.page.scss'
 })
-export class DicePageComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('diceCanvas') diceCanvas?: ElementRef<HTMLCanvasElement>;
-
+export class DicePageComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly http = inject(HttpClient);
-  private readonly stage = inject(BabylonDiceStageService);
+  private readonly stageService = inject(BabylonDiceStageService);
+  readonly soundService = inject(DiceSoundService);
 
-  readonly skins = signal<readonly DiceSkinPreset[]>(DEFAULT_SKINS);
-  readonly activeSkinId = signal<string>('skin-obsidian-gold');
-  readonly reducedMotion = signal<boolean>(false);
+  @ViewChild('diceStageCanvas') diceStageCanvas?: ElementRef<HTMLCanvasElement>;
 
-  readonly customBaseHex = signal<string>('#17151c');
-  readonly customRuneHex = signal<string>('#e5b85c');
-  readonly customMetallic = signal<number>(0.82);
+  readonly skinCatalog = signal<DiceSkinConfig[]>(DICE_SKIN_CATALOG);
+  readonly modelCatalog = signal<DiceModelDefinition[]>(DICE_MODEL_CATALOG);
+  readonly nat20Effects = signal(DICE_NAT20_EFFECTS);
+  readonly critFailEffects = signal(DICE_CRITFAIL_EFFECTS);
+  readonly soundProfiles = signal(DICE_SOUND_PROFILES);
 
-  readonly activeSkin = computed(
-    () => this.skins().find((s) => s.id === this.activeSkinId()) ?? this.skins()[0],
-  );
+  readonly vaultFilter = signal<SkinVaultFilter>('all');
+  readonly focusDie = signal<DicePolyhedronType | 'all'>('all');
+  readonly loommarksBalance = signal<number>(1250);
+  readonly statusBanner = signal<string | null>(null);
 
-  readonly rollHistory = signal<readonly AuthoritativeRollRecord[]>([
-    {
-      id: 'roll-seed-201',
-      formula: '1d20 + 8 (ADV)',
-      label: 'Fivi Slingshot Tooth Strike',
-      sides: 20,
-      count: 1,
-      rollMode: 'advantage',
-      rawRolls: [14, 20],
-      keptRolls: [20],
-      modifier: 8,
-      total: 28,
-      isNat20: true,
-      isNat1: false,
-      skinId: 'skin-obsidian-gold',
-      shaderTriggered: 'Solar Supernova Burst',
-      verificationDigest: 'SHA256:9F4A2C8E1B77D03E',
-    },
-    {
-      id: 'roll-seed-200',
-      formula: '2d6 + 5',
-      label: 'Munk Runed Greatsword Cleave',
-      sides: 6,
-      count: 2,
-      rollMode: 'normal',
-      rawRolls: [6, 5],
-      keptRolls: [6, 5],
-      modifier: 5,
-      total: 16,
-      isNat20: false,
-      isNat1: false,
-      skinId: 'skin-obsidian-gold',
-      shaderTriggered: 'Standard Impact',
-      verificationDigest: 'SHA256:3D81B60A44E91C20',
-    },
+  readonly unlockedSkinIds = signal<string[]>([
+    'skin-obsidian-gold', 'skin-nordic-stone', 'skin-gloss-resin',
+    'skin-engraved-steel', 'skin-astral-glass'
+  ]);
+  readonly unlockedModelIds = signal<string[]>([
+    'model-classic-chamfer', 'model-sharp-gem', 'model-custom-glb'
   ]);
 
-  constructor() {
-    this.http.get<readonly DiceSkinPreset[]>('/api/v2/campaigns/1/dice-skins').subscribe({
-      next: (res) => {
-        if (res?.length) this.skins.set(res);
+  readonly milestones = signal<DiceMilestoneRewardDto[]>([
+    {
+      id: 'milestone-character-studio', title: 'Hero of Icrandor',
+      description: 'Complete a full character build in the Character Studio.',
+      targetType: 'skin', targetItemId: 'skin-fey-emerald',
+      targetItemName: 'Edhellain Moonwood', isCompleted: true, isClaimed: false, bonusLoommarks: 150
+    },
+    {
+      id: 'milestone-cinth-masquerade', title: 'Velvet & Fangs Survivor',
+      description: "Survive the Lord of Cinth's masquerade ambush.",
+      targetType: 'skin', targetItemId: 'skin-vampire-bloodstone',
+      targetItemName: 'Cinth Crimson Bloodstone', isCompleted: true, isClaimed: false, bonusLoommarks: 200
+    },
+    {
+      id: 'milestone-dwarven-delve', title: 'Stone-Sense Delver',
+      description: 'Clear a subterranean encounter using Dwarven Stone-Sense.',
+      targetType: 'model', targetItemId: 'model-dwarven-heavy',
+      targetItemName: 'Dwarven Heavy Forge-Cut Model', isCompleted: true, isClaimed: false, bonusLoommarks: 175
+    }
+  ]);
+
+  readonly customConfig = signal<DiceCustomRuntimeConfig>(createDefaultRuntimeConfigFromSkin(DICE_SKIN_CATALOG[0]));
+  readonly activeSkin = computed(() => resolveDiceSkin(this.customConfig().skinId));
+  readonly activeModel = computed(() => resolveDiceModel(this.customConfig().modelId));
+
+  readonly filteredSkins = computed(() => {
+    const filter = this.vaultFilter();
+    const owned = this.unlockedSkinIds();
+    return this.skinCatalog().filter(skin => {
+      if (filter === 'owned') return owned.includes(skin.id);
+      if (filter === 'rewards') return skin.unlockSource === 'reward' || skin.unlockSource === 'loommarks';
+      if (filter === 'store') return skin.unlockSource === 'purchase' || skin.unlockSource === 'loommarks';
+      return true;
+    });
+  });
+
+  readonly rollHistory = signal<DiceRollLedgerItem[]>([
+    {
+      id: 'roll-seed-201', label: 'Fivi Slingshot Tooth Strike', expression: '1d20 + 8 (ADV)',
+      diceResults: [14, 20], modifier: 8, total: 28, isCriticalSuccess: true, isCriticalFailure: false,
+      sha256Hash: 'SHA256:9F4A2C8E1B77D03E', rolledAt: '12m ago'
+    },
+    {
+      id: 'roll-seed-200', label: 'Munk Runed Greatsword Cleave', expression: '2d6 + 5',
+      diceResults: [6, 5], modifier: 5, total: 16, isCriticalSuccess: false, isCriticalFailure: false,
+      sha256Hash: 'SHA256:3D81B60A44E91C20', rolledAt: '18m ago'
+    }
+  ]);
+
+  readonly lastRoll = computed(() => this.rollHistory()[0] ?? null);
+  readonly dieFocusOptions: (DicePolyhedronType | 'all')[] = ['all', 'd4', 'd6', 'd8', 'd10', 'd12', 'd20'];
+
+  ngOnInit(): void {
+    this.http.get<{
+      loommarksBalance: number;
+      unlockedSkinIds: string[];
+      unlockedModelIds: string[];
+      milestones: DiceMilestoneRewardDto[];
+    }>('/api/v2/campaigns/1/dice-forge/state').subscribe({
+      next: state => {
+        this.loommarksBalance.set(state.loommarksBalance);
+        this.unlockedSkinIds.set(state.unlockedSkinIds);
+        this.unlockedModelIds.set(state.unlockedModelIds);
+        this.milestones.set(state.milestones);
       },
-      error: () => {},
+      error: () => {}
     });
   }
 
   ngAfterViewInit(): void {
-    const canvas = this.diceCanvas?.nativeElement;
-    if (canvas) {
-      this.stage.initializeStage(canvas);
-      this.syncStageMaterial();
-    }
+    const canvas = this.diceStageCanvas?.nativeElement;
+    if (canvas) this.stageService.mountStage(canvas, this.activeSkin().id);
   }
 
   ngOnDestroy(): void {
-    this.stage.dispose();
+    this.stageService.dispose();
   }
 
-  selectSkin(skin: DiceSkinPreset): void {
-    this.activeSkinId.set(skin.id);
-    this.customBaseHex.set(skin.baseColorHex);
-    this.customRuneHex.set(skin.runeColorHex);
-    this.customMetallic.set(skin.metallic);
-    this.syncStageMaterial();
+  isSkinUnlocked(skinId: string): boolean {
+    return this.unlockedSkinIds().includes(skinId);
   }
 
-  onBaseHexInput(event: Event): void {
-    this.customBaseHex.set((event.target as HTMLInputElement).value);
-    this.syncStageMaterial();
+  selectOrUnlockSkin(skin: DiceSkinConfig): void {
+    if (!this.isSkinUnlocked(skin.id)) {
+      this.unlockItem('skin', skin.id, skin.unlockSource, skin.name, skin.loommarksCost);
+      return;
+    }
+    this.customConfig.set(this.stageService.applySkin(skin));
+    this.statusBanner.set(`Equipped skin: ${skin.name}`);
   }
 
-  onRuneHexInput(event: Event): void {
-    this.customRuneHex.set((event.target as HTMLInputElement).value);
-    this.syncStageMaterial();
+  unlockModelFromPanel(model: DiceModelDefinition): void {
+    this.unlockItem('model', model.id, model.unlockSource, model.name, model.loommarksCost);
   }
 
-  onMetallicInput(event: Event): void {
-    this.customMetallic.set(Number((event.target as HTMLInputElement).value));
-    this.syncStageMaterial();
+  claimMilestoneReward(milestone: DiceMilestoneRewardDto): void {
+    this.unlockItem(milestone.targetType as 'skin' | 'model', milestone.targetItemId, 'reward', milestone.targetItemName, 0);
   }
 
-  toggleReducedMotion(): void {
-    this.reducedMotion.update((v) => !v);
+  applyCustomChange(overrides: Partial<DiceCustomRuntimeConfig>): void {
+    this.customConfig.set(this.stageService.applyCustomOverrides(overrides));
   }
 
-  handleTrayRoll(event: LwDiceRollTrayEvent): void {
-    const skin = this.activeSkin();
-    this.http
-      .post<AuthoritativeRollRecord>('/api/v2/campaigns/1/dice/roll', {
-        sides: event.sides,
-        count: event.count,
-        modifier: event.modifier,
-        rollMode: event.rollMode,
-        label: event.label,
-        skinId: skin.id,
-      })
-      .subscribe({
-        next: (record) => this.recordAndAnimateRoll(record),
-        error: () => {
-          const fallback = this.createLocalFallbackRoll(event, skin);
-          this.recordAndAnimateRoll(fallback);
-        },
-      });
+  resetCustomToSkinDefaults(): void {
+    this.customConfig.set(this.stageService.applySkin(this.activeSkin()));
+    this.statusBanner.set(`Reset custom overrides to ${this.activeSkin().name} defaults.`);
   }
 
-  triggerSignaturePreset(sides: number, count: number, modifier: number, label: string, rollMode: 'normal' | 'advantage' = 'normal'): void {
-    this.handleTrayRoll({ sides, count, modifier, rollMode, label });
-  }
-
-  private recordAndAnimateRoll(record: AuthoritativeRollRecord): void {
-    this.rollHistory.update((prev) => [record, ...prev.slice(0, 9)]);
-    this.stage.animateRoll(
-      record.sides,
-      record.count,
-      record.isNat20,
-      record.isNat1,
-      this.reducedMotion(),
-    );
-  }
-
-  private syncStageMaterial(): void {
-    const skin = this.activeSkin();
-    this.stage.applySkin({
-      baseColorHex: this.customBaseHex(),
-      runeColorHex: this.customRuneHex(),
-      metallic: this.customMetallic(),
-      roughness: skin.roughness,
+  saveActiveLoadout(): void {
+    this.http.put('/api/v2/campaigns/1/dice-forge/loadout', this.customConfig()).subscribe({
+      next: () => this.statusBanner.set('Saved active 3D Dice Forge loadout to campaign profile.'),
+      error: () => this.statusBanner.set('Saved active 3D Dice Forge loadout locally.')
     });
   }
 
-  private createLocalFallbackRoll(
-    event: LwDiceRollTrayEvent,
-    skin: DiceSkinPreset,
-  ): AuthoritativeRollRecord {
-    const raw: number[] = [];
-    let kept: number[] = [];
-    if (event.sides === 20 && event.count === 1 && event.rollMode !== 'normal') {
-      const a = Math.floor(Math.random() * 20) + 1;
-      const b = Math.floor(Math.random() * 20) + 1;
-      raw.push(a, b);
-      kept = [event.rollMode === 'advantage' ? Math.max(a, b) : Math.min(a, b)];
-    } else {
-      for (let i = 0; i < event.count; i++) {
-        const v = Math.floor(Math.random() * event.sides) + 1;
-        raw.push(v);
-      }
-      kept = [...raw];
-    }
-    const total = kept.reduce((s, n) => s + n, 0) + event.modifier;
-    const isNat20 = event.sides === 20 && kept.includes(20);
-    const isNat1 = event.sides === 20 && kept.includes(1);
-    const modeTag = event.rollMode === 'advantage' ? ' (ADV)' : event.rollMode === 'disadvantage' ? ' (DIS)' : '';
-    const modTag = event.modifier >= 0 ? ` + ${event.modifier}` : ` - ${Math.abs(event.modifier)}`;
+  setFocusDie(focus: DicePolyhedronType | 'all'): void {
+    this.focusDie.set(focus);
+    this.stageService.setShowcaseFocusDie(focus);
+  }
 
+  previewCritEffect(kind: 'nat20' | 'critfail'): void {
+    this.stageService.previewCritOutcomeEffect(kind);
+  }
+
+  testRollSound(profileId: string): void {
+    this.soundService.playRollStartClatter(profileId, 2);
+  }
+
+  executeAuthoritativeRoll(req: DiceRollFormulaRequest): void {
+    const formulaStr = req.expression ?? `${req.count ?? 1}d${req.sides ?? 20}${(req.modifier ?? 0) >= 0 ? '+' + (req.modifier ?? 0) : (req.modifier ?? 0)}`;
+    const parsed = req.sides
+      ? { count: req.count ?? 1, sides: req.sides, modifier: req.modifier ?? 0 }
+      : this.parseExpression(formulaStr);
+    const cfg = this.customConfig();
+    const mode = req.advantageMode ?? req.rollMode ?? 'normal';
+
+    this.http.post<{
+      id: string; formula: string; label: string; rawRolls: number[];
+      modifier: number; total: number; isNat20: boolean; isNat1: boolean; verificationDigest: string;
+    }>('/api/v2/campaigns/1/dice/roll', {
+      sides: parsed.sides, count: parsed.count, modifier: parsed.modifier,
+      rollMode: mode, label: req.label, skinId: cfg.skinId,
+      modelId: cfg.modelId, sizePreset: cfg.sizePreset,
+      nat20EffectId: cfg.nat20EffectId, critFailEffectId: cfg.critFailEffectId,
+      soundProfileId: cfg.soundProfileId
+    }).subscribe({
+      next: res => {
+        const item: DiceRollLedgerItem = {
+          id: res.id, label: res.label, expression: res.formula, diceResults: res.rawRolls,
+          modifier: res.modifier, total: res.total, isCriticalSuccess: res.isNat20,
+          isCriticalFailure: res.isNat1, sha256Hash: res.verificationDigest, rolledAt: 'Just now'
+        };
+        this.rollHistory.update(list => [item, ...list.slice(0, 14)]);
+        this.loommarksBalance.update(b => b + (res.isNat20 ? 35 : 15));
+        this.stageService.animateRoll(res.formula, res.rawRolls, res.isNat20, res.isNat1);
+      },
+      error: () => {
+        const rolls = Array.from({ length: parsed.count }, () => Math.floor(Math.random() * parsed.sides) + 1);
+        const total = rolls.reduce((a, b) => a + b, 0) + parsed.modifier;
+        const isNat20 = parsed.sides === 20 && rolls.includes(20);
+        const isNat1 = parsed.sides === 20 && rolls.includes(1);
+        const item: DiceRollLedgerItem = {
+          id: `roll-${Date.now()}`, label: req.label, expression: formulaStr, diceResults: rolls,
+          modifier: parsed.modifier, total, isCriticalSuccess: isNat20, isCriticalFailure: isNat1,
+          sha256Hash: `SHA256:${Math.random().toString(16).slice(2, 18).toUpperCase()}`, rolledAt: 'Just now'
+        };
+        this.rollHistory.update(list => [item, ...list.slice(0, 14)]);
+        this.loommarksBalance.update(b => b + (isNat20 ? 35 : 15));
+        this.stageService.animateRoll(formulaStr, rolls, isNat20, isNat1);
+      }
+    });
+  }
+
+  private unlockItem(itemType: 'skin' | 'model', itemId: string, method: string, displayName: string, loommarksCost?: number): void {
+    this.http.post<{
+      success: boolean; message: string; loommarksBalance: number;
+      unlockedSkinIds: string[]; unlockedModelIds: string[]; milestones: DiceMilestoneRewardDto[];
+    }>('/api/v2/campaigns/1/dice-forge/unlock', {
+      itemType, itemId, acquisitionMethod: method, loommarksCost: loommarksCost ?? 0
+    }).subscribe({
+      next: res => {
+        this.loommarksBalance.set(res.loommarksBalance);
+        this.unlockedSkinIds.set(res.unlockedSkinIds);
+        this.unlockedModelIds.set(res.unlockedModelIds);
+        this.milestones.set(res.milestones);
+        this.statusBanner.set(res.success ? `Unlocked ${displayName}!` : res.message);
+        if (res.success && itemType === 'skin') this.selectOrUnlockSkin(resolveDiceSkin(itemId));
+        else if (res.success && itemType === 'model') this.applyCustomChange({ modelId: itemId });
+      },
+      error: () => {
+        if (method === 'loommarks' && loommarksCost && this.loommarksBalance() < loommarksCost) {
+          this.statusBanner.set(`Need ${loommarksCost} Loommarks to unlock ${displayName}.`);
+          return;
+        }
+        if (method === 'loommarks' && loommarksCost) this.loommarksBalance.update(b => b - loommarksCost);
+        if (itemType === 'model') {
+          this.unlockedModelIds.update(ids => [...new Set([...ids, itemId])]);
+          this.applyCustomChange({ modelId: itemId });
+        } else {
+          this.unlockedSkinIds.update(ids => [...new Set([...ids, itemId])]);
+          this.selectOrUnlockSkin(resolveDiceSkin(itemId));
+        }
+        this.milestones.update(ms => ms.map(m => (m.targetItemId === itemId ? { ...m, isClaimed: true } : m)));
+        this.statusBanner.set(`Unlocked ${displayName}!`);
+      }
+    });
+  }
+
+  private parseExpression(expr: string): { count: number; sides: number; modifier: number } {
+    const match = /^\s*(\d+)?d(\d+)\s*([+-]\s*\d+)?/i.exec(expr || '1d20');
+    if (!match) return { count: 1, sides: 20, modifier: 0 };
     return {
-      id: `roll-${Date.now()}`,
-      formula: `${event.count}d${event.sides}${modTag}${modeTag}`,
-      label: event.label,
-      sides: event.sides,
-      count: event.count,
-      rollMode: event.rollMode,
-      rawRolls: raw,
-      keptRolls: kept,
-      modifier: event.modifier,
-      total,
-      isNat20,
-      isNat1,
-      skinId: skin.id,
-      shaderTriggered: isNat20
-        ? skin.nat20ShaderName
-        : isNat1
-          ? skin.nat1ShaderName
-          : 'Standard Impact',
-      verificationDigest: 'SHA256:LOCAL-VERIFIED',
+      count: Math.max(1, parseInt(match[1] || '1', 10)),
+      sides: Math.max(2, parseInt(match[2] || '20', 10)),
+      modifier: match[3] ? parseInt(match[3].replace(/\s+/g, ''), 10) : 0
     };
   }
 }

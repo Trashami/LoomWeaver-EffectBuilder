@@ -13,6 +13,60 @@ public sealed record DiceSkinPresetContract(
     string UnlockTier
 );
 
+public sealed record DiceForgeLoadoutContract(
+    string SkinId,
+    string ModelId,
+    string SizePreset,
+    string CoreColorHex,
+    string NumberColorHex,
+    string GlowColorHex,
+    double GlowIntensity,
+    double ReflectionMetallic,
+    double SurfaceRoughness,
+    bool RecessedNumbers,
+    bool VeinPulse,
+    string Nat20EffectId,
+    string CritFailEffectId,
+    string SoundProfileId
+);
+
+public sealed record DiceForgeMilestoneRewardContract(
+    string Id,
+    string Title,
+    string Description,
+    string TargetType,
+    string TargetItemId,
+    string TargetItemName,
+    bool IsCompleted,
+    bool IsClaimed,
+    int BonusLoommarks
+);
+
+public sealed record DiceForgeUserStateContract(
+    int CampaignId,
+    int LoommarksBalance,
+    IReadOnlyList<string> UnlockedSkinIds,
+    IReadOnlyList<string> UnlockedModelIds,
+    IReadOnlyList<DiceForgeMilestoneRewardContract> Milestones,
+    DiceForgeLoadoutContract ActiveLoadout
+);
+
+public sealed record DiceForgeUnlockRequestContract(
+    string ItemType,
+    string ItemId,
+    string AcquisitionMethod,
+    int? LoommarksCost
+);
+
+public sealed record DiceForgeUnlockResponseContract(
+    bool Success,
+    string Message,
+    int LoommarksBalance,
+    IReadOnlyList<string> UnlockedSkinIds,
+    IReadOnlyList<string> UnlockedModelIds,
+    IReadOnlyList<DiceForgeMilestoneRewardContract> Milestones
+);
+
 public sealed record DiceRollRequestContract(
     int Sides,
     int Count,
@@ -21,7 +75,12 @@ public sealed record DiceRollRequestContract(
     string? Label,
     string? SkinId,
     string? ActorName,
-    string? DamageType
+    string? DamageType,
+    string? ModelId = null,
+    string? SizePreset = null,
+    string? Nat20EffectId = null,
+    string? CritFailEffectId = null,
+    string? SoundProfileId = null
 );
 
 public sealed record DiceRollResponseContract(

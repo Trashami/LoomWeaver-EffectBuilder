@@ -3,30 +3,32 @@ import { AdventureGuideService } from '../../../core/services/adventure-guide.se
 import { AuthSessionService } from '../../../core/services/auth-session.service';
 import { LoomWeaverStoreService } from '../../../core/services/loomweaver-store.service';
 import {
-  CREATOR_ANCESTRIES,
-  CREATOR_BACKGROUNDS,
-  CREATOR_CLASSES,
   buildSavingThrows,
   buildSkillsList,
 } from '../models/character-creator-catalog.data';
 import {
   AbilityScoreVm,
   CharacterCreatorDraftVm,
+  CharacterRichNoteVm,
   CharacterSheetTab,
   CharacterSheetVm,
+  CharacterSpellVm,
   CharacterStudioViewMode,
+  EquipmentLoadoutItemVm,
 } from '../models/character-studio.models';
 import {
   DEFAULT_CONNECTIONS,
   buildSeedPartySheets,
   wizardDefaultEquipment,
 } from '../models/character-studio-seed.data';
+import { CharacterCompendiumCatalogService } from './character-compendium-catalog.service';
 
 @Injectable({ providedIn: 'root' })
 export class CharacterStudioService {
   private readonly store = inject(LoomWeaverStoreService);
   private readonly adventureGuide = inject(AdventureGuideService);
   private readonly auth = inject(AuthSessionService);
+  readonly catalog = inject(CharacterCompendiumCatalogService);
 
   readonly activeSystem = signal<'dnd5e' | 'pf2e' | 'vampire_v5'>('dnd5e');
   readonly selectedCharacterKey = signal<string>('char-ciaran');
@@ -37,6 +39,8 @@ export class CharacterStudioService {
   readonly viewMode = signal<CharacterStudioViewMode>('viewer');
   readonly activeSheetTab = signal<CharacterSheetTab>('overview');
   readonly creatorStep = signal<number>(1);
+  readonly isEditingCharacter = signal<boolean>(false);
+  private readonly editingCharacterKey = signal<string | null>(null);
   readonly ancestrySourceFilter = signal<'All' | 'PHB' | 'SRD 5.1' | 'Homebrew'>('All');
   readonly ancestrySearchQuery = signal<string>('');
 
@@ -46,6 +50,7 @@ export class CharacterStudioService {
     alignment: 'Neutral Good',
     quote: '"Knowledge preserves what time would otherwise forget."',
     portraitUrl: '/assets/5e-tools/races/PHB/Elf.webp',
+    level: 1,
     ancestryId: 'elf',
     subraceId: 'high-elf',
     classId: 'wizard',
@@ -54,7 +59,13 @@ export class CharacterStudioService {
     selectedSkills: ['Arcana', 'History', 'Investigation', 'Perception'],
     selectedFeatId: 'Warcaster',
     startingPack: 'Starting Equipment',
-    abilities: { STR: 8, DEX: 16, CON: 14, INT: 17, WIS: 12, CHA: 10 },
+    equippedItemIds: ['db-quarterstaff', 'db-arcane-grimoire', 'db-cloak-protection'],
+    backpackItemIds: ['db-scholar-pack', 'db-healing-potion'],
+    personalityTrait: 'Methodical, curious, and always cross-referencing inscriptions.',
+    ideal: 'Truth should be recorded, not buried beneath politics.',
+    bond: 'An ancient manuscript with missing pages that points to forgotten history.',
+    flaw: 'Will risk danger to read an unsealed rune or inscription.',
+    abilities: { STR: 8, DEX: 14, CON: 14, INT: 15, WIS: 12, CHA: 10 },
   });
 
   readonly userOwnedSheets = computed<readonly CharacterSheetVm[]>(() => {
@@ -112,10 +123,6 @@ export class CharacterStudioService {
       this.openCreatorWizard();
       return;
     }
-    if (requestedMode === 'roster' || requestedMode === 'studio') {
-      this.viewMode.set('roster');
-      return;
-    }
     if (requestedMode === 'viewer' || requestedMode === 'sheet') {
       this.viewMode.set('viewer');
       return;
@@ -126,7 +133,7 @@ export class CharacterStudioService {
       this.viewMode.set('viewer');
     } else {
       if (!focusKey) this.selectedCharacterKey.set('char-dal');
-      this.viewMode.set('roster');
+      this.viewMode.set('viewer');
     }
   }
 
@@ -137,23 +144,48 @@ export class CharacterStudioService {
   }
 
   openCreatorWizard(fromExisting?: CharacterSheetVm): void {
+    const ancestries = this.catalog.ancestries();
+    const classes = this.catalog.classes();
+    const backgrounds = this.catalog.backgrounds();
     if (fromExisting) {
+      this.isEditingCharacter.set(true);
+      this.editingCharacterKey.set(fromExisting.characterKey);
       const scoreOf = (code: AbilityScoreVm['code']) =>
         fromExisting.abilities.find((a) => a.code === code)?.score ?? 12;
+      const matchedAncestry =
+        ancestries.find((a) => fromExisting.ancestryOrClan.toLowerCase().includes(a.name.toLowerCase())) ??
+        ancestries[1];
+      const matchedSubrace =
+        matchedAncestry.subraces.find((sr) => fromExisting.subrace.toLowerCase().includes(sr.name.toLowerCase())) ??
+        matchedAncestry.subraces[0];
+      const matchedClass =
+        classes.find((c) => fromExisting.classOrArchetype.toLowerCase().includes(c.name.toLowerCase())) ??
+        classes[0];
+      const matchedBg =
+        backgrounds.find((b) => fromExisting.backgroundName.toLowerCase().includes(b.name.toLowerCase())) ??
+        backgrounds[0];
+
       this.creatorDraft.set({
         name: fromExisting.name,
         pronouns: fromExisting.pronouns,
         alignment: fromExisting.alignment,
         quote: fromExisting.quote,
         portraitUrl: fromExisting.portraitUrl,
-        ancestryId: CREATOR_ANCESTRIES.find((a) => fromExisting.ancestryOrClan.toLowerCase().includes(a.name.toLowerCase()))?.id ?? 'elf',
-        subraceId: CREATOR_ANCESTRIES.flatMap((a) => a.subraces).find((sr) => fromExisting.subrace.toLowerCase().includes(sr.name.toLowerCase()))?.id ?? 'high-elf',
-        classId: CREATOR_CLASSES.find((c) => fromExisting.classOrArchetype.toLowerCase().includes(c.name.toLowerCase()))?.id ?? 'wizard',
-        subclass: fromExisting.subclass,
-        backgroundId: CREATOR_BACKGROUNDS.find((b) => fromExisting.backgroundName.toLowerCase().includes(b.name.toLowerCase()))?.id ?? 'sage',
+        level: fromExisting.level,
+        ancestryId: matchedAncestry.id,
+        subraceId: matchedSubrace?.id ?? matchedAncestry.subraces[0]?.id ?? 'high-elf',
+        classId: matchedClass.id,
+        subclass: fromExisting.subclass || matchedClass.subclassDefault,
+        backgroundId: matchedBg.id,
         selectedSkills: fromExisting.skills.filter((s) => s.proficient).map((s) => s.label),
         selectedFeatId: fromExisting.featureCards.find((f) => f.category === 'feat')?.title ?? 'Warcaster',
         startingPack: 'Starting Equipment',
+        equippedItemIds: fromExisting.equipment.filter((e) => e.equipped).map((e) => e.id),
+        backpackItemIds: fromExisting.equipment.filter((e) => !e.equipped).map((e) => e.id),
+        personalityTrait: fromExisting.personality.personality,
+        ideal: fromExisting.personality.ideals,
+        bond: fromExisting.personality.bonds,
+        flaw: fromExisting.personality.flaws,
         abilities: {
           STR: scoreOf('STR'),
           DEX: scoreOf('DEX'),
@@ -164,7 +196,14 @@ export class CharacterStudioService {
         },
       });
     } else {
+      this.isEditingCharacter.set(false);
+      this.editingCharacterKey.set(null);
       this.creatorStep.set(1);
+      this.creatorDraft.update((cur) => ({
+        ...cur,
+        level: 1,
+        abilities: { STR: 8, DEX: 14, CON: 14, INT: 15, WIS: 12, CHA: 10 },
+      }));
     }
     this.viewMode.set('creator');
   }
@@ -175,7 +214,7 @@ export class CharacterStudioService {
   }
 
   openStudioRoster(): void {
-    this.viewMode.set('roster');
+    this.viewMode.set('viewer');
   }
 
   updateCreatorDraft(patch: Partial<CharacterCreatorDraftVm>): void {
@@ -183,9 +222,15 @@ export class CharacterStudioService {
   }
 
   updateCreatorAbility(code: AbilityScoreVm['code'], delta: number): void {
+    const isEdit = this.isEditingCharacter();
+    const minScore = isEdit ? 6 : 8;
+    const maxScore = isEdit ? 20 : 18;
     this.creatorDraft.update((cur) => ({
       ...cur,
-      abilities: { ...cur.abilities, [code]: Math.max(6, Math.min(20, (cur.abilities[code] ?? 10) + delta)) },
+      abilities: {
+        ...cur.abilities,
+        [code]: Math.max(minScore, Math.min(maxScore, (cur.abilities[code] ?? 10) + delta)),
+      },
     }));
   }
 
@@ -199,14 +244,19 @@ export class CharacterStudioService {
 
   finalizeWizardCharacter(): CharacterSheetVm {
     const draft = this.creatorDraft();
-    const ancestry = CREATOR_ANCESTRIES.find((a) => a.id === draft.ancestryId) ?? CREATOR_ANCESTRIES[1];
+    const ancestries = this.catalog.ancestries();
+    const classes = this.catalog.classes();
+    const backgrounds = this.catalog.backgrounds();
+    const ancestry = ancestries.find((a) => a.id === draft.ancestryId) ?? ancestries[0];
     const subrace = ancestry.subraces.find((sr) => sr.id === draft.subraceId) ?? ancestry.subraces[0];
-    const cls = CREATOR_CLASSES.find((c) => c.id === draft.classId) ?? CREATOR_CLASSES[0];
-    const bg = CREATOR_BACKGROUNDS.find((b) => b.id === draft.backgroundId) ?? CREATOR_BACKGROUNDS[0];
+    const cls = classes.find((c) => c.id === draft.classId) ?? classes[0];
+    const bg = backgrounds.find((b) => b.id === draft.backgroundId) ?? backgrounds[0];
 
     const cleanName = draft.name.trim() || 'Ciarán Fiachra';
     const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const charKey = `char-${slug}`;
+    const editingKey = this.editingCharacterKey();
+    const existingSheet = editingKey ? this.sheets().find((s) => s.characterKey === editingKey) : undefined;
+    const charKey = existingSheet?.characterKey ?? `char-${slug}`;
     const profile = this.auth.activeProfile();
 
     const abilities: AbilityScoreVm[] = [
@@ -218,11 +268,35 @@ export class CharacterStudioService {
       { code: 'CHA', label: 'Charisma', score: draft.abilities.CHA, modifier: 0 },
     ];
 
+    const dbItems = this.catalog.equipmentDatabase();
+    const existingItems = existingSheet?.equipment ?? [];
+    const allKnownItems = [...existingItems, ...dbItems];
+    const equippedIds = draft.equippedItemIds ?? [];
+    const backpackIds = draft.backpackItemIds ?? [];
+    const resolvedEquipment: EquipmentLoadoutItemVm[] = [];
+    const seenEq = new Set<string>();
+    for (const id of equippedIds) {
+      if (seenEq.has(id)) continue;
+      const found = allKnownItems.find((i) => i.id === id);
+      if (found) {
+        seenEq.add(id);
+        resolvedEquipment.push({ ...found, equipped: true });
+      }
+    }
+    for (const id of backpackIds) {
+      if (seenEq.has(id)) continue;
+      const found = allKnownItems.find((i) => i.id === id);
+      if (found) {
+        seenEq.add(id);
+        resolvedEquipment.push({ ...found, equipped: false });
+      }
+    }
+
     const baseSheet: CharacterSheetVm = {
       compositeKey: `1:Character:${charKey}`,
       characterKey: charKey,
-      ownerAccountId: profile.accountId,
-      ownerUsername: profile.username,
+      ownerAccountId: existingSheet?.ownerAccountId ?? profile.accountId,
+      ownerUsername: existingSheet?.ownerUsername ?? profile.username,
       campaignId: 1,
       name: cleanName,
       roleBadge: 'Player Character',
@@ -236,25 +310,25 @@ export class CharacterStudioService {
       subclass: draft.subclass || cls.subclassDefault,
       backgroundName: bg.name,
       backgroundSummary: bg.summary,
-      tags: ['Party Member', subrace?.name ?? ancestry.name, bg.name, 'Arcane Scholar', 'Cinth', 'Member of the Circle'],
+      tags: ['Party Member', subrace?.name ?? ancestry.name, bg.name, cls.name, 'Cinth'],
       systemCode: this.activeSystem(),
-      level: 5,
-      currentXp: 14250,
-      nextLevelXp: 15000,
-      levelUpEligible: true,
+      level: draft.level ?? existingSheet?.level ?? 5,
+      currentXp: existingSheet?.currentXp ?? 14250,
+      nextLevelXp: existingSheet?.nextLevelXp ?? 15000,
+      levelUpEligible: existingSheet?.levelUpEligible ?? true,
       maxHp: 32,
       currentHp: 32,
       armorClass: 15,
       initiativeBonus: 3,
-      speedFeet: 30,
+      speedFeet: ancestry.speedFeet ?? 30,
       proficiencyBonus: 3,
       primaryAttackBonus: 7,
       actionEconomySummary: '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move',
       abilities,
       savingThrows: buildSavingThrows(abilities, 3, cls.savingThrows),
       skills: buildSkillsList(abilities, 3, draft.selectedSkills),
-      spellGroups: cls.startingSpells,
-      equipment: wizardDefaultEquipment(slug),
+      spellGroups: existingSheet?.spellGroups?.length ? existingSheet.spellGroups : cls.startingSpells,
+      equipment: resolvedEquipment.length ? resolvedEquipment : wizardDefaultEquipment(slug),
       featureCards: [
         ...cls.features,
         ...ancestry.traits.map((t) => ({
@@ -269,27 +343,36 @@ export class CharacterStudioService {
           id: `feat-${slug}-custom`,
           title: draft.selectedFeatId || 'Warcaster',
           category: 'feat',
-          summary: 'Selected during character creation.',
+          summary: 'Selected Feat & Tactical Mastery.',
           icon: 'swords',
           tone: 'gold',
         },
       ],
       features: [...cls.features.map((f) => f.title), ...ancestry.traits.map((t) => t.title), draft.selectedFeatId || 'Warcaster'],
-      personality: bg.personality,
-      connections: DEFAULT_CONNECTIONS,
-      notes: [
+      personality: {
+        personality: draft.personalityTrait || bg.personality.personality,
+        ideals: draft.ideal || bg.personality.ideals,
+        bonds: draft.bond || bg.personality.bonds,
+        flaws: draft.flaw || bg.personality.flaws,
+      },
+      connections: existingSheet?.connections ?? DEFAULT_CONNECTIONS,
+      notes: existingSheet?.notes ?? [
         `Created in Character Studio for ${this.store.activeCampaign().name}.`,
         `Starting Equipment Pack: ${draft.startingPack} · Proficient Skills: ${draft.selectedSkills.join(', ')}.`,
       ],
-      historyEvents: [
+      richNotes: existingSheet?.richNotes ?? [],
+      metEntities: existingSheet?.metEntities ?? this.catalog.metEntities(),
+      campaignHistory: existingSheet?.campaignHistory ?? this.catalog.campaignHistory(),
+      historyEvents: existingSheet?.historyEvents ?? [
         `Created as a ${subrace?.name ?? ancestry.name} ${cls.name} (${draft.subclass || cls.subclassDefault}) with the ${bg.name} background.`,
-        `Joined the active party roster in ${this.store.activeCampaign().currentLocationName}.`,
       ],
     };
 
     const calculated = this.recalculate(baseSheet, this.activeSystem());
     this.sheets.update((prev) => [calculated, ...prev.filter((s) => s.characterKey !== charKey)]);
     this.selectedCharacterKey.set(charKey);
+    this.isEditingCharacter.set(false);
+    this.editingCharacterKey.set(null);
     this.viewMode.set('viewer');
     this.activeSheetTab.set('overview');
     this.registerInCampaignStore(calculated);
@@ -320,6 +403,72 @@ export class CharacterStudioService {
     );
   }
 
+  addEquipmentFromDatabase(item: EquipmentLoadoutItemVm, equipNow: boolean): void {
+    const key = this.selectedCharacterKey();
+    const instanceId = `${item.id}-${Date.now().toString(36).slice(-4)}`;
+    const newItem: EquipmentLoadoutItemVm = { ...item, id: instanceId, equipped: equipNow };
+    this.sheets.update((list) =>
+      list.map((sheet) => {
+        if (sheet.characterKey !== key) return sheet;
+        return this.recalculate({ ...sheet, equipment: [newItem, ...sheet.equipment] }, this.activeSystem());
+      }),
+    );
+  }
+
+  removeEquipmentItem(equipmentId: string): void {
+    const key = this.selectedCharacterKey();
+    this.sheets.update((list) =>
+      list.map((sheet) => {
+        if (sheet.characterKey !== key) return sheet;
+        return this.recalculate(
+          { ...sheet, equipment: sheet.equipment.filter((e) => e.id !== equipmentId) },
+          this.activeSystem(),
+        );
+      }),
+    );
+  }
+
+  toggleSpellPrepared(spellId: string): void {
+    const key = this.selectedCharacterKey();
+    this.sheets.update((list) =>
+      list.map((sheet) => {
+        if (sheet.characterKey !== key) return sheet;
+        const spellGroups = sheet.spellGroups.map((grp) => ({
+          ...grp,
+          spells: grp.spells.map((sp) =>
+            sp.id === spellId ? { ...sp, prepared: grp.isCantrip ? true : !sp.prepared } : sp,
+          ),
+        }));
+        return { ...sheet, spellGroups };
+      }),
+    );
+  }
+
+  addSpellToActiveCharacter(spell: CharacterSpellVm, prepared: boolean): void {
+    const key = this.selectedCharacterKey();
+    const isCantrip = (spell.level ?? 1) === 0;
+    const groupId = isCantrip ? 'cantrips' : `level-${spell.level ?? 1}`;
+    const groupLabel = isCantrip ? 'Cantrips (Always Prepared)' : `Level ${spell.level ?? 1} Spells`;
+    this.sheets.update((list) =>
+      list.map((sheet) => {
+        if (sheet.characterKey !== key) return sheet;
+        const existsGrp = sheet.spellGroups.some((g) => g.groupId === groupId);
+        const spellEntry: CharacterSpellVm = { ...spell, prepared: isCantrip ? true : prepared };
+        const spellGroups = existsGrp
+          ? sheet.spellGroups.map((g) =>
+              g.groupId === groupId && !g.spells.some((s) => s.name === spell.name)
+                ? { ...g, spells: [...g.spells, spellEntry] }
+                : g,
+            )
+          : [
+              ...sheet.spellGroups,
+              { groupId, label: groupLabel, slotsRemaining: 2, slotsMax: 2, isCantrip, spells: [spellEntry] },
+            ];
+        return { ...sheet, spellGroups };
+      }),
+    );
+  }
+
   unlockEquipment(equipmentId: string): void {
     const key = this.selectedCharacterKey();
     this.sheets.update((list) =>
@@ -340,22 +489,10 @@ export class CharacterStudioService {
   }
 
   cyclePortrait(): void {
-    const portraits = [
-      '/assets/5e-tools/races/PHB/Elf.webp',
-      '/assets/5e-tools/races/PHB/Human.webp',
-      '/assets/5e-tools/races/PHB/Dwarf.webp',
-      '/assets/5e-tools/races/PHB/Halfling.webp',
-      '/assets/5e-tools/races/PHB/Dragonborn.webp',
-      '/assets/5e-tools/races/PHB/Tiefling.webp',
-      '/assets/previews-png/obj-654ef947728b71fc.png',
-    ];
+    const portraits = ['/assets/5e-tools/races/PHB/Elf.webp', '/assets/5e-tools/races/PHB/Human.webp'];
     const key = this.selectedCharacterKey();
     this.sheets.update((list) =>
-      list.map((sheet) => {
-        if (sheet.characterKey !== key) return sheet;
-        const idx = portraits.indexOf(sheet.portraitUrl);
-        return { ...sheet, portraitUrl: portraits[(idx + 1) % portraits.length] };
-      }),
+      list.map((sheet) => (sheet.characterKey === key ? { ...sheet, portraitUrl: portraits[0] } : sheet)),
     );
   }
 
@@ -387,6 +524,22 @@ export class CharacterStudioService {
     if (!clean) return;
     const key = this.selectedCharacterKey();
     this.sheets.update((list) => list.map((s) => (s.characterKey === key ? { ...s, notes: [clean, ...s.notes] } : s)));
+  }
+
+  addRichCharacterNote(note: CharacterRichNoteVm): void {
+    const key = this.selectedCharacterKey();
+    this.sheets.update((list) =>
+      list.map((s) =>
+        s.characterKey === key
+          ? {
+              ...s,
+              richNotes: [note, ...(s.richNotes ?? [])],
+              notes: [`[${note.visibility.toUpperCase()}] ${note.title}: ${note.contentText}`, ...s.notes],
+            }
+          : s,
+      ),
+    );
+    this.catalog.syncNoteToLoom(this.store.activeCampaignId(), note);
   }
 
   createCharacter(name: string, ancestry: string, archetype: string): void {
@@ -446,12 +599,7 @@ export class CharacterStudioService {
     const maxHp = isWizard ? (4 + conMod) * sheet.level + 2 : (7 + conMod) * sheet.level + 12;
     const primaryStatMod = isWizard ? intMod : Math.max(strMod, dexMod);
     const primaryAttackBonus = primaryStatMod + prof + eqAtk;
-    const economy =
-      systemCode === 'pf2e'
-        ? '3 Actions · 1 Reaction · Focus Pool (2)'
-        : systemCode === 'vampire_v5'
-          ? '1 Turn Action · Rouse Check · Willpower Pool'
-          : '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move';
+    const economy = '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move';
 
     const proficientSaves = sheet.savingThrows.filter((s) => s.proficient).map((s) => s.code);
     const savingThrows = buildSavingThrows(abilities, prof, proficientSaves.length ? proficientSaves : ['INT', 'WIS']);
@@ -468,9 +616,11 @@ export class CharacterStudioService {
       armorClass,
       maxHp,
       currentHp: maxHp,
-      initiativeBonus: dexMod + (systemCode === 'pf2e' ? prof : 0),
+      initiativeBonus: dexMod,
       primaryAttackBonus,
       actionEconomySummary: economy,
+      metEntities: sheet.metEntities ?? this.catalog.metEntities(),
+      campaignHistory: sheet.campaignHistory ?? this.catalog.campaignHistory(),
       levelUpEligible: sheet.currentXp >= sheet.nextLevelXp || sheet.levelUpEligible,
     };
   }

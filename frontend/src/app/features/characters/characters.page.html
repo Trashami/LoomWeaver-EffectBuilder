@@ -1,288 +1,46 @@
 <div class="lw-page">
-  @switch (studio.viewMode()) {
-    @case ('creator') {
-      <lw-character-creator-wizard
-        [campaignName]="store.activeCampaign().name"
-        [draft]="studio.creatorDraft()"
-        [(activeStep)]="studio.creatorStep"
-        [(sourceFilter)]="studio.ancestrySourceFilter"
-        [(searchQuery)]="studio.ancestrySearchQuery"
-        (draftPatched)="studio.updateCreatorDraft($event)"
-        (abilityAdjusted)="studio.updateCreatorAbility($event.code, $event.delta)"
-        (skillToggled)="studio.toggleCreatorSkill($event)"
-        (completed)="studio.finalizeWizardCharacter()"
-        (closed)="studio.hasUserCharacters() ? studio.openSheetViewer() : studio.openStudioRoster()"
-      />
-    }
-
-    @case ('viewer') {
-      <lw-character-sheet-view
-        [sheet]="studio.activeSheet()"
-        [partyRoster]="studio.sheets()"
-        [(activeTab)]="studio.activeSheetTab"
-        (characterSelected)="studio.selectCharacter($event, true)"
-        (createCharacterRequested)="studio.openCreatorWizard()"
-        (editCharacterRequested)="studio.openCreatorWizard($event)"
-        (studioRosterRequested)="studio.openStudioRoster()"
-        (levelUpRequested)="studio.executeLevelUp($event.featureName, $event.abilityCode)"
-        (portraitChangeRequested)="studio.cyclePortrait()"
-        (portraitSelected)="studio.setActiveCharacterPortrait($event)"
-        (abilityAdjusted)="studio.adjustAbility($event.code, $event.delta)"
-        (equipmentToggled)="studio.toggleEquipment($event)"
-        (connectionSelected)="onConnectionClicked($event)"
-        (noteAdded)="studio.addCharacterNote($event)"
-      />
-    }
-
-    @default {
-      <lw-panel
-        eyebrow="Module 1 · Server-Side Character & Rules Engine"
-        title="Character Studio · Creation, Equipment & Progression"
-        subtitle="Pluggable rule adapters calculate HP, AC, Initiative, Proficiency, and Level-Up thresholds without hardcoding D&D 5e into the core."
-        icon="users"
-        [elevated]="true"
-      >
-        <div panelActions class="lw-panel-action-row">
-          <lw-button
-            variant="emerald"
-            size="sm"
-            icon="plus"
-            label="Create New Character"
-            (pressed)="studio.openCreatorWizard()"
-          />
-          <lw-button
-            variant="gold"
-            size="sm"
-            icon="book-open"
-            label="Open Full Character Sheet"
-            (pressed)="studio.openSheetViewer()"
-          />
-          <a class="lw-action-link" routerLink="/arcane-screen">Sync Party to Arcane Screen</a>
-          <a class="lw-action-link" routerLink="/statistics">View Combat Telemetry</a>
-        </div>
-
-        <lw-rules-option-selector
-          title="Select Pluggable Game System Adapter"
-          [options]="ruleSystemOptions"
-          [selectedId]="studio.activeSystem()"
-          variant="cards"
-          (selectionChanged)="onSystemSelected($event)"
-        />
-      </lw-panel>
-
-      <div class="lw-studio-grid">
-        <lw-panel
-          eyebrow="Party Roster & Creator"
-          title="Active Heroes ({{ studio.sheets().length }})"
-          subtitle="Select a hero to edit ability scores, equipment, and level-up progression."
-          icon="shield"
-        >
-          <div class="lw-roster-list">
-            @for (hero of studio.sheets(); track hero.characterKey) {
-              <button
-                type="button"
-                class="lw-roster-item"
-                [class.lw-roster-item--active]="
-                  studio.activeSheet().characterKey === hero.characterKey
-                "
-                (click)="studio.selectCharacter(hero.characterKey)"
-                (dblclick)="studio.selectCharacter(hero.characterKey, true)"
-              >
-                <div class="lw-roster-item__top">
-                  <strong>{{ hero.name }}</strong>
-                  <lw-badge [label]="'Lv.' + hero.level" tone="gold" />
-                </div>
-                <span>{{ hero.subrace }} · {{ hero.classOrArchetype }}</span>
-              </button>
-            }
-          </div>
-
-          <div class="lw-creator-box">
-            <h4>Create New Character</h4>
-            <lw-button
-              variant="emerald"
-              size="sm"
-              icon="plus"
-              [fullWidth]="true"
-              label="Launch 8-Step Character Creator"
-              (pressed)="studio.openCreatorWizard()"
-            />
-            <input
-              type="text"
-              class="lw-input"
-              [ngModel]="newCharName()"
-              (ngModelChange)="newCharName.set($event)"
-              placeholder="Quick Hero Name (e.g., Captain Kutler)"
-            />
-            <input
-              type="text"
-              class="lw-input"
-              [ngModel]="newCharAncestry()"
-              (ngModelChange)="newCharAncestry.set($event)"
-              placeholder="Ancestry / Lineage / Clan"
-            />
-            <input
-              type="text"
-              class="lw-input"
-              [ngModel]="newCharArchetype()"
-              (ngModelChange)="newCharArchetype.set($event)"
-              placeholder="Class / Archetype"
-            />
-            <lw-button
-              variant="gold"
-              size="sm"
-              icon="plus"
-              label="Quick Create & View Sheet"
-              (pressed)="createNewHero()"
-            />
-          </div>
-        </lw-panel>
-
-        @if (studio.activeSheet(); as sheet) {
-          <lw-panel
-            eyebrow="Interactive Server-Calculated Sheet"
-            [title]="
-              sheet.name + ' · Level ' + sheet.level + ' (' + sheet.systemCode.toUpperCase() + ')'
-            "
-            [subtitle]="
-              sheet.subrace + ' · ' + sheet.classOrArchetype + ' · ' + sheet.actionEconomySummary
-            "
-          >
-            <div panelActions class="lw-panel-action-row">
-              <lw-button
-                variant="emerald"
-                size="sm"
-                icon="eye"
-                label="Open Full Character View"
-                (pressed)="studio.openSheetViewer(sheet.characterKey)"
-              />
-              <lw-button
-                variant="ghost"
-                size="sm"
-                icon="network"
-                label="Inspect Neo4j Node"
-                (pressed)="store.inspectEntity(sheet.compositeKey)"
-              />
-            </div>
-
-            <div class="lw-kpi-strip">
-              <div class="lw-kpi">
-                <span>Hit Points</span>
-                <strong>{{ sheet.currentHp }} / {{ sheet.maxHp }}</strong>
-              </div>
-              <div class="lw-kpi">
-                <span>Armor Class</span>
-                <strong>{{ sheet.armorClass }}</strong>
-              </div>
-              <div class="lw-kpi">
-                <span>Attack Bonus</span>
-                <strong>+{{ sheet.primaryAttackBonus }}</strong>
-              </div>
-              <div class="lw-kpi">
-                <span>Initiative</span>
-                <strong>+{{ sheet.initiativeBonus }}</strong>
-              </div>
-              <div class="lw-kpi">
-                <span>Proficiency</span>
-                <strong>+{{ sheet.proficiencyBonus }}</strong>
-              </div>
-              <div class="lw-kpi">
-                <span>XP Progress</span>
-                <strong>{{ sheet.currentXp }} / {{ sheet.nextLevelXp }}</strong>
-              </div>
-            </div>
-
-            <div class="lw-ability-grid">
-              @for (ab of sheet.abilities; track ab.code) {
-                <div class="lw-ability-card">
-                  <span class="lw-ability-card__code">{{ ab.code }}</span>
-                  <strong class="lw-ability-card__score">{{ ab.score }}</strong>
-                  <span class="lw-ability-card__mod">
-                    {{ ab.modifier >= 0 ? '+' + ab.modifier : ab.modifier }}
-                  </span>
-                  <div class="lw-ability-card__btns">
-                    <button type="button" (click)="studio.adjustAbility(ab.code, -1)">-</button>
-                    <button type="button" (click)="studio.adjustAbility(ab.code, 1)">+</button>
-                  </div>
-                </div>
-              }
-            </div>
-
-            <div class="lw-section-block">
-              <lw-asset-picker
-                title="Equipment & Relic Loadout (Toggling Recalculates AC & Attack)"
-                actionLabel="Equip"
-                [items]="equipmentPickerItems()"
-                (itemPicked)="studio.toggleEquipment($event.id)"
-                (unlockRequested)="studio.unlockEquipment($event.id)"
-              />
-            </div>
-
-            <div class="lw-section-block">
-              <div class="lw-levelup-header">
-                <div>
-                  <h4>Level-Up & Advancement Engine</h4>
-                  <span>
-                    Choose a milestone feature and promote {{ sheet.name }} to Level
-                    {{ sheet.level + 1 }}.
-                  </span>
-                </div>
-                <lw-button
-                  variant="gold"
-                  size="sm"
-                  [label]="'Promote to Level ' + (sheet.level + 1)"
-                  (pressed)="studio.executeLevelUp(selectedPerk(), 'DEX')"
-                />
-              </div>
-
-              <lw-rules-option-selector
-                [options]="levelUpPerkOptions"
-                [selectedId]="selectedPerk()"
-                variant="cards"
-                (selectionChanged)="selectedPerk.set($event)"
-              />
-
-              <div class="lw-feature-tags">
-                @for (feat of sheet.features; track feat) {
-                  <lw-badge [label]="feat" tone="emerald" />
-                }
-              </div>
-            </div>
-          </lw-panel>
-        }
-      </div>
-
-      <lw-panel
-        eyebrow="Shared lw-compendium-importer Primitive"
-        title="5e SRD & Icrandor Canon Compendium Importer"
-        [subtitle]="compendiumStatus()"
-        icon="BookOpen"
-      >
-        <lw-compendium-importer
-          [entries]="compendiumEntries()"
-          [targetLabel]="studio.activeSheet().name"
-          (entryImported)="importCompendiumEntry($event)"
-        />
-      </lw-panel>
-
-      <lw-panel
-        eyebrow="Hexagonal Capability Signatures"
-        title="Party Radar Profiles"
-        subtitle="Rendered via the shared lw-stat-radar component."
-        icon="bar-chart"
-      >
-        <div class="lw-radar-grid">
-          @for (stat of store.telemetry(); track stat.characterKey) {
-            <div class="lw-radar-card">
-              <lw-stat-radar
-                [title]="stat.characterName"
-                [subtitle]="stat.classSummary"
-                [axes]="stat.radarAxes"
-              />
-            </div>
-          }
-        </div>
-      </lw-panel>
-    }
+  @if (studio.viewMode() === 'creator') {
+    <lw-character-creator-wizard
+      [campaignName]="store.activeCampaign().name"
+      [isEditMode]="studio.isEditingCharacter()"
+      [draft]="studio.creatorDraft()"
+      [ancestryOptions]="studio.catalog.ancestries()"
+      [classOptions]="studio.catalog.classes()"
+      [backgroundOptions]="studio.catalog.backgrounds()"
+      [featOptions]="studio.catalog.feats()"
+      [equipmentDatabase]="studio.catalog.equipmentDatabase()"
+      [(activeStep)]="studio.creatorStep"
+      [(sourceFilter)]="studio.ancestrySourceFilter"
+      [(searchQuery)]="studio.ancestrySearchQuery"
+      (draftPatched)="studio.updateCreatorDraft($event)"
+      (abilityAdjusted)="studio.updateCreatorAbility($event.code, $event.delta)"
+      (skillToggled)="studio.toggleCreatorSkill($event)"
+      (completed)="studio.finalizeWizardCharacter()"
+      (closed)="studio.openSheetViewer()"
+    />
+  } @else {
+    <lw-character-sheet-view
+      [sheet]="studio.activeSheet()"
+      [partyRoster]="studio.sheets()"
+      [equipmentDatabase]="studio.catalog.equipmentDatabase()"
+      [spellDatabase]="studio.catalog.spellDatabase()"
+      [mentionableEntities]="studio.catalog.mentionableEntities()"
+      [(activeTab)]="studio.activeSheetTab"
+      (characterSelected)="studio.selectCharacter($event, true)"
+      (createCharacterRequested)="studio.openCreatorWizard()"
+      (editCharacterRequested)="studio.openCreatorWizard($event)"
+      (levelUpRequested)="studio.executeLevelUp($event.featureName, $event.abilityCode)"
+      (portraitChangeRequested)="studio.cyclePortrait()"
+      (portraitSelected)="studio.setActiveCharacterPortrait($event)"
+      (abilityAdjusted)="studio.adjustAbility($event.code, $event.delta)"
+      (equipmentToggled)="studio.toggleEquipment($event)"
+      (equipmentAdded)="studio.addEquipmentFromDatabase($event.item, $event.equipNow)"
+      (equipmentRemoved)="studio.removeEquipmentItem($event)"
+      (spellPreparedToggled)="studio.toggleSpellPrepared($event)"
+      (spellAdded)="studio.addSpellToActiveCharacter($event.spell, $event.prepared)"
+      (connectionSelected)="onConnectionClicked($event)"
+      (noteAdded)="studio.addCharacterNote($event)"
+      (richNoteAdded)="studio.addRichCharacterNote($event)"
+    />
   }
 </div>

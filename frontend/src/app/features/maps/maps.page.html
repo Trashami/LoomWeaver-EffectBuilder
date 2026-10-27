@@ -140,11 +140,18 @@
             }
           </div>
 
-          @if (pngPipelineBanner()) {
-            <div class="lw-maps-studio__toast-banner">
-              <span>{{ pngPipelineBanner() }}</span>
-            </div>
-          }
+          <lw-toast-notification
+            [message]="pngPipelineBanner()"
+            title="LoomMaps Studio"
+            variant="emerald"
+            position="bottom-right"
+            [durationMs]="3200"
+            [autoHide]="true"
+            [showProgress]="true"
+            [dismissible]="true"
+            maxWidth="440px"
+            (dismissed)="pngPipelineBanner.set('')"
+          />
 
           <div class="lw-maps-studio__compass" aria-label="Scene Compass">
             <span class="lw-maps-studio__compass-dir lw-maps-studio__compass-dir--n">N</span>
@@ -166,7 +173,7 @@
           (viewChange)="onCameraViewChange($event)"
           (themeChange)="onThemeChange($event)"
           (qualityChange)="onQualityChange($event)"
-          (gridSizeChange)="gridSizeLabel.set($event)"
+          (gridSizeChange)="onGridModeChange($event)"
           (snapToggle)="snapEnabled.set(!snapEnabled()); stage.setSnapToGrid(snapEnabled())"
           (playerSafeToggle)="onTogglePlayerSafeView()"
         />

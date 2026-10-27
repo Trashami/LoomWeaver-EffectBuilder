@@ -10,9 +10,15 @@ import {
 import { FormsModule } from '@angular/forms';
 import { NgpButton } from 'ng-primitives/button';
 import {
+  ALL_DND5E_SKILLS,
   CREATOR_ANCESTRIES,
   CREATOR_BACKGROUNDS,
   CREATOR_CLASSES,
+  CREATOR_EQUIPMENT_DATABASE,
+  CREATOR_FEATS,
+  calculateLevelUpAsiPoints,
+  calculatePointBuySpent,
+  getPointBuyCostForScore,
 } from '../../../features/characters/models/character-creator-catalog.data';
 import {
   AbilityScoreVm,
@@ -20,7 +26,9 @@ import {
   CreatorAncestryOptionVm,
   CreatorBackgroundOptionVm,
   CreatorClassOptionVm,
+  CreatorFeatOptionVm,
   CreatorSubraceOptionVm,
+  EquipmentLoadoutItemVm,
 } from '../../../features/characters/models/character-studio.models';
 import { LwButtonComponent } from '../button/button.component';
 import { LwCharacterPortraitPickerComponent } from '../character-portrait-picker/character-portrait-picker.component';
@@ -48,7 +56,14 @@ export interface LwCreatorWizardStepVm {
 })
 export class LwCharacterCreatorWizardComponent {
   readonly campaignName = input<string>('The Ashen Vale');
+  readonly isEditMode = input<boolean>(false);
   readonly draft = input.required<CharacterCreatorDraftVm>();
+  readonly ancestryOptions = input<readonly CreatorAncestryOptionVm[]>(CREATOR_ANCESTRIES);
+  readonly classOptions = input<readonly CreatorClassOptionVm[]>(CREATOR_CLASSES);
+  readonly backgroundOptions = input<readonly CreatorBackgroundOptionVm[]>(CREATOR_BACKGROUNDS);
+  readonly featOptions = input<readonly CreatorFeatOptionVm[]>(CREATOR_FEATS);
+  readonly equipmentDatabase = input<readonly EquipmentLoadoutItemVm[]>(CREATOR_EQUIPMENT_DATABASE);
+
   readonly activeStep = model<number>(1);
   readonly sourceFilter = model<'All' | 'PHB' | 'SRD 5.1' | 'Homebrew'>('All');
   readonly searchQuery = model<string>('');
@@ -60,6 +75,12 @@ export class LwCharacterCreatorWizardComponent {
   readonly closed = output<void>();
 
   readonly editingIdentity = signal<boolean>(false);
+  readonly classSearchQuery = signal<string>('');
+  readonly backgroundSearchQuery = signal<string>('');
+  readonly backgroundFilterMode = signal<'all' | 'recommended'>('all');
+  readonly featSearchQuery = signal<string>('');
+  readonly equipmentSearchQuery = signal<string>('');
+  readonly equipmentCategoryFilter = signal<'All' | 'Weapon' | 'Armor' | 'Focus' | 'Gear'>('All');
 
   readonly steps: readonly LwCreatorWizardStepVm[] = [
     { stepNumber: 1, id: 'ancestry', label: 'Ancestry' },
@@ -79,54 +100,21 @@ export class LwCharacterCreatorWizardComponent {
     'Homebrew',
   ];
 
-  readonly allSkills: readonly string[] = [
-    'Acrobatics',
-    'Arcana',
-    'Athletics',
-    'Deception',
-    'History',
-    'Insight',
-    'Investigation',
-    'Medicine',
-    'Nature',
-    'Perception',
-    'Persuasion',
-    'Sleight of Hand',
-    'Stealth',
-    'Survival',
-  ];
-
-  readonly featChoices: readonly { id: string; title: string; summary: string }[] = [
-    {
-      id: 'Warcaster',
-      title: 'Warcaster',
-      summary: 'Advantage on Concentration saves and somatic casting with hands full.',
-    },
-    {
-      id: 'Anelith Resonance Mastery',
-      title: 'Anelith Resonance Mastery',
-      summary: '+1 Intelligence or Wisdom and resistance to ancient runic ward feedback.',
-    },
-    {
-      id: 'Cinth Artificer Overclock',
-      title: 'Cinth Artificer Overclock',
-      summary: 'Integrate clockwork plating for +1 AC and a protective reaction.',
-    },
-    {
-      id: 'Alert',
-      title: 'Alert',
-      summary: '+5 bonus to Initiative and cannot be surprised while conscious.',
-    },
-  ];
+  readonly allSkillsDef = ALL_DND5E_SKILLS;
 
   readonly filteredAncestries = computed<readonly CreatorAncestryOptionVm[]>(() => {
     const src = this.sourceFilter();
     const q = this.searchQuery().trim().toLowerCase();
-    return CREATOR_ANCESTRIES.filter((a) => {
+    return this.ancestryOptions().filter((a) => {
       if (src !== 'All' && a.source !== src && !a.subraces.some((sr) => sr.source === src)) {
         return false;
       }
-      if (q && !a.name.toLowerCase().includes(q) && !a.tagline.toLowerCase().includes(q)) {
+      if (
+        q &&
+        !a.name.toLowerCase().includes(q) &&
+        !a.tagline.toLowerCase().includes(q) &&
+        !a.subraces.some((sr) => sr.name.toLowerCase().includes(q))
+      ) {
         return false;
       }
       return true;
@@ -135,7 +123,9 @@ export class LwCharacterCreatorWizardComponent {
 
   readonly selectedAncestry = computed<CreatorAncestryOptionVm>(
     () =>
-      CREATOR_ANCESTRIES.find((a) => a.id === this.draft().ancestryId) ?? CREATOR_ANCESTRIES[1],
+      this.ancestryOptions().find((a) => a.id === this.draft().ancestryId) ??
+      this.ancestryOptions()[0] ??
+      CREATOR_ANCESTRIES[0],
   );
 
   readonly selectedSubrace = computed<CreatorSubraceOptionVm>(
@@ -144,19 +134,111 @@ export class LwCharacterCreatorWizardComponent {
       this.selectedAncestry().subraces[0],
   );
 
-  readonly classes = CREATOR_CLASSES;
+  readonly filteredClasses = computed<readonly CreatorClassOptionVm[]>(() => {
+    const q = this.classSearchQuery().trim().toLowerCase();
+    return this.classOptions().filter(
+      (c) =>
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.tagline.toLowerCase().includes(q) ||
+        (c.subclasses ?? []).some((sc) => sc.toLowerCase().includes(q)),
+    );
+  });
 
   readonly selectedClass = computed<CreatorClassOptionVm>(
-    () => CREATOR_CLASSES.find((c) => c.id === this.draft().classId) ?? CREATOR_CLASSES[0],
+    () =>
+      this.classOptions().find((c) => c.id === this.draft().classId) ??
+      this.classOptions()[0] ??
+      CREATOR_CLASSES[0],
   );
 
-  readonly backgrounds = CREATOR_BACKGROUNDS;
+  readonly filteredBackgrounds = computed<readonly CreatorBackgroundOptionVm[]>(() => {
+    const q = this.backgroundSearchQuery().trim().toLowerCase();
+    const mode = this.backgroundFilterMode();
+    const clsId = this.selectedClass().id.toLowerCase();
+    const ancId = this.selectedAncestry().id.toLowerCase();
+    return this.backgroundOptions().filter((b) => {
+      if (
+        q &&
+        !b.name.toLowerCase().includes(q) &&
+        !b.tagline.toLowerCase().includes(q) &&
+        !b.skillProficiencies.some((sk) => sk.toLowerCase().includes(q))
+      ) {
+        return false;
+      }
+      if (mode === 'recommended') {
+        return this.isBackgroundRecommended(b, clsId, ancId);
+      }
+      return true;
+    });
+  });
 
   readonly selectedBackground = computed<CreatorBackgroundOptionVm>(
     () =>
-      CREATOR_BACKGROUNDS.find((b) => b.id === this.draft().backgroundId) ??
+      this.backgroundOptions().find((b) => b.id === this.draft().backgroundId) ??
+      this.backgroundOptions()[0] ??
       CREATOR_BACKGROUNDS[0],
   );
+
+  readonly filteredFeats = computed<readonly CreatorFeatOptionVm[]>(() => {
+    const q = this.featSearchQuery().trim().toLowerCase();
+    return this.featOptions().filter(
+      (f) =>
+        !q ||
+        f.name.toLowerCase().includes(q) ||
+        f.category.toLowerCase().includes(q) ||
+        f.summary.toLowerCase().includes(q),
+    );
+  });
+
+  readonly selectedFeat = computed<CreatorFeatOptionVm>(
+    () =>
+      this.featOptions().find((f) => f.id === this.draft().selectedFeatId || f.name === this.draft().selectedFeatId) ??
+      this.featOptions()[0] ??
+      CREATOR_FEATS[0],
+  );
+
+  readonly filteredDatabaseItems = computed<readonly EquipmentLoadoutItemVm[]>(() => {
+    const q = this.equipmentSearchQuery().trim().toLowerCase();
+    const cat = this.equipmentCategoryFilter();
+    return this.equipmentDatabase().filter((item) => {
+      if (cat === 'Weapon' && item.slot !== 'Main Hand' && item.slot !== 'Off Hand') return false;
+      if (cat === 'Armor' && item.slot !== 'Armor') return false;
+      if (cat === 'Focus' && item.slot !== 'Focus') return false;
+      if (cat === 'Gear' && item.slot !== 'Gear') return false;
+      if (
+        q &&
+        !item.name.toLowerCase().includes(q) &&
+        !item.summary.toLowerCase().includes(q) &&
+        !item.bonusLabel.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  });
+
+  readonly equippedDraftItems = computed<readonly EquipmentLoadoutItemVm[]>(() => {
+    const ids = this.draft().equippedItemIds ?? [];
+    const db = this.equipmentDatabase();
+    return ids.map((id) => db.find((i) => i.id === id)).filter((i): i is EquipmentLoadoutItemVm => !!i);
+  });
+
+  readonly backpackDraftItems = computed<readonly EquipmentLoadoutItemVm[]>(() => {
+    const ids = this.draft().backpackItemIds ?? [];
+    const db = this.equipmentDatabase();
+    return ids.map((id) => db.find((i) => i.id === id)).filter((i): i is EquipmentLoadoutItemVm => !!i);
+  });
+
+  readonly characterLevel = computed<number>(() => Math.max(1, this.draft().level ?? 1));
+  readonly proficiencyBonus = computed<number>(() => 2 + Math.floor((this.characterLevel() - 1) / 4));
+  readonly basePointBuyBudget = 27;
+  readonly levelUpAsiPoints = computed<number>(() =>
+    calculateLevelUpAsiPoints(this.characterLevel(), this.selectedClass().id),
+  );
+  readonly totalPointBudget = computed<number>(() => this.basePointBuyBudget + this.levelUpAsiPoints());
+  readonly pointsUsed = computed<number>(() => calculatePointBuySpent(this.draft().abilities));
+  readonly pointsRemaining = computed<number>(() => this.totalPointBudget() - this.pointsUsed());
 
   readonly summaryAbilities = computed<readonly AbilityScoreVm[]>(() => {
     const ab = this.draft().abilities;
@@ -177,19 +259,47 @@ export class LwCharacterCreatorWizardComponent {
 
   readonly computedAc = computed<number>(() => {
     const dexMod = this.summaryAbilities().find((a) => a.code === 'DEX')?.modifier ?? 0;
-    return 10 + dexMod;
+    const eqBonus = this.equippedDraftItems().reduce((sum, item) => sum + item.acBonus, 0);
+    return 10 + Math.min(3, dexMod) + eqBonus;
   });
 
   readonly computedHp = computed<number>(() => {
     const conMod = this.summaryAbilities().find((a) => a.code === 'CON')?.modifier ?? 0;
-    return Math.max(6, this.selectedClass().hitDie + conMod);
+    const lvl = this.characterLevel();
+    const hitDie = this.selectedClass().hitDie;
+    const avgPerLevel = Math.floor(hitDie / 2) + 1;
+    return Math.max(6, hitDie + conMod + (lvl - 1) * Math.max(2, avgPerLevel + conMod));
   });
 
   readonly nextButtonLabel = computed<string>(() => {
     const step = this.activeStep();
     const nextStep = this.steps.find((s) => s.stepNumber === step + 1);
-    return nextStep ? `Next: ${nextStep.label}` : 'Complete & View Character';
+    if (nextStep) return `Next: ${nextStep.label}`;
+    return this.isEditMode() ? 'Save Character Changes' : 'Complete & View Character';
   });
+
+  isBackgroundRecommended(bg: CreatorBackgroundOptionVm, clsId?: string, ancId?: string): boolean {
+    const c = (clsId ?? this.selectedClass().id).toLowerCase();
+    const a = (ancId ?? this.selectedAncestry().id).toLowerCase();
+    return !!(
+      bg.recommendedClasses?.some((rc) => c.includes(rc)) ||
+      bg.recommendedAncestries?.some((ra) => a.includes(ra))
+    );
+  }
+
+  getPointCost(score: number): number {
+    return getPointBuyCostForScore(score);
+  }
+
+  getAncestryBonus(code: AbilityScoreVm['code']): number {
+    return this.selectedAncestry().abilityBonuses?.[code] ?? 0;
+  }
+
+  getSkillTotalBonus(abilityCode: AbilityScoreVm['code'], skillLabel: string): number {
+    const mod = this.summaryAbilities().find((a) => a.code === abilityCode)?.modifier ?? 0;
+    const prof = this.draft().selectedSkills.includes(skillLabel) ? this.proficiencyBonus() : 0;
+    return mod + prof;
+  }
 
   selectAncestry(ancestry: CreatorAncestryOptionVm): void {
     const defaultSub = ancestry.subraces[0];
@@ -214,24 +324,54 @@ export class LwCharacterCreatorWizardComponent {
     });
   }
 
+  selectSubclass(subclassName: string): void {
+    this.draftPatched.emit({ subclass: subclassName });
+  }
+
   selectBackground(bg: CreatorBackgroundOptionVm): void {
+    const mergedSkills = Array.from(new Set([...this.draft().selectedSkills, ...bg.skillProficiencies]));
     this.draftPatched.emit({
       backgroundId: bg.id,
       quote: bg.defaultQuote,
+      selectedSkills: mergedSkills,
+      personalityTrait: bg.personality.personality,
+      ideal: bg.personality.ideals,
+      bond: bg.personality.bonds,
+      flaw: bg.personality.flaws,
+    });
+  }
+
+  selectFeat(feat: CreatorFeatOptionVm): void {
+    this.draftPatched.emit({ selectedFeatId: feat.id });
+  }
+
+  addItemToDraft(item: EquipmentLoadoutItemVm, equipNow: boolean): void {
+    const curEquipped = [...(this.draft().equippedItemIds ?? [])];
+    const curBackpack = [...(this.draft().backpackItemIds ?? [])];
+    if (equipNow) {
+      if (!curEquipped.includes(item.id)) curEquipped.push(item.id);
+      this.draftPatched.emit({
+        equippedItemIds: curEquipped,
+        backpackItemIds: curBackpack.filter((id) => id !== item.id),
+      });
+    } else {
+      if (!curBackpack.includes(item.id)) curBackpack.push(item.id);
+      this.draftPatched.emit({
+        equippedItemIds: curEquipped.filter((id) => id !== item.id),
+        backpackItemIds: curBackpack,
+      });
+    }
+  }
+
+  removeItemFromDraft(itemId: string): void {
+    this.draftPatched.emit({
+      equippedItemIds: (this.draft().equippedItemIds ?? []).filter((id) => id !== itemId),
+      backpackItemIds: (this.draft().backpackItemIds ?? []).filter((id) => id !== itemId),
     });
   }
 
   selectPortrait(url: string): void {
     this.draftPatched.emit({ portraitUrl: url });
-  }
-
-  cyclePortrait(delta: number): void {
-    const gallery = this.selectedAncestry().galleryPortraits;
-    if (!gallery.length) return;
-    const current = this.draft().portraitUrl;
-    const idx = Math.max(0, gallery.indexOf(current));
-    const nextIdx = (idx + delta + gallery.length) % gallery.length;
-    this.selectPortrait(gallery[nextIdx]);
   }
 
   advanceOrComplete(): void {

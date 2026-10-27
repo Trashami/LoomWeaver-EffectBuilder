@@ -4,23 +4,24 @@
 }
 
 .lw-tool-dock {
-  width: 68px;
+  width: 60px;
   height: 100%;
-  padding: 0.45rem 0.35rem;
+  padding: 0.25rem 0.15rem;
   background: linear-gradient(180deg, rgba(9, 18, 15, 0.98) 0%, rgba(6, 12, 10, 0.99) 100%);
   border-right: 1px solid rgba(217, 183, 122, 0.2);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.28rem;
+  justify-content: center;
+  gap: 0.2rem;
   overflow-y: auto;
 }
 
 .lw-tool-dock__btn {
-  width: 56px;
-  min-height: 50px;
-  padding: 0.38rem 0.2rem;
-  border-radius: 7px;
+  width: 54px;
+  min-height: 44px;
+  padding: 0.26rem 0.12rem;
+  border-radius: 3px;
   border: 1px solid transparent;
   background: transparent;
   color: #9cb0a7;
@@ -28,27 +29,32 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.24rem;
+  gap: 0.18rem;
   cursor: pointer;
-  transition: all 130ms ease;
+  transition: all 120ms ease;
 
   &:hover {
     color: #f3e8d0;
     background: rgba(28, 62, 46, 0.38);
-    border-color: rgba(73, 232, 146, 0.24);
+    border-color: rgba(73, 232, 146, 0.28);
   }
 
   &--active {
     color: #f5e6c4;
-    background: linear-gradient(180deg, rgba(32, 74, 54, 0.78), rgba(16, 38, 28, 0.9));
+    background: linear-gradient(180deg, rgba(32, 74, 54, 0.82), rgba(16, 38, 28, 0.92));
     border-color: #d9b77a;
     box-shadow: inset 0 0 0 1px rgba(73, 232, 146, 0.22);
   }
 }
 
 .lw-tool-dock__label {
-  font-size: 0.66rem;
+  width: 100%;
+  font-size: 0.56rem;
   font-weight: 600;
-  line-height: 1.1;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

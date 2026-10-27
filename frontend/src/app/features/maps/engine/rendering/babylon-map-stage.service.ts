@@ -125,8 +125,9 @@ export class BabylonMapStageService {
 
         const rawX = pick.pickedPoint.x;
         const rawZ = pick.pickedPoint.z;
-        const gx = this.snapToGrid ? Math.round(rawX * 2) / 2 : Math.round(rawX * 10) / 10;
-        const gz = this.snapToGrid ? Math.round(rawZ * 2) / 2 : Math.round(rawZ * 10) / 10;
+        const useExactPointer = !this.snapToGrid || this.ghostConfig.kind === 'terrain';
+        const gx = useExactPointer ? Math.round(rawX * 100) / 100 : Math.round(rawX * 2) / 2;
+        const gz = useExactPointer ? Math.round(rawZ * 100) / 100 : Math.round(rawZ * 2) / 2;
 
         if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
           this.hoverCoords.set({ x: gx, z: gz });
@@ -327,7 +328,11 @@ export class BabylonMapStageService {
   updateCelestialLight(config: CelestialLightConfig): void {
     if (!this.scene) return;
     SceneLightingController.syncCelestialDirectionalLight(this.scene, config);
-    SceneLightingController.refreshShadowCasters(this.scene);
+  }
+
+  setGridMode(mode: string): void {
+    if (!this.scene) return;
+    TerrainMeshBuilder.setGridMode(this.scene, mode);
   }
 
   setCameraMode(mode: MapRenderMode | string): void {

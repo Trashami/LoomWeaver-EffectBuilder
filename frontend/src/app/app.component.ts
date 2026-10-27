@@ -17,14 +17,12 @@ import {
 } from './core/services/cookie-sso.helper';
 import { LoomWeaverStoreService } from './core/services/loomweaver-store.service';
 import { WebAudioAmbienceService } from './features/assets/engine/web-audio-ambience.service';
-import {
-  LwAppHeaderBarComponent,
-  LwAuthModalComponent,
-  LwIconComponent,
-  LwInspectorDrawerComponent,
-  LwLoomLauncherComponent,
-  LwScrollAreaComponent,
-} from './shared/ui/public-api';
+import { LwAppHeaderBarComponent } from './shared/ui/app-header-bar/app-header-bar.component';
+import { LwAuthModalComponent } from './shared/ui/auth-modal/auth-modal.component';
+import { LwIconComponent } from './shared/ui/icon/icon.component';
+import { LwInspectorDrawerComponent } from './shared/ui/inspector-drawer/inspector-drawer.component';
+import { LwLoomLauncherComponent } from './shared/ui/loom-launcher/loom-launcher.component';
+import { LwScrollAreaComponent } from './shared/ui/scroll-area/scroll-area.component';
 
 interface StudioPrimaryNavItem {
   readonly id: string;
@@ -62,8 +60,16 @@ export class AppComponent {
   readonly currentUrl = signal<string>(this.resolveInitialBrowserPath());
   readonly globalSearchText = signal<string>('');
   readonly showAllModules = signal<boolean>(true);
-  readonly leftNavCollapsed = signal<boolean>(false);
+  readonly leftNavCollapsed = signal<boolean>(
+    this.resolveInitialBrowserPath().startsWith('/arcane-screen') ||
+      this.resolveInitialBrowserPath().startsWith('/maps'),
+  );
   readonly rightGuideCollapsed = signal<boolean>(true);
+
+  readonly isFullBleedVttRoute = computed(() => {
+    const clean = this.currentUrl().split('?')[0].split('#')[0];
+    return clean.startsWith('/arcane-screen') || clean.startsWith('/maps');
+  });
 
   readonly isLandingSurface = computed(() => {
     const clean = this.currentUrl().split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
@@ -102,8 +108,8 @@ export class AppComponent {
   ];
 
   private readonly baseEngineSidebarNav: readonly StudioPrimaryNavItem[] = [
-    { id: 'arcane-vtt', label: 'Arcane Screen VTT', route: '/arcane-screen' },
-    { id: 'encounters', label: 'Encounters & Bestiary', route: '/encounters' },
+    { id: 'encounters', label: 'Encounters (Build & Prep)', route: '/encounters' },
+    { id: 'arcane-vtt', label: 'Arcane Screen (Live VTT)', route: '/arcane-screen' },
     { id: 'dice-forge', label: '3D Dice Forge', route: '/dice' },
     { id: 'effects-rules', label: 'Actions & FX Studio', route: '/effects' },
     { id: 'marketplace', label: 'Creator Marketplace', route: '/marketplace' },
@@ -143,6 +149,10 @@ export class AppComponent {
           const nextUrl = e.urlAfterRedirects || e.url;
           this.currentUrl.set(nextUrl);
           if (nextUrl.startsWith('/characters')) {
+            this.rightGuideCollapsed.set(true);
+          }
+          if (nextUrl.startsWith('/arcane-screen') || nextUrl.startsWith('/maps')) {
+            this.leftNavCollapsed.set(true);
             this.rightGuideCollapsed.set(true);
           }
         } else if (e.url && e.url !== '/') {

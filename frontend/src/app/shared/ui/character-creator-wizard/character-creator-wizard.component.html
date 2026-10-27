@@ -1,20 +1,26 @@
-<section class="lw-creator-wizard" aria-label="Create a New Character">
+<section class="lw-creator-wizard" [attr.aria-label]="isEditMode() ? 'Edit Character' : 'Create a New Character'">
   <header class="lw-creator-wizard__header">
     <div class="lw-creator-wizard__brand">
       <div class="lw-creator-wizard__crest" aria-hidden="true">
         <lw-icon name="compass" [size]="24" tone="gold" />
       </div>
       <div class="lw-creator-wizard__title-group">
-        <h1>Create a New Character</h1>
-        <p>Build your hero for {{ campaignName() }}. Your story begins here.</p>
+        <h1>{{ isEditMode() ? 'Edit Character' : 'Create a New Character' }}</h1>
+        <p>
+          @if (isEditMode()) {
+            Modify {{ draft().name }} for {{ campaignName() }}. All changes update your Character Summary live.
+          } @else {
+            Build your hero for {{ campaignName() }}. Your story begins here.
+          }
+        </p>
       </div>
     </div>
-    <button ngpButton type="button" class="lw-creator-wizard__close" title="Close Character Creator" aria-label="Close Character Creator" (click)="closed.emit()">
+    <button ngpButton type="button" class="lw-creator-wizard__close" title="Close" aria-label="Close" (click)="closed.emit()">
       <lw-icon name="close" [size]="18" />
     </button>
   </header>
 
-  <nav class="lw-creator-wizard__stepper" aria-label="Character Creation Steps">
+  <nav class="lw-creator-wizard__stepper" aria-label="Character Steps">
     @for (step of steps; track step.stepNumber; let last = $last) {
       <button
         ngpButton
@@ -34,17 +40,17 @@
   </nav>
 
   <div class="lw-creator-wizard__grid">
-    <!-- Column 1: Step Selection List -->
+    <!-- Column 1: Step-Specific Left Panel (Independently Scrollable) -->
     <div class="lw-creator-wizard__col lw-creator-wizard__col--selector">
       @switch (activeStep()) {
         @case (1) {
           <div class="lw-creator-wizard__col-head">
-            <h2>Choose Ancestry</h2>
-            <p>Your ancestry shapes your character's heritage, traits, and connection to the world.</p>
+            <h2>Choose Ancestry ({{ filteredAncestries().length }})</h2>
+            <p>Your ancestry shapes your heritage, speed, innate traits, and connection to Icrandor.</p>
           </div>
           <label class="lw-creator-wizard__search">
             <lw-icon name="search" [size]="15" tone="muted" />
-            <input type="search" placeholder="Search ancestries..." [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" />
+            <input type="search" placeholder="Search all 5e ancestries..." [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" />
           </label>
           <div class="lw-creator-wizard__filter-pills" role="group" aria-label="Ancestry Source Filter">
             @for (src of sourceFilters; track src) {
@@ -68,11 +74,15 @@
         }
         @case (2) {
           <div class="lw-creator-wizard__col-head">
-            <h2>Choose Class</h2>
-            <p>Select your hero's combat discipline, spellcasting tradition, and role in the party.</p>
+            <h2>Choose Class ({{ filteredClasses().length }})</h2>
+            <p>Select your combat discipline, spellcasting tradition, and party role.</p>
           </div>
+          <label class="lw-creator-wizard__search">
+            <lw-icon name="search" [size]="15" tone="muted" />
+            <input type="search" placeholder="Search classes &amp; subclasses..." [ngModel]="classSearchQuery()" (ngModelChange)="classSearchQuery.set($event)" />
+          </label>
           <div class="lw-creator-wizard__list">
-            @for (cls of classes; track cls.id) {
+            @for (cls of filteredClasses(); track cls.id) {
               <button ngpButton type="button" class="lw-creator-wizard__option" [class.lw-creator-wizard__option--selected]="selectedClass().id === cls.id" (click)="selectClass(cls)">
                 <span class="lw-creator-wizard__option-badge">d{{ cls.hitDie }}</span>
                 <span class="lw-creator-wizard__option-copy">
@@ -86,32 +96,68 @@
         }
         @case (3) {
           <div class="lw-creator-wizard__col-head">
-            <h2>Choose Background</h2>
-            <p>Define where your hero came from and the bonds they carry into the campaign.</p>
+            <h2>Choose Background ({{ filteredBackgrounds().length }})</h2>
+            <p>Backgrounds recommended for {{ selectedAncestry().name }} &amp; {{ selectedClass().name }} are badged.</p>
+          </div>
+          <label class="lw-creator-wizard__search">
+            <lw-icon name="search" [size]="15" tone="muted" />
+            <input type="search" placeholder="Search backgrounds or skills..." [ngModel]="backgroundSearchQuery()" (ngModelChange)="backgroundSearchQuery.set($event)" />
+          </label>
+          <div class="lw-creator-wizard__filter-pills">
+            <button ngpButton type="button" class="lw-creator-wizard__pill" [class.lw-creator-wizard__pill--active]="backgroundFilterMode() === 'all'" (click)="backgroundFilterMode.set('all')">
+              All ({{ backgroundOptions().length }})
+            </button>
+            <button ngpButton type="button" class="lw-creator-wizard__pill" [class.lw-creator-wizard__pill--active]="backgroundFilterMode() === 'recommended'" (click)="backgroundFilterMode.set('recommended')">
+              Recommended for {{ selectedClass().name }}
+            </button>
           </div>
           <div class="lw-creator-wizard__list">
-            @for (bg of backgrounds; track bg.id) {
+            @for (bg of filteredBackgrounds(); track bg.id) {
               <button ngpButton type="button" class="lw-creator-wizard__option" [class.lw-creator-wizard__option--selected]="selectedBackground().id === bg.id" (click)="selectBackground(bg)">
                 <span class="lw-creator-wizard__option-copy">
-                  <strong>{{ bg.name }}</strong>
-                  <small>{{ bg.tagline }}</small>
+                  <strong>
+                    {{ bg.name }}
+                    @if (isBackgroundRecommended(bg)) {
+                      <span class="lw-creator-wizard__rec-tag">Recommended</span>
+                    }
+                  </strong>
+                  <small>{{ bg.skillProficiencies.join(', ') }} · {{ bg.tagline }}</small>
                 </span>
                 <lw-icon [name]="selectedBackground().id === bg.id ? 'check' : 'chevron-right'" [size]="16" [tone]="selectedBackground().id === bg.id ? 'emerald' : 'muted'" />
               </button>
             }
           </div>
         }
-        @default {
+        @case (4) {
           <div class="lw-creator-wizard__col-head">
-            <h2>{{ steps[activeStep() - 1].label }}</h2>
-            <p>Refine ability scores, proficiencies, feats, and personal chronicle details.</p>
+            <h2>Ability Scores &amp; Point Buy</h2>
+            <p>Standard D&amp;D 5e Point Buy (27 pts at Level 1) plus Level-Up ASI points.</p>
+          </div>
+          <div class="lw-creator-wizard__point-budget-box">
+            <div class="lw-creator-wizard__budget-row">
+              <span>Starting Point-Buy Pool</span>
+              <strong>{{ basePointBuyBudget }} pts</strong>
+            </div>
+            <div class="lw-creator-wizard__budget-row">
+              <span>Level {{ characterLevel() }} ASI Bonus Pool</span>
+              <strong>+{{ levelUpAsiPoints() }} pts</strong>
+            </div>
+            <div class="lw-creator-wizard__budget-row lw-creator-wizard__budget-row--total">
+              <span>Points Used / Total Available</span>
+              <strong [class.is-over]="pointsRemaining() < 0">{{ pointsUsed() }} / {{ totalPointBudget() }} pts ({{ pointsRemaining() >= 0 ? pointsRemaining() + ' left' : 'Over by ' + (-pointsRemaining()) }})</strong>
+            </div>
           </div>
           <div class="lw-creator-wizard__list">
             @for (ab of summaryAbilities(); track ab.code) {
               <div class="lw-creator-wizard__ability-edit-row">
                 <div>
                   <strong>{{ ab.label }} ({{ ab.code }})</strong>
-                  <small>Modifier {{ formatMod(ab.modifier) }}</small>
+                  <small>
+                    Mod {{ formatMod(ab.modifier) }} · Cost {{ getPointCost(ab.score) }} pt
+                    @if (getAncestryBonus(ab.code) > 0) {
+                      · Ancestry +{{ getAncestryBonus(ab.code) }}
+                    }
+                  </small>
                 </div>
                 <div class="lw-creator-wizard__stepper-btns">
                   <button ngpButton type="button" (click)="abilityAdjusted.emit({ code: ab.code, delta: -1 })">-</button>
@@ -120,6 +166,109 @@
                 </div>
               </div>
             }
+          </div>
+        }
+        @case (5) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Select Skill Proficiencies</h2>
+            <p>{{ draft().selectedSkills.length }} skills selected · Proficiency Bonus +{{ proficiencyBonus() }}.</p>
+          </div>
+          <div class="lw-creator-wizard__list">
+            @for (sk of allSkillsDef; track sk.id) {
+              <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="draft().selectedSkills.includes(sk.label)" (click)="skillToggled.emit(sk.label)">
+                <span class="lw-creator-wizard__radio-dot"></span>
+                <span class="lw-creator-wizard__option-copy">
+                  <strong>{{ sk.label }} ({{ sk.abilityCode }})</strong>
+                  <small>{{ draft().selectedSkills.includes(sk.label) ? 'Proficient' : 'Untrained' }} · Total {{ formatMod(getSkillTotalBonus(sk.abilityCode, sk.label)) }}</small>
+                </span>
+                @if (draft().selectedSkills.includes(sk.label)) {
+                  <lw-icon name="check" [size]="15" tone="emerald" />
+                }
+              </button>
+            }
+          </div>
+        }
+        @case (6) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Choose Feat ({{ filteredFeats().length }})</h2>
+            <p>Select an Origin or Level-Up Feat from the 5e Compendium.</p>
+          </div>
+          <label class="lw-creator-wizard__search">
+            <lw-icon name="search" [size]="15" tone="muted" />
+            <input type="search" placeholder="Search 5e feats..." [ngModel]="featSearchQuery()" (ngModelChange)="featSearchQuery.set($event)" />
+          </label>
+          <div class="lw-creator-wizard__list">
+            @for (feat of filteredFeats(); track feat.id) {
+              <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="draft().selectedFeatId === feat.id || draft().selectedFeatId === feat.name" (click)="selectFeat(feat)">
+                <span class="lw-creator-wizard__radio-dot"></span>
+                <span class="lw-creator-wizard__option-copy">
+                  <strong>{{ feat.name }}</strong>
+                  <small>{{ feat.category }} · {{ feat.abilityBonus }}</small>
+                </span>
+                @if (draft().selectedFeatId === feat.id || draft().selectedFeatId === feat.name) {
+                  <lw-icon name="check" [size]="15" tone="emerald" />
+                }
+              </button>
+            }
+          </div>
+        }
+        @case (7) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>5e Equipment Database ({{ filteredDatabaseItems().length }})</h2>
+            <p>Add weapons, armor, focuses, or gear to Equipped Loadout or Backpack.</p>
+          </div>
+          <label class="lw-creator-wizard__search">
+            <lw-icon name="search" [size]="15" tone="muted" />
+            <input type="search" placeholder="Search weapons, armor, gear..." [ngModel]="equipmentSearchQuery()" (ngModelChange)="equipmentSearchQuery.set($event)" />
+          </label>
+          <div class="lw-creator-wizard__filter-pills">
+            @for (cat of ['All', 'Weapon', 'Armor', 'Focus', 'Gear']; track cat) {
+              <button ngpButton type="button" class="lw-creator-wizard__pill" [class.lw-creator-wizard__pill--active]="equipmentCategoryFilter() === cat" (click)="equipmentCategoryFilter.set($any(cat))">
+                {{ cat }}
+              </button>
+            }
+          </div>
+          <div class="lw-creator-wizard__list">
+            @for (item of filteredDatabaseItems(); track item.id) {
+              <div class="lw-creator-wizard__db-item-card">
+                <div class="lw-creator-wizard__option-copy">
+                  <strong>{{ item.name }}</strong>
+                  <small>{{ item.slot }} · {{ item.bonusLabel }}</small>
+                </div>
+                <div class="lw-creator-wizard__db-item-actions">
+                  <button ngpButton type="button" class="lw-creator-wizard__mini-btn is-equip" (click)="addItemToDraft(item, true)">+ Equip</button>
+                  <button ngpButton type="button" class="lw-creator-wizard__mini-btn" (click)="addItemToDraft(item, false)">+ Pack</button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @case (8) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Identity &amp; Level Details</h2>
+            <p>Configure your character's name, level, pronouns, alignment, and motto.</p>
+          </div>
+          <div class="lw-creator-wizard__details-form">
+            <label>
+              <span>Character Name</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().name" (ngModelChange)="draftPatched.emit({ name: $event })" />
+            </label>
+            <label>
+              <span>Character Level (1–20, updates ASI points)</span>
+              <input type="number" min="1" max="20" class="lw-creator-wizard__text-input" [ngModel]="characterLevel()" (ngModelChange)="draftPatched.emit({ level: +$event })" />
+            </label>
+            <label>
+              <span>Pronouns</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().pronouns" (ngModelChange)="draftPatched.emit({ pronouns: $event })" />
+            </label>
+            <label>
+              <span>Alignment</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().alignment" (ngModelChange)="draftPatched.emit({ alignment: $event })" />
+            </label>
+            <label>
+              <span>Personal Epigraph / Quote</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().quote" (ngModelChange)="draftPatched.emit({ quote: $event })" />
+            </label>
           </div>
         }
       }
@@ -135,109 +284,234 @@
       />
     </div>
 
-    <!-- Column 3: Traits, Subrace & Step-Specific Options -->
+    <!-- Column 3: Step-Specific Context & Details Panel (Independently Scrollable) -->
     <div class="lw-creator-wizard__col lw-creator-wizard__col--traits">
-      @if (activeStep() === 5) {
-        <div class="lw-creator-wizard__col-head">
-          <h2>Skill Proficiencies</h2>
-          <p>Choose the skills your character has mastered prior to Session 1.</p>
-        </div>
-        <div class="lw-creator-wizard__trait-list">
-          @for (skill of allSkills; track skill) {
-            <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="draft().selectedSkills.includes(skill)" (click)="skillToggled.emit(skill)">
-              <span class="lw-creator-wizard__radio-dot"></span>
-              <span class="lw-creator-wizard__option-copy">
-                <strong>{{ skill }}</strong>
-                <small>{{ draft().selectedSkills.includes(skill) ? 'Proficient (+3)' : 'Click to toggle proficiency' }}</small>
-              </span>
-              @if (draft().selectedSkills.includes(skill)) {
-                <lw-icon name="check" [size]="15" tone="emerald" />
+      @switch (activeStep()) {
+        @case (2) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>{{ selectedClass().name }} Subclasses &amp; Features</h2>
+            <p>Hit Die d{{ selectedClass().hitDie }} · Primary {{ selectedClass().primaryAbility }} · Saves: {{ selectedClass().savingThrows.join(', ') }}</p>
+          </div>
+          <div class="lw-creator-wizard__subrace-section">
+            <h3>Select Subclass / Tradition</h3>
+            <div class="lw-creator-wizard__subrace-list">
+              @for (sub of selectedClass().subclasses ?? [selectedClass().subclassDefault]; track sub) {
+                <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="draft().subclass === sub" (click)="selectSubclass(sub)">
+                  <span class="lw-creator-wizard__radio-dot"></span>
+                  <span class="lw-creator-wizard__option-copy">
+                    <strong>{{ sub }}</strong>
+                    <small>{{ selectedClass().name }} Specialization</small>
+                  </span>
+                  @if (draft().subclass === sub) {
+                    <lw-icon name="check" [size]="15" tone="emerald" />
+                  }
+                </button>
               }
-            </button>
-          }
-        </div>
-      } @else if (activeStep() === 6) {
-        <div class="lw-creator-wizard__col-head">
-          <h2>Feats & Specializations</h2>
-          <p>Select a starting or milestone feat for your build.</p>
-        </div>
-        <div class="lw-creator-wizard__trait-list">
-          @for (feat of featChoices; track feat.id) {
-            <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="draft().selectedFeatId === feat.id" (click)="draftPatched.emit({ selectedFeatId: feat.id })">
-              <span class="lw-creator-wizard__radio-dot"></span>
-              <span class="lw-creator-wizard__option-copy">
-                <strong>{{ feat.title }}</strong>
-                <small>{{ feat.summary }}</small>
-              </span>
-              @if (draft().selectedFeatId === feat.id) {
-                <lw-icon name="check" [size]="15" tone="emerald" />
-              }
-            </button>
-          }
-        </div>
-      } @else if (activeStep() === 8) {
-        <div class="lw-creator-wizard__col-head">
-          <h2>Character Details & Identity</h2>
-          <p>Personalize your hero's name, pronouns, alignment, and motto.</p>
-        </div>
-        <div class="lw-creator-wizard__details-form">
-          <label>
-            <span>Character Name</span>
-            <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().name" (ngModelChange)="draftPatched.emit({ name: $event })" />
-          </label>
-          <label>
-            <span>Pronouns</span>
-            <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().pronouns" (ngModelChange)="draftPatched.emit({ pronouns: $event })" />
-          </label>
-          <label>
-            <span>Alignment</span>
-            <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().alignment" (ngModelChange)="draftPatched.emit({ alignment: $event })" />
-          </label>
-          <label>
-            <span>Personal Epigraph / Quote</span>
-            <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().quote" (ngModelChange)="draftPatched.emit({ quote: $event })" />
-          </label>
-        </div>
-      } @else {
-        <div class="lw-creator-wizard__col-head">
-          <h2>{{ selectedAncestry().name }} Traits</h2>
-          <p>{{ selectedAncestry().description }}</p>
-        </div>
-        <div class="lw-creator-wizard__trait-list">
-          @for (trait of selectedAncestry().traits; track trait.id) {
-            <div class="lw-creator-wizard__trait-card">
-              <span class="lw-creator-wizard__trait-icon" aria-hidden="true">
-                <lw-icon [name]="trait.icon" [size]="16" tone="gold" />
-              </span>
-              <div class="lw-creator-wizard__trait-copy">
-                <strong>{{ trait.title }}</strong>
-                <span>{{ trait.description }}</span>
-              </div>
             </div>
-          }
-        </div>
-        <div class="lw-creator-wizard__subrace-section">
-          <h3>Subrace</h3>
-          <div class="lw-creator-wizard__subrace-list">
-            @for (sub of selectedAncestry().subraces; track sub.id) {
-              <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="selectedSubrace().id === sub.id" (click)="selectSubrace(sub)">
-                <img [src]="sub.portraitUrl" [alt]="sub.name" class="lw-creator-wizard__subrace-thumb" />
-                <span class="lw-creator-wizard__radio-dot"></span>
-                <span class="lw-creator-wizard__option-copy">
-                  <strong>{{ sub.name }}</strong>
-                  <small>{{ sub.subtitle }}</small>
-                </span>
-                @if (selectedSubrace().id === sub.id) {
-                  <lw-icon name="check" [size]="16" tone="emerald" />
-                }
-              </button>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            @for (feat of selectedClass().features; track feat.id) {
+              <div class="lw-creator-wizard__trait-card">
+                <span class="lw-creator-wizard__trait-icon"><lw-icon [name]="feat.icon" [size]="16" tone="gold" /></span>
+                <div class="lw-creator-wizard__trait-copy">
+                  <strong>{{ feat.title }}</strong>
+                  <span>{{ feat.summary }}</span>
+                </div>
+              </div>
             }
           </div>
-        </div>
+        }
+        @case (3) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>{{ selectedBackground().name }} Details</h2>
+            <p>{{ selectedBackground().summary }}</p>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            <div class="lw-creator-wizard__trait-card">
+              <span class="lw-creator-wizard__trait-icon"><lw-icon name="book-open" [size]="16" tone="gold" /></span>
+              <div class="lw-creator-wizard__trait-copy">
+                <strong>Feature: {{ selectedBackground().featureName || 'Background Specialty' }}</strong>
+                <span>Skill Proficiencies: {{ selectedBackground().skillProficiencies.join(', ') }}</span>
+              </div>
+            </div>
+            <div class="lw-creator-wizard__trait-card">
+              <span class="lw-creator-wizard__trait-icon"><lw-icon name="compass" [size]="16" tone="gold" /></span>
+              <div class="lw-creator-wizard__trait-copy">
+                <strong>Personality &amp; Ideal</strong>
+                <span>{{ selectedBackground().personality.personality }} — {{ selectedBackground().personality.ideals }}</span>
+              </div>
+            </div>
+          </div>
+        }
+        @case (4) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Ability Rules &amp; Derived Modifiers</h2>
+            <p>D&amp;D 5e Point Buy costs: 8 (0), 9 (1), 10 (2), 11 (3), 12 (4), 13 (5), 14 (7), 15 (9).</p>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            @for (ab of summaryAbilities(); track ab.code) {
+              <div class="lw-creator-wizard__trait-card">
+                <span class="lw-creator-wizard__trait-icon"><strong>{{ ab.code }}</strong></span>
+                <div class="lw-creator-wizard__trait-copy">
+                  <strong>{{ ab.label }}: {{ ab.score }} ({{ formatMod(ab.modifier) }})</strong>
+                  <span>Saving Throw: {{ formatMod(ab.modifier + (selectedClass().savingThrows.includes(ab.code) ? proficiencyBonus() : 0)) }} {{ selectedClass().savingThrows.includes(ab.code) ? '(Proficient)' : '' }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @case (5) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Skill Modifiers &amp; Passive Senses</h2>
+            <p>Background grants: {{ selectedBackground().skillProficiencies.join(', ') }}.</p>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            @for (sk of allSkillsDef; track sk.id) {
+              @if (draft().selectedSkills.includes(sk.label)) {
+                <div class="lw-creator-wizard__trait-card">
+                  <span class="lw-creator-wizard__trait-icon"><lw-icon name="check" [size]="15" tone="emerald" /></span>
+                  <div class="lw-creator-wizard__trait-copy">
+                    <strong>{{ sk.label }} ({{ sk.abilityCode }}) · {{ formatMod(getSkillTotalBonus(sk.abilityCode, sk.label)) }}</strong>
+                    <span>Proficient (+{{ proficiencyBonus() }} Proficiency Bonus included)</span>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        }
+        @case (6) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Selected Feat: {{ selectedFeat().name }}</h2>
+            <p>{{ selectedFeat().category }} · Prerequisite: {{ selectedFeat().prerequisite }}</p>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            <div class="lw-creator-wizard__trait-card">
+              <span class="lw-creator-wizard__trait-icon"><lw-icon name="zap" [size]="16" tone="gold" /></span>
+              <div class="lw-creator-wizard__trait-copy">
+                <strong>{{ selectedFeat().name }} ({{ selectedFeat().abilityBonus }})</strong>
+                <span>{{ selectedFeat().summary }}</span>
+              </div>
+            </div>
+            @for (feat of selectedClass().features; track feat.id) {
+              <div class="lw-creator-wizard__trait-card">
+                <span class="lw-creator-wizard__trait-icon"><lw-icon [name]="feat.icon" [size]="16" tone="gold" /></span>
+                <div class="lw-creator-wizard__trait-copy">
+                  <strong>Class Feature: {{ feat.title }}</strong>
+                  <span>{{ feat.summary }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @case (7) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Character Loadout &amp; Backpack</h2>
+            <p>Manage active Equipped items vs. Backpack inventory.</p>
+          </div>
+          <div class="lw-creator-wizard__subrace-section">
+            <h3>Equipped on Character ({{ equippedDraftItems().length }})</h3>
+            <div class="lw-creator-wizard__trait-list">
+              @for (item of equippedDraftItems(); track item.id) {
+                <div class="lw-creator-wizard__db-item-card">
+                  <div class="lw-creator-wizard__option-copy">
+                    <strong>{{ item.name }}</strong>
+                    <small>{{ item.slot }} · {{ item.bonusLabel }}</small>
+                  </div>
+                  <div class="lw-creator-wizard__db-item-actions">
+                    <button ngpButton type="button" class="lw-creator-wizard__mini-btn" (click)="addItemToDraft(item, false)">To Pack</button>
+                    <button ngpButton type="button" class="lw-creator-wizard__mini-btn is-danger" (click)="removeItemFromDraft(item.id)">&times;</button>
+                  </div>
+                </div>
+              } @empty {
+                <p class="lw-creator-wizard__empty-note">No items equipped yet. Click "+ Equip" on the left.</p>
+              }
+            </div>
+          </div>
+          <div class="lw-creator-wizard__subrace-section">
+            <h3>In Backpack ({{ backpackDraftItems().length }})</h3>
+            <div class="lw-creator-wizard__trait-list">
+              @for (item of backpackDraftItems(); track item.id) {
+                <div class="lw-creator-wizard__db-item-card">
+                  <div class="lw-creator-wizard__option-copy">
+                    <strong>{{ item.name }}</strong>
+                    <small>{{ item.bonusLabel }}</small>
+                  </div>
+                  <div class="lw-creator-wizard__db-item-actions">
+                    <button ngpButton type="button" class="lw-creator-wizard__mini-btn is-equip" (click)="addItemToDraft(item, true)">Equip</button>
+                    <button ngpButton type="button" class="lw-creator-wizard__mini-btn is-danger" (click)="removeItemFromDraft(item.id)">&times;</button>
+                  </div>
+                </div>
+              } @empty {
+                <p class="lw-creator-wizard__empty-note">Backpack is empty. Click "+ Pack" on the left.</p>
+              }
+            </div>
+          </div>
+        }
+        @case (8) {
+          <div class="lw-creator-wizard__col-head">
+            <h2>Personality, Ideals, Bonds &amp; Flaws</h2>
+            <p>Roleplay pillars that ground your character in the campaign.</p>
+          </div>
+          <div class="lw-creator-wizard__details-form">
+            <label>
+              <span>Personality Trait</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().personalityTrait" (ngModelChange)="draftPatched.emit({ personalityTrait: $event })" />
+            </label>
+            <label>
+              <span>Ideal</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().ideal" (ngModelChange)="draftPatched.emit({ ideal: $event })" />
+            </label>
+            <label>
+              <span>Bond</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().bond" (ngModelChange)="draftPatched.emit({ bond: $event })" />
+            </label>
+            <label>
+              <span>Flaw</span>
+              <input type="text" class="lw-creator-wizard__text-input" [ngModel]="draft().flaw" (ngModelChange)="draftPatched.emit({ flaw: $event })" />
+            </label>
+          </div>
+        }
+        @default {
+          <div class="lw-creator-wizard__col-head">
+            <h2>{{ selectedAncestry().name }} Traits</h2>
+            <p>{{ selectedAncestry().description }}</p>
+          </div>
+          <div class="lw-creator-wizard__trait-list">
+            @for (trait of selectedAncestry().traits; track trait.id) {
+              <div class="lw-creator-wizard__trait-card">
+                <span class="lw-creator-wizard__trait-icon" aria-hidden="true">
+                  <lw-icon [name]="trait.icon" [size]="16" tone="gold" />
+                </span>
+                <div class="lw-creator-wizard__trait-copy">
+                  <strong>{{ trait.title }}</strong>
+                  <span>{{ trait.description }}</span>
+                </div>
+              </div>
+            }
+          </div>
+          <div class="lw-creator-wizard__subrace-section">
+            <h3>Subrace / Lineage</h3>
+            <div class="lw-creator-wizard__subrace-list">
+              @for (sub of selectedAncestry().subraces; track sub.id) {
+                <button ngpButton type="button" class="lw-creator-wizard__subrace" [class.lw-creator-wizard__subrace--selected]="selectedSubrace().id === sub.id" (click)="selectSubrace(sub)">
+                  <img [src]="sub.portraitUrl" [alt]="sub.name" class="lw-creator-wizard__subrace-thumb" />
+                  <span class="lw-creator-wizard__radio-dot"></span>
+                  <span class="lw-creator-wizard__option-copy">
+                    <strong>{{ sub.name }}</strong>
+                    <small>{{ sub.subtitle }}</small>
+                  </span>
+                  @if (selectedSubrace().id === sub.id) {
+                    <lw-icon name="check" [size]="16" tone="emerald" />
+                  }
+                </button>
+              }
+            </div>
+          </div>
+        }
       }
     </div>
 
-    <!-- Column 4: Live Character Summary Panel -->
+    <!-- Column 4: Live Auto-Updating Character Summary Panel -->
     <aside class="lw-creator-wizard__col lw-creator-wizard__col--summary" aria-label="Character Summary">
       <div class="lw-creator-wizard__col-head">
         <h2>Character Summary</h2>
@@ -252,8 +526,8 @@
             } @else {
               <strong>{{ draft().name }}</strong>
             }
-            <span>Level 1 {{ selectedClass().name }}</span>
-            <small>{{ selectedSubrace().name || selectedAncestry().name }}</small>
+            <span>Level {{ characterLevel() }} {{ selectedClass().name }} ({{ draft().subclass || selectedClass().subclassDefault }})</span>
+            <small>{{ selectedSubrace().name || selectedAncestry().name }} · {{ selectedBackground().name }}</small>
           </div>
           <lw-button variant="guide-action" size="xs" icon="pen" [label]="editingIdentity() ? 'Done' : 'Edit'" (pressed)="editingIdentity.set(!editingIdentity())" />
         </div>
@@ -281,33 +555,33 @@
           </div>
           <div class="lw-creator-wizard__vital-row">
             <span><lw-icon name="compass" [size]="14" tone="gold" /> Speed</span>
-            <strong>30 ft</strong>
+            <strong>{{ selectedAncestry().speedFeet || 30 }} ft</strong>
           </div>
           <div class="lw-creator-wizard__vital-row">
             <span><lw-icon name="check" [size]="14" tone="gold" /> Proficiency Bonus</span>
-            <strong>+2</strong>
+            <strong>+{{ proficiencyBonus() }}</strong>
           </div>
         </div>
 
         <div class="lw-creator-wizard__summary-JumpList">
           <div class="lw-creator-wizard__jump-item">
             <span class="lw-creator-wizard__trait-icon" aria-hidden="true"><lw-icon name="shield" [size]="15" tone="gold" /></span>
-            <div class="lw-creator-wizard__jump-copy"><small>Class</small><strong>{{ selectedClass().name }}</strong></div>
+            <div class="lw-creator-wizard__jump-copy"><small>Class &amp; Subclass</small><strong>{{ selectedClass().name }} · {{ draft().subclass || selectedClass().subclassDefault }}</strong></div>
             <lw-button variant="guide-action" size="xs" label="Change" (pressed)="activeStep.set(2)" />
           </div>
           <div class="lw-creator-wizard__jump-item">
             <span class="lw-creator-wizard__trait-icon" aria-hidden="true"><lw-icon name="book-open" [size]="15" tone="gold" /></span>
-            <div class="lw-creator-wizard__jump-copy"><small>Background</small><strong>{{ selectedBackground().name }}</strong></div>
+            <div class="lw-creator-wizard__jump-copy"><small>Background &amp; Skills ({{ draft().selectedSkills.length }})</small><strong>{{ selectedBackground().name }}</strong></div>
             <lw-button variant="guide-action" size="xs" label="Change" (pressed)="activeStep.set(3)" />
           </div>
           <div class="lw-creator-wizard__jump-item">
             <span class="lw-creator-wizard__trait-icon" aria-hidden="true"><lw-icon name="zap" [size]="15" tone="gold" /></span>
-            <div class="lw-creator-wizard__jump-copy"><small>Feats</small><strong>{{ draft().selectedFeatId || 'None' }}</strong></div>
-            <lw-button variant="guide-action" size="xs" label="Add" (pressed)="activeStep.set(6)" />
+            <div class="lw-creator-wizard__jump-copy"><small>Feat</small><strong>{{ selectedFeat().name }}</strong></div>
+            <lw-button variant="guide-action" size="xs" label="Edit" (pressed)="activeStep.set(6)" />
           </div>
           <div class="lw-creator-wizard__jump-item">
             <span class="lw-creator-wizard__trait-icon" aria-hidden="true"><lw-icon name="layers" [size]="15" tone="gold" /></span>
-            <div class="lw-creator-wizard__jump-copy"><small>Equipment</small><strong>{{ draft().startingPack }}</strong></div>
+            <div class="lw-creator-wizard__jump-copy"><small>Equipment &amp; Pack</small><strong>{{ equippedDraftItems().length }} Equipped · {{ backpackDraftItems().length }} Pack</strong></div>
             <lw-button variant="guide-action" size="xs" label="Edit" (pressed)="activeStep.set(7)" />
           </div>
         </div>
@@ -319,7 +593,7 @@
           </button>
           @if (activeStep() < 8) {
             <button ngpButton type="button" class="lw-creator-wizard__finish-now-btn" (click)="completed.emit()">
-              Finish & Open Sheet Now
+              {{ isEditMode() ? 'Save Character Changes Now' : 'Finish & Open Sheet Now' }}
             </button>
           }
         </div>

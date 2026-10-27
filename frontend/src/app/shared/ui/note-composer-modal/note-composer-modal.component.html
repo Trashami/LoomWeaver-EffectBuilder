@@ -1,0 +1,222 @@
+@if (open()) {
+  <div class="lw-note-modal-backdrop" (click)="closeModal()" role="presentation">
+    <section
+      class="lw-note-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lw-note-modal-title"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="lw-note-modal__header">
+        <div class="lw-note-modal__title-block">
+          <span class="lw-note-modal__kicker">UNIVERSAL LOOM NOTE COMPOSER</span>
+          <h2 id="lw-note-modal-title" class="lw-note-modal__title">
+            Add Stylized Note · {{ sourceEntityName() || 'Campaign Record' }}
+          </h2>
+          <p class="lw-note-modal__subtitle">
+            Type <code>&#64;</code> anywhere in the editor to link Characters, NPCs, Places, Quests, or Factions directly into The Loom graph.
+          </p>
+        </div>
+        <button
+          ngpButton
+          type="button"
+          class="lw-note-modal__close-btn"
+          aria-label="Close Note Composer"
+          (click)="closeModal()"
+        >
+          <lw-icon name="x" [size]="18" />
+        </button>
+      </header>
+
+      <div class="lw-note-modal__body">
+        <div class="lw-note-modal__meta-grid">
+          <label class="lw-note-modal__field">
+            <span class="lw-note-modal__label">NOTE TITLE</span>
+            <input
+              type="text"
+              class="lw-note-modal__input"
+              placeholder="e.g., Clues from the Lord of Cinth Gala..."
+              [ngModel]="noteTitle()"
+              (ngModelChange)="noteTitle.set($event)"
+            />
+          </label>
+
+          <div class="lw-note-modal__field">
+            <span class="lw-note-modal__label">NOTE TYPE (AUTO-SELECTED BY CONTEXT)</span>
+            <div class="lw-note-modal__type-pills">
+              @for (t of noteTypes; track t.id) {
+                <button
+                  ngpButton
+                  type="button"
+                  class="lw-note-modal__type-pill"
+                  [class.is-active]="selectedNoteType() === t.id"
+                  [title]="t.description"
+                  (click)="selectNoteType(t.id)"
+                >
+                  {{ t.label }}
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy / Loom Visibility Scoping -->
+        <div class="lw-note-modal__visibility-bar">
+          <span class="lw-note-modal__label">LOOM VISIBILITY &amp; PRIVACY SCOPE</span>
+          <div class="lw-note-modal__visibility-grid">
+            @for (vis of visibilityOptions; track vis.id) {
+              <button
+                ngpButton
+                type="button"
+                class="lw-note-modal__vis-card"
+                [class.is-active]="selectedVisibility() === vis.id"
+                [attr.data-scope]="vis.id"
+                (click)="selectVisibility(vis.id)"
+              >
+                <div class="lw-note-modal__vis-top">
+                  <span class="lw-note-modal__vis-name">{{ vis.label }}</span>
+                  <span class="lw-note-modal__vis-badge">{{ vis.badge }}</span>
+                </div>
+                <span class="lw-note-modal__vis-desc">{{ vis.description }}</span>
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Stylized WYSIWYG Toolbar + Editor -->
+        <div class="lw-note-modal__editor-shell">
+          <div class="lw-note-modal__toolbar" role="toolbar" aria-label="Formatting options">
+            <button ngpButton type="button" class="lw-note-modal__tool-btn" (click)="applyFormat('formatBlock', 'H2')">
+              H2
+            </button>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn" (click)="applyFormat('formatBlock', 'H3')">
+              H3
+            </button>
+            <span class="lw-note-modal__tool-sep"></span>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn is-bold" (click)="applyFormat('bold')">
+              B
+            </button>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn is-italic" (click)="applyFormat('italic')">
+              I
+            </button>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn is-underline" (click)="applyFormat('underline')">
+              U
+            </button>
+            <span class="lw-note-modal__tool-sep"></span>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn" (click)="applyFormat('insertUnorderedList')">
+              Bullet List
+            </button>
+            <button ngpButton type="button" class="lw-note-modal__tool-btn" (click)="applyFormat('formatBlock', 'BLOCKQUOTE')">
+              Lore Callout
+            </button>
+            <span class="lw-note-modal__tool-sep"></span>
+            <button
+              ngpButton
+              type="button"
+              class="lw-note-modal__tool-btn lw-note-modal__tool-btn--mention"
+              (click)="triggerAtMentionPicker()"
+            >
+              &#64; Tag Entity for The Loom
+            </button>
+          </div>
+
+          <div class="lw-note-modal__editor-wrap">
+            <div
+              #editorSurface
+              class="lw-note-modal__wysiwyg"
+              contenteditable="true"
+              data-placeholder="Write your chronicle entry here... Type @ to mention and link any Character, NPC, Place, Quest, or Faction to The Loom."
+              (input)="onEditorInput($event)"
+              (keydown)="onEditorKeydown($event)"
+            ></div>
+
+            @if (mentionMenuOpen()) {
+              <div class="lw-note-modal__mention-dropdown" role="listbox" aria-label="Campaign entities">
+                <div class="lw-note-modal__mention-head">
+                  <span>LINK ENTITY TO THE LOOM</span>
+                  <input
+                    type="text"
+                    class="lw-note-modal__mention-search"
+                    placeholder="Filter entity..."
+                    [ngModel]="mentionQuery()"
+                    (ngModelChange)="mentionQuery.set($event)"
+                  />
+                </div>
+                <div class="lw-note-modal__mention-list">
+                  @for (entity of filteredMentions(); track entity.compositeKey; let idx = $index) {
+                    <button
+                      ngpButton
+                      type="button"
+                      class="lw-note-modal__mention-item"
+                      [class.is-highlighted]="idx === activeMentionIndex()"
+                      (click)="insertMentionEntity(entity)"
+                    >
+                      <span class="lw-note-modal__mention-name">&#64;{{ entity.name }}</span>
+                      <span class="lw-note-modal__mention-type">{{ entity.entityType }}</span>
+                    </button>
+                  } @empty {
+                    <div class="lw-note-modal__mention-empty">No matching campaign entities found.</div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Loom Graph Relationships Preview -->
+        <div class="lw-note-modal__loom-links">
+          <div class="lw-note-modal__loom-links-head">
+            <span class="lw-note-modal__label">
+              THE LOOM GRAPH CONNECTIONS ({{ sourceEntityName() || 'Source' }} &rarr; Mentioned Entities)
+            </span>
+          </div>
+          <div class="lw-note-modal__tag-row">
+            @for (tag of taggedEntities(); track tag.compositeKey) {
+              <span class="lw-note-modal__tag-chip">
+                <strong>&#64;{{ tag.name }}</strong>
+                <small>{{ tag.entityType }}</small>
+                <button
+                  ngpButton
+                  type="button"
+                  class="lw-note-modal__tag-remove"
+                  (click)="removeTaggedEntity(tag.compositeKey)"
+                >
+                  &times;
+                </button>
+              </span>
+            } @empty {
+              <span class="lw-note-modal__tag-hint">
+                No entities tagged yet. Type <code>&#64;</code> in the note or click an entity below to weave a relationship:
+              </span>
+            }
+          </div>
+          <div class="lw-note-modal__quick-tags">
+            @for (entity of mentionableEntities().slice(0, 8); track entity.compositeKey) {
+              <button
+                ngpButton
+                type="button"
+                class="lw-note-modal__quick-tag"
+                (click)="insertMentionEntity(entity)"
+              >
+                + &#64;{{ entity.name }}
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <footer class="lw-note-modal__footer">
+        <div class="lw-note-modal__footer-meta">
+          Scope: <strong>{{ selectedVisibility() === 'private' ? 'Private (Author Only)' : selectedVisibility() === 'dm-only' ? 'DM Only (Player + DM)' : 'Global (Entire Campaign)' }}</strong>
+          · Type: <strong>{{ selectedNoteType() }}</strong>
+        </div>
+        <div class="lw-note-modal__footer-actions">
+          <lw-button variant="ghost" size="sm" (pressed)="closeModal()">Cancel</lw-button>
+          <lw-button variant="primary" size="sm" (pressed)="saveNote()">
+            Save Note &amp; Sync to The Loom
+          </lw-button>
+        </div>
+      </footer>
+    </section>
+  </div>
+}

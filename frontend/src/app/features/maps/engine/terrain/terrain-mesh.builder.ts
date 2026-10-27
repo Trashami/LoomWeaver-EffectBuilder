@@ -9,14 +9,30 @@ import {
   VertexData,
 } from '@babylonjs/core';
 
+export type LwFloorGridMode = '5 ft' | '10 ft' | 'Hex' | 'Off';
+
 export class TerrainMeshBuilder {
+  private static readonly GROUND_W = 36;
+  private static readonly GROUND_H = 28;
+  private static readonly SUBDIV = 48;
+
   private static customElevations: Float32Array | null = null;
-  private static activeAlbedoUrl = '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone.png';
-  private static activeNormalUrl = '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone_normal.png';
+  private static activeAlbedoUrl =
+    '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone.png';
+  private static activeNormalUrl =
+    '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone_normal.png';
   private static floorTilingScale = 10;
+  private static activeGridMode: LwFloorGridMode = '5 ft';
 
   static resetElevations(): void {
     this.customElevations = null;
+  }
+
+  static setGridMode(scene: Scene, mode: string): void {
+    const normalized: LwFloorGridMode =
+      mode === '10 ft' || mode === 'Hex' || mode === 'Off' ? mode : '5 ft';
+    this.activeGridMode = normalized;
+    this.rebuildGridOverlay(scene);
   }
 
   static buildTerrainAndGrid(
@@ -28,7 +44,12 @@ export class TerrainMeshBuilder {
     if (!ground) {
       ground = MeshBuilder.CreateGround(
         'lw-terrain-ground',
-        { width: 36, height: 28, subdivisions: 48, updatable: true },
+        {
+          width: this.GROUND_W,
+          height: this.GROUND_H,
+          subdivisions: this.SUBDIV,
+          updatable: true,
+        },
         scene,
       );
       ground.isPickable = true;
@@ -54,45 +75,127 @@ export class TerrainMeshBuilder {
         }
         ground.updateVerticesData('position', positions);
         this.recomputeNormals(ground, positions);
+        ground.refreshBoundingInfo();
       }
 
       this.applyMaterialAndBump(scene, ground, biome);
-    }
-
-    const existingGrid = scene.getMeshByName('lw-terrain-grid');
-    if (!existingGrid) {
-      const lines: Vector3[][] = [];
-      for (let x = -18; x <= 18; x += 1.5) {
-        lines.push([new Vector3(x, 0.03, -14), new Vector3(x, 0.03, 14)]);
-      }
-      for (let z = -14; z <= 14; z += 1.5) {
-        lines.push([new Vector3(-18, 0.03, z), new Vector3(18, 0.03, z)]);
-      }
-      const grid = MeshBuilder.CreateLineSystem('lw-terrain-grid', { lines }, scene);
-      grid.color = Color3.FromHexString('#2b4a3c');
-      grid.isPickable = false;
+      this.rebuildGridOverlay(scene);
     }
 
     return ground;
   }
 
+  /**
+   * Bilinear interpolation of ground height at any (worldX, worldZ) so the
+   * terrain brush circle and floor grid match the sculpted surface 1:1.
+   */
   static sampleElevationAt(scene: Scene, worldX: number, worldZ: number): number {
     const ground = scene.getMeshByName('lw-terrain-ground') as Mesh | null;
     if (!ground) return 0;
     const positions = ground.getVerticesData('position');
     if (!positions) return 0;
-    let bestY = 0;
-    let bestDistSq = Infinity;
-    for (let i = 0; i < positions.length; i += 3) {
-      const dx = positions[i] - worldX;
-      const dz = positions[i + 2] - worldZ;
-      const dSq = dx * dx + dz * dz;
-      if (dSq < bestDistSq) {
-        bestDistSq = dSq;
-        bestY = positions[i + 1];
+
+    const cols = this.SUBDIV + 1;
+    const u = Math.max(0, Math.min(1, (worldX + this.GROUND_W / 2) / this.GROUND_W));
+    const v = Math.max(0, Math.min(1, (this.GROUND_H / 2 - worldZ) / this.GROUND_H));
+
+    const gx = u * this.SUBDIV;
+    const gz = v * this.SUBDIV;
+    const x0 = Math.min(this.SUBDIV - 1, Math.floor(gx));
+    const z0 = Math.min(this.SUBDIV - 1, Math.floor(gz));
+    const tx = gx - x0;
+    const tz = gz - z0;
+
+    const y00 = positions[(z0 * cols + x0) * 3 + 1] ?? 0;
+    const y10 = positions[(z0 * cols + (x0 + 1)) * 3 + 1] ?? 0;
+    const y01 = positions[((z0 + 1) * cols + x0) * 3 + 1] ?? 0;
+    const y11 = positions[((z0 + 1) * cols + (x0 + 1)) * 3 + 1] ?? 0;
+
+    const yTop = y00 * (1 - tx) + y10 * tx;
+    const yBot = y01 * (1 - tx) + y11 * tx;
+    return yTop * (1 - tz) + yBot * tz;
+  }
+
+  /**
+   * Rebuilds the 3D floor grid ('5 ft', '10 ft', 'Hex', or 'Off'), draping lines
+   * over sculpted terrain and adjusting cell coordinates for 3D slope distance.
+   */
+  static rebuildGridOverlay(scene: Scene): void {
+    const existingGrid = scene.getMeshByName('lw-terrain-grid');
+    if (existingGrid) {
+      existingGrid.dispose();
+    }
+
+    if (this.activeGridMode === 'Off') {
+      return;
+    }
+
+    const lines: Vector3[][] = [];
+    const halfW = this.GROUND_W / 2;
+    const halfH = this.GROUND_H / 2;
+    const liftY = 0.045;
+
+    // Slope-aware coordinate shift: pulls grid lines slightly inward on steep slopes
+    // so the 3D surface distance along the hill respects the true square/hex size.
+    const slopeAdjustedPoint = (x: number, z: number): Vector3 => {
+      const y = this.sampleElevationAt(scene, x, z);
+      const eps = 0.35;
+      const dydx =
+        (this.sampleElevationAt(scene, x + eps, z) -
+          this.sampleElevationAt(scene, x - eps, z)) /
+        (2 * eps);
+      const dydz =
+        (this.sampleElevationAt(scene, x, z + eps) -
+          this.sampleElevationAt(scene, x, z - eps)) /
+        (2 * eps);
+      const adjX = x - dydx * Math.abs(y) * 0.18;
+      const adjZ = z - dydz * Math.abs(y) * 0.18;
+      const adjY = this.sampleElevationAt(scene, adjX, adjZ) + liftY;
+      return new Vector3(adjX, adjY, adjZ);
+    };
+
+    if (this.activeGridMode === 'Hex') {
+      const hexR = 1.05;
+      const dx = hexR * 1.5;
+      const dz = hexR * Math.sqrt(3);
+      let col = 0;
+      for (let cx = -halfW + hexR; cx <= halfW - hexR; cx += dx, col++) {
+        const zOffset = col % 2 === 0 ? 0 : dz / 2;
+        for (let cz = -halfH + hexR + zOffset; cz <= halfH - hexR; cz += dz) {
+          const ring: Vector3[] = [];
+          for (let k = 0; k <= 6; k++) {
+            const angle = (k * Math.PI) / 3;
+            const vx = cx + Math.cos(angle) * hexR;
+            const vz = cz + Math.sin(angle) * hexR;
+            ring.push(slopeAdjustedPoint(vx, vz));
+          }
+          lines.push(ring);
+        }
+      }
+    } else {
+      const cellStep = this.activeGridMode === '10 ft' ? 3.0 : 1.5;
+      const sampleStep = 0.5;
+
+      for (let x = -halfW; x <= halfW + 0.01; x += cellStep) {
+        const polyline: Vector3[] = [];
+        for (let z = -halfH; z <= halfH + 0.01; z += sampleStep) {
+          polyline.push(slopeAdjustedPoint(x, z));
+        }
+        lines.push(polyline);
+      }
+
+      for (let z = -halfH; z <= halfH + 0.01; z += cellStep) {
+        const polyline: Vector3[] = [];
+        for (let x = -halfW; x <= halfW + 0.01; x += sampleStep) {
+          polyline.push(slopeAdjustedPoint(x, z));
+        }
+        lines.push(polyline);
       }
     }
-    return bestY;
+
+    const grid = MeshBuilder.CreateLineSystem('lw-terrain-grid', { lines }, scene);
+    grid.color = Color3.FromHexString('#34634d');
+    grid.isPickable = false;
   }
 
   static applyFloorBumpTexture(
@@ -186,6 +289,8 @@ export class TerrainMeshBuilder {
 
     ground.updateVerticesData('position', positions);
     this.recomputeNormals(ground, positions);
+    ground.refreshBoundingInfo();
+    this.rebuildGridOverlay(scene);
   }
 
   private static recomputeNormals(ground: Mesh, positions: number[] | Float32Array): void {

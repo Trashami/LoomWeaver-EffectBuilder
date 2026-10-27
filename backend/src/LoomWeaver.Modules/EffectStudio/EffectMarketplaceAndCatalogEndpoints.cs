@@ -233,9 +233,9 @@ public static class EffectMarketplaceAndCatalogEndpoints
             return Results.Ok(new { members });
         });
 
-        api.MapGet("/spells", async (string? search, int? offset, int? limit, LoomWeaverMySqlRepository mysql, CancellationToken ct) =>
+        api.MapGet("/spells", async (string? search, string? school, string? source, int? level, int? offset, int? limit, LoomWeaverMySqlRepository mysql, CancellationToken ct) =>
         {
-            var lim = Math.Clamp(limit ?? 25, 1, 100);
+            var lim = Math.Clamp(limit ?? 50, 1, 1000);
             var off = Math.Max(0, offset ?? 0);
             var items = new List<object>();
             var total = 0;
@@ -243,31 +243,62 @@ public static class EffectMarketplaceAndCatalogEndpoints
             try
             {
                 await using var db = await mysql.OpenConnectionAsync(ct);
-                var where = string.IsNullOrWhiteSpace(search) ? "" : "WHERE name LIKE @s OR school LIKE @s";
-                await using (var countCmd = new MySqlCommand($"SELECT COUNT(*) FROM jane_scrum.dnd_spells {where}", db))
+                var clauses = new List<string>();
+                if (!string.IsNullOrWhiteSpace(search))
+                    clauses.Add("(name LIKE @s OR school LIKE @s OR source_book LIKE @s)");
+                if (!string.IsNullOrWhiteSpace(school) && !string.Equals(school, "All", StringComparison.OrdinalIgnoreCase))
+                    clauses.Add("LOWER(school) = LOWER(@school)");
+                if (!string.IsNullOrWhiteSpace(source) && !string.Equals(source, "All", StringComparison.OrdinalIgnoreCase))
+                    clauses.Add("LOWER(source_book) = LOWER(@src)");
+                if (level.HasValue && level.Value >= 0)
+                    clauses.Add("level = @lvl");
+
+                var where = clauses.Count > 0 ? "WHERE " + string.Join(" AND ", clauses) : "";
+
+                await using (var countCmd = new MySqlCommand($"SELECT COUNT(*) FROM dnd_spells {where}", db))
                 {
                     if (!string.IsNullOrWhiteSpace(search)) countCmd.Parameters.AddWithValue("@s", $"%{search.Trim()}%");
+                    if (!string.IsNullOrWhiteSpace(school)) countCmd.Parameters.AddWithValue("@school", school.Trim());
+                    if (!string.IsNullOrWhiteSpace(source)) countCmd.Parameters.AddWithValue("@src", source.Trim());
+                    if (level.HasValue) countCmd.Parameters.AddWithValue("@lvl", level.Value);
                     total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct));
                 }
 
                 await using var cmd = new MySqlCommand(
-                    $"SELECT id, name, level, COALESCE(school,'Evocation'), COALESCE(casting_time,'1 Action'), COALESCE(spell_range,'60 feet'), COALESCE(duration,'Instantaneous') FROM jane_scrum.dnd_spells {where} ORDER BY level, name LIMIT @lim OFFSET @off",
+                    $"""
+                    SELECT id, name, level, COALESCE(school,'Evocation'), COALESCE(casting_time,'1 Action'),
+                           COALESCE(range_text, spell_range, '60 feet'), COALESCE(duration_text, duration, 'Instantaneous'),
+                           COALESCE(source_book, 'PHB'), image_path, default_effect_id, effect_json, foundry_json
+                    FROM dnd_spells
+                    {where}
+                    ORDER BY level, name
+                    LIMIT @lim OFFSET @off
+                    """,
                     db);
                 if (!string.IsNullOrWhiteSpace(search)) cmd.Parameters.AddWithValue("@s", $"%{search.Trim()}%");
+                if (!string.IsNullOrWhiteSpace(school)) cmd.Parameters.AddWithValue("@school", school.Trim());
+                if (!string.IsNullOrWhiteSpace(source)) cmd.Parameters.AddWithValue("@src", source.Trim());
+                if (level.HasValue) cmd.Parameters.AddWithValue("@lvl", level.Value);
                 cmd.Parameters.AddWithValue("@lim", lim);
                 cmd.Parameters.AddWithValue("@off", off);
+
                 await using var r = await cmd.ExecuteReaderAsync(ct);
                 while (await r.ReadAsync(ct))
                 {
                     items.Add(new
                     {
-                        id = r.GetInt32(0),
+                        id = Convert.ToInt32(r.GetValue(0)),
                         name = r.GetString(1),
-                        level = r.GetInt32(2),
+                        level = Convert.ToInt32(r.GetValue(2)),
                         school = r.GetString(3),
                         castingTime = r.GetString(4),
                         spellRange = r.GetString(5),
-                        duration = r.GetString(6)
+                        duration = r.GetString(6),
+                        sourceBook = r.GetString(7),
+                        imagePath = r.IsDBNull(8) ? null : r.GetString(8),
+                        defaultEffectId = r.IsDBNull(9) ? null : r.GetString(9),
+                        hasEffect = !r.IsDBNull(10),
+                        hasFoundryData = !r.IsDBNull(11)
                     });
                 }
             }
@@ -288,11 +319,56 @@ public static class EffectMarketplaceAndCatalogEndpoints
                     school = s.School,
                     castingTime = s.CastingTime,
                     spellRange = s.Range,
-                    duration = s.Duration
+                    duration = s.Duration,
+                    sourceBook = "PHB",
+                    imagePath = (string?)"/5etools/spell-art/magic-missile.webp",
+                    defaultEffectId = (string?)$"fx-spell-{s.Name.ToLowerInvariant().Replace(' ', '-')}",
+                    hasEffect = true,
+                    hasFoundryData = true
                 }));
             }
 
             return Results.Ok(new { items, total });
+        });
+
+        api.MapGet("/spells/{id:long}/effect", async (long id, LoomWeaverMySqlRepository mysql, CancellationToken ct) =>
+        {
+            try
+            {
+                await using var db = await mysql.OpenConnectionAsync(ct);
+                await using var cmd = new MySqlCommand(
+                    """
+                    SELECT se.effect_id, se.spell_id, se.spell_name, se.source_book, se.school, se.level,
+                           se.energy_theme, se.delivery_mode, se.is_handcrafted, se.icon_url,
+                           se.studio_document_json, se.vtt_definition_json
+                    FROM dnd_spell_effects se
+                    WHERE se.spell_id = @id
+                    LIMIT 1
+                    """,
+                    db);
+                cmd.Parameters.AddWithValue("@id", id);
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                if (await r.ReadAsync(ct))
+                {
+                    return Results.Ok(new
+                    {
+                        effectId = r.GetString(0),
+                        spellId = Convert.ToInt64(r.GetValue(1)),
+                        spellName = r.GetString(2),
+                        sourceBook = r.GetString(3),
+                        school = r.GetString(4),
+                        level = Convert.ToInt32(r.GetValue(5)),
+                        energyTheme = r.GetString(6),
+                        deliveryMode = r.GetString(7),
+                        isHandcrafted = Convert.ToBoolean(r.GetValue(8)),
+                        iconUrl = r.IsDBNull(9) ? null : r.GetString(9),
+                        studioDocument = JsonDocument.Parse(r.GetString(10)).RootElement,
+                        vttDefinition = JsonDocument.Parse(r.GetString(11)).RootElement
+                    });
+                }
+            }
+            catch { }
+            return Results.NotFound(new { message = $"Spell effect for spell #{id} not found." });
         });
 
         api.MapGet("/assets/library", async (string? search, int? limit, LoomWeaverMySqlRepository mysql, CancellationToken ct) =>

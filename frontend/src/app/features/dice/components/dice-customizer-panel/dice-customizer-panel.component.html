@@ -1,0 +1,273 @@
+<lw-panel
+  title="3D Polyhedral Customizer"
+  subtitle="Size, 3D geometry model, core & number pigments, glow, reflection, crit shaders, and roll audio"
+  [elevated]="true"
+>
+  <div class="customizer-grid">
+    <!-- 1. Dice Size Selector -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">Dice Scale &amp; Mass</span>
+        <lw-badge [label]="(customConfig().sizePreset | uppercase)" tone="emerald" />
+      </div>
+      <div class="size-selector-row">
+        @for (sz of sizePresets; track sz.id) {
+          <button
+            type="button"
+            class="size-pill"
+            [class.active]="customConfig().sizePreset === sz.id"
+            (click)="selectSize(sz.id)"
+          >
+            <strong>{{ sz.label }}</strong>
+            <span>{{ sz.scaleNote }}</span>
+          </button>
+        }
+      </div>
+    </section>
+
+    <!-- 2. 3D Geometry Model Selector -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">3D Polyhedral Model</span>
+        <span class="group-hint">Procedural Chamfer &amp; .GLB Meshes</span>
+      </div>
+      <div class="model-list">
+        @for (model of models(); track model.id) {
+          <div
+            class="model-card"
+            [class.active]="customConfig().modelId === model.id"
+            [class.locked]="!isModelUnlocked(model.id)"
+            (click)="selectModel(model)"
+          >
+            <div class="model-card-top">
+              <strong>{{ model.name }}</strong>
+              @if (isModelUnlocked(model.id)) {
+                <lw-badge
+                  [label]="customConfig().modelId === model.id ? 'Equipped' : 'Owned'"
+                  [tone]="customConfig().modelId === model.id ? 'emerald' : 'neutral'"
+                />
+              } @else {
+                <lw-badge [label]="model.priceLabel" tone="gold" />
+              }
+            </div>
+            <p class="model-desc">{{ model.description }}</p>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- 3. Core Dice Color & Number Color -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">Core Material &amp; Number Inlay Colors</span>
+      </div>
+      <div class="color-pickers-row">
+        <label class="color-field">
+          <span>Core Body Color</span>
+          <div class="color-input-wrap">
+            <input
+              type="color"
+              [value]="customConfig().coreColorHex"
+              (input)="updateColor('coreColorHex', $any($event.target).value)"
+            />
+            <code>{{ customConfig().coreColorHex }}</code>
+          </div>
+          <div class="swatch-strip">
+            @for (hex of quickCoreSwatches; track hex) {
+              <button
+                type="button"
+                class="mini-swatch"
+                [style.background]="hex"
+                (click)="updateColor('coreColorHex', hex)"
+                [title]="hex"
+              ></button>
+            }
+          </div>
+        </label>
+
+        <label class="color-field">
+          <span>Dice Number Color</span>
+          <div class="color-input-wrap">
+            <input
+              type="color"
+              [value]="customConfig().numberColorHex"
+              (input)="updateColor('numberColorHex', $any($event.target).value)"
+            />
+            <code>{{ customConfig().numberColorHex }}</code>
+          </div>
+          <div class="swatch-strip">
+            @for (hex of quickNumberSwatches; track hex) {
+              <button
+                type="button"
+                class="mini-swatch"
+                [style.background]="hex"
+                (click)="updateColor('numberColorHex', hex)"
+                [title]="hex"
+              ></button>
+            }
+          </div>
+        </label>
+
+        <label class="color-field">
+          <span>Number &amp; Vein Glow Color</span>
+          <div class="color-input-wrap">
+            <input
+              type="color"
+              [value]="customConfig().glowColorHex"
+              (input)="updateColor('glowColorHex', $any($event.target).value)"
+            />
+            <code>{{ customConfig().glowColorHex }}</code>
+          </div>
+        </label>
+      </div>
+    </section>
+
+    <!-- 4. 3D Surface Reflection, Glow & Engraving Depth -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">3D Glow, Reflection &amp; Engraving</span>
+      </div>
+      <div class="sliders-stack">
+        <label class="slider-row">
+          <div class="slider-meta">
+            <span>Luminary Glow Intensity</span>
+            <strong>{{ (customConfig().glowIntensity * 100) | number:'1.0-0' }}%</strong>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            [value]="customConfig().glowIntensity"
+            (input)="updateRange('glowIntensity', $event)"
+          />
+        </label>
+
+        <label class="slider-row">
+          <div class="slider-meta">
+            <span>Metallic Specular Reflection</span>
+            <strong>{{ (customConfig().reflectionMetallic * 100) | number:'1.0-0' }}%</strong>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            [value]="customConfig().reflectionMetallic"
+            (input)="updateRange('reflectionMetallic', $event)"
+          />
+        </label>
+
+        <label class="slider-row">
+          <div class="slider-meta">
+            <span>Surface Micro-Roughness</span>
+            <strong>{{ (customConfig().surfaceRoughness * 100) | number:'1.0-0' }}%</strong>
+          </div>
+          <input
+            type="range"
+            min="0.04"
+            max="0.95"
+            step="0.04"
+            [value]="customConfig().surfaceRoughness"
+            (input)="updateRange('surfaceRoughness', $event)"
+          />
+        </label>
+      </div>
+
+      <div class="toggle-pills-row">
+        <button
+          type="button"
+          class="toggle-chip"
+          [class.active]="customConfig().recessedNumbers"
+          (click)="toggleBoolean('recessedNumbers', !customConfig().recessedNumbers)"
+        >
+          {{ customConfig().recessedNumbers ? 'Engraving: Recessed Carve' : 'Engraving: Raised Relief' }}
+        </button>
+        <button
+          type="button"
+          class="toggle-chip"
+          [class.active]="customConfig().veinPulse"
+          (click)="toggleBoolean('veinPulse', !customConfig().veinPulse)"
+        >
+          {{ customConfig().veinPulse ? 'Vein Heartbeat: Active' : 'Vein Heartbeat: Static' }}
+        </button>
+      </div>
+    </section>
+
+    <!-- 5. Nat 20 & Crit Fail 3D Effects -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">Nat 20 &amp; Crit Fail 3D Effects</span>
+      </div>
+      <div class="fx-select-stack">
+        <div class="fx-row">
+          <label class="fx-select-label">
+            <span>Natural 20 Burst Effect</span>
+            <select [value]="customConfig().nat20EffectId" (change)="selectNat20Effect($event)">
+              @for (fx of nat20Effects(); track fx.id) {
+                <option [value]="fx.id">{{ fx.name }}</option>
+              }
+            </select>
+          </label>
+          <lw-button label="Test Nat 20" variant="secondary" size="sm" (pressed)="previewCritEffect.emit('nat20')" />
+        </div>
+
+        <div class="fx-row">
+          <label class="fx-select-label">
+            <span>Critical Fail (Nat 1) Effect</span>
+            <select [value]="customConfig().critFailEffectId" (change)="selectCritFailEffect($event)">
+              @for (fx of critFailEffects(); track fx.id) {
+                <option [value]="fx.id">{{ fx.name }}</option>
+              }
+            </select>
+          </label>
+          <lw-button label="Test Nat 1" variant="secondary" size="sm" (pressed)="previewCritEffect.emit('critfail')" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Roll Audio Synthesizer Profile -->
+    <section class="custom-group">
+      <div class="group-header">
+        <span class="group-label">Roll Collision &amp; Settle Sound</span>
+      </div>
+      <div class="fx-row">
+        <label class="fx-select-label">
+          <span>Acoustic Material Profile</span>
+          <select [value]="customConfig().soundProfileId" (change)="selectSoundProfile($event)">
+            @for (snd of soundProfiles(); track snd.id) {
+              <option [value]="snd.id">{{ snd.name }}</option>
+            }
+          </select>
+        </label>
+        <lw-button
+          label="Test Sound"
+          variant="secondary"
+          size="sm"
+          (pressed)="testSoundRequest.emit(customConfig().soundProfileId)"
+        />
+      </div>
+
+      <label class="slider-row">
+        <div class="slider-meta">
+          <span>Roll SFX Volume</span>
+          <strong>{{ soundMuted() ? 'Muted' : ((soundVolume() * 100) | number:'1.0-0') + '%' }}</strong>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          [value]="soundVolume()"
+          (input)="onVolumeSlider($event)"
+        />
+      </label>
+    </section>
+
+    <!-- Actions Footer -->
+    <div class="customizer-actions">
+      <lw-button label="Reset to Skin Defaults" variant="ghost" size="sm" (pressed)="resetToSkinDefault.emit()" />
+      <lw-button label="Save Active Loadout" variant="primary" size="sm" (pressed)="saveLoadoutRequest.emit()" />
+    </div>
+  </div>
+</lw-panel>

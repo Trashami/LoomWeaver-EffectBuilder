@@ -1,0 +1,142 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "LoomWeaver.Api/1.0.0": {
+        "dependencies": {
+          "LoomWeaver.Domain": "1.0.0",
+          "LoomWeaver.GameSystems": "1.0.0",
+          "LoomWeaver.Infrastructure": "1.0.0",
+          "LoomWeaver.Modules": "1.0.0"
+        },
+        "runtime": {
+          "LoomWeaver.Api.dll": {}
+        }
+      },
+      "Microsoft.Bcl.AsyncInterfaces/5.0.0": {
+        "runtime": {
+          "lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll": {
+            "assemblyVersion": "5.0.0.0",
+            "fileVersion": "5.0.20.51904"
+          }
+        }
+      },
+      "MySqlConnector/2.4.0": {
+        "runtime": {
+          "lib/net9.0/MySqlConnector.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.4.0.0"
+          }
+        }
+      },
+      "Neo4j.Driver/5.27.0": {
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "5.0.0"
+        },
+        "runtime": {
+          "lib/net8.0/Neo4j.Driver.dll": {
+            "assemblyVersion": "5.27.38.0",
+            "fileVersion": "5.27.0.0"
+          }
+        }
+      },
+      "LoomWeaver.Domain/1.0.0": {
+        "runtime": {
+          "LoomWeaver.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "LoomWeaver.GameSystems/1.0.0": {
+        "dependencies": {
+          "LoomWeaver.Domain": "1.0.0"
+        },
+        "runtime": {
+          "LoomWeaver.GameSystems.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "LoomWeaver.Infrastructure/1.0.0": {
+        "dependencies": {
+          "LoomWeaver.Domain": "1.0.0",
+          "MySqlConnector": "2.4.0",
+          "Neo4j.Driver": "5.27.0"
+        },
+        "runtime": {
+          "LoomWeaver.Infrastructure.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "LoomWeaver.Modules/1.0.0": {
+        "dependencies": {
+          "LoomWeaver.Domain": "1.0.0",
+          "LoomWeaver.GameSystems": "1.0.0",
+          "LoomWeaver.Infrastructure": "1.0.0"
+        },
+        "runtime": {
+          "LoomWeaver.Modules.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "LoomWeaver.Api/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Microsoft.Bcl.AsyncInterfaces/5.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-W8DPQjkMScOMTtJbPwmPyj9c3zYSFGawDW3jwlBOOsnY+EzZFLgNQ/UMkK35JmkNOVPdCyPr2Tw7Vv9N+KA3ZQ==",
+      "path": "microsoft.bcl.asyncinterfaces/5.0.0",
+      "hashPath": "microsoft.bcl.asyncinterfaces.5.0.0.nupkg.sha512"
+    },
+    "MySqlConnector/2.4.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-78M+gVOjbdZEDIyXQqcA7EYlCGS3tpbUELHvn6638A2w0pkPI625ixnzsa5staAd3N9/xFmPJtkKDYwsXpFi/w==",
+      "path": "mysqlconnector/2.4.0",
+      "hashPath": "mysqlconnector.2.4.0.nupkg.sha512"
+    },
+    "Neo4j.Driver/5.27.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bIjjXvlldC4bDTy7sKif45br+EWC47p/pcXEVwo56SGFDJ0Gob9edi30nQY1Y4yAmEjepa4rIPICq6JjlyDUuQ==",
+      "path": "neo4j.driver/5.27.0",
+      "hashPath": "neo4j.driver.5.27.0.nupkg.sha512"
+    },
+    "LoomWeaver.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "LoomWeaver.GameSystems/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "LoomWeaver.Infrastructure/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "LoomWeaver.Modules/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

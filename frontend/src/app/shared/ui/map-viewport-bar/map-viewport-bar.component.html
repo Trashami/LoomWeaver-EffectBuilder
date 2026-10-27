@@ -7,7 +7,7 @@
       [class.lw-viewport-bar__mode-btn--active]="activeView() === 'top-down'"
       (click)="selectView('top-down')"
     >
-      <lw-icon name="grid_view" [size]="15" />
+      <lw-icon name="grid_view" [size]="14" />
       <span>Top Down</span>
     </button>
 
@@ -18,7 +18,7 @@
       [class.lw-viewport-bar__mode-btn--active]="activeView() === 'isometric'"
       (click)="selectView('isometric')"
     >
-      <lw-icon name="view_in_ar" [size]="15" />
+      <lw-icon name="view_in_ar" [size]="14" />
       <span>Isometric</span>
     </button>
 
@@ -29,7 +29,7 @@
       [class.lw-viewport-bar__mode-btn--active]="activeView() === 'first-person'"
       (click)="selectView('first-person')"
     >
-      <lw-icon name="visibility" [size]="15" />
+      <lw-icon name="visibility" [size]="14" />
       <span>First Person</span>
     </button>
 
@@ -41,7 +41,7 @@
       (click)="selectView('real-2d')"
       title="Low-power authoritative 2D canvas renderer"
     >
-      <lw-icon name="map" [size]="15" />
+      <lw-icon name="map" [size]="14" />
       <span>Real 2D</span>
     </button>
 
@@ -53,12 +53,12 @@
       (click)="selectView('split-2d-3d')"
       title="Simultaneous 2D and 3D synchronized viewports"
     >
-      <lw-icon name="vertical_split" [size]="15" />
+      <lw-icon name="vertical_split" [size]="14" />
       <span>2D + 3D Split</span>
     </button>
   </div>
 
-  <div class="lw-viewport-bar__group lw-viewport-bar__group--selectors">
+  <div class="lw-viewport-bar__group lw-viewport-bar__group--right">
     <label class="lw-viewport-bar__select-pill">
       <span class="lw-viewport-bar__select-label">Theme:</span>
       <select
@@ -87,33 +87,20 @@
       </select>
       <span class="lw-viewport-bar__fps-badge">{{ fps() }} FPS</span>
     </label>
-  </div>
 
-  <div class="lw-viewport-bar__group lw-viewport-bar__group--right">
-    <button
-      ngpButton
-      type="button"
-      class="lw-viewport-bar__toggle-pill"
-      [class.lw-viewport-bar__toggle-pill--active]="showPlayerSafeOnly()"
-      (click)="playerSafeToggle.emit()"
-      title="Preview player-safe view (hides GM secret geometry and discoveries)"
-    >
-      <lw-icon [name]="showPlayerSafeOnly() ? 'lock' : 'lock_open'" [size]="14" />
-      <span>{{ showPlayerSafeOnly() ? 'Player Safe View' : 'GM Full Canon' }}</span>
-    </button>
-
-    <label class="lw-viewport-bar__select-pill">
-      <lw-icon name="grid_4x4" [size]="14" />
+    <label class="lw-viewport-bar__select-pill" title="Select 5ft Squares, 10ft Squares, Hex Grid, or Hide Grid">
+      <lw-icon name="grid_4x4" [size]="13" />
       <span class="lw-viewport-bar__select-label">Grid:</span>
       <select
         class="lw-viewport-bar__select"
         [value]="gridSize()"
         (change)="onGridSizeSelect($event)"
-        aria-label="Grid Scale"
+        aria-label="Grid Mode"
       >
-        <option value="5 ft">5 ft</option>
-        <option value="10 ft">10 ft</option>
-        <option value="Hex">Hex</option>
+        <option value="5 ft">5 ft Squares</option>
+        <option value="10 ft">10 ft Squares</option>
+        <option value="Hex">Hex Grid</option>
+        <option value="Off">Hide Grid (Off)</option>
       </select>
     </label>
 
@@ -124,8 +111,20 @@
       [class.lw-viewport-bar__toggle-pill--active]="snapEnabled()"
       (click)="snapToggle.emit()"
     >
-      <lw-icon name="straighten" [size]="14" />
+      <lw-icon name="straighten" [size]="13" />
       <span>Snap: {{ snapEnabled() ? 'On' : 'Off' }}</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-viewport-bar__toggle-pill"
+      [class.lw-viewport-bar__toggle-pill--active]="showPlayerSafeOnly()"
+      (click)="playerSafeToggle.emit()"
+      title="Preview player-safe view (hides GM secret geometry and discoveries)"
+    >
+      <lw-icon [name]="showPlayerSafeOnly() ? 'lock' : 'lock_open'" [size]="13" />
+      <span>{{ showPlayerSafeOnly() ? 'Player Safe' : 'GM Full Canon' }}</span>
     </button>
   </div>
 </footer>

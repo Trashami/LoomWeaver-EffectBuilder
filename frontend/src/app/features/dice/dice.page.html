@@ -1,132 +1,219 @@
-<div class="lw-dice-page">
-  <lw-panel
-    eyebrow="Module 6 · Babylon.js 3D Polyhedral Renderer + .NET Cryptographic Entropy"
-    title="3D Dice Forge & Shader Lab"
-    subtitle="Customize PBR polyhedral materials, trigger Nat 20 / Nat 1 3D burst shaders, and execute SHA-256 verified server rolls."
-    [elevated]="true"
-  >
-    <div panelActions class="lw-dice-page__actions">
-      <lw-button variant="ghost" (pressed)="toggleReducedMotion()">
-        {{ reducedMotion() ? 'Motion: Reduced' : 'Motion: Full 3D Tumble' }}
-      </lw-button>
-      <a routerLink="/arcane-screen" class="lw-link-reset">
-        <lw-button variant="secondary" icon="Swords">Send Set to VTT</lw-button>
-      </a>
-      <a routerLink="/statistics" class="lw-link-reset">
-        <lw-button variant="primary" icon="BarChart3">Inspect Roll Telemetry</lw-button>
-      </a>
+<section class="dice-forge-page">
+  <header class="dice-header">
+    <div>
+      <span class="eyebrow">STAGE 4 · BABYLON.JS 3D POLYHEDRAL DICE FORGE &amp; VAULT</span>
+      <h1>3D Dice Forge &amp; Customizer</h1>
+      <p>
+        Server-authoritative cryptographic rolls paired with modular 3D polyhedral models, procedural &amp; PBR skins,
+        custom core/number/glow pigments, Nat 20 &amp; Crit Fail shaders, and reward/store unlocks.
+      </p>
     </div>
 
-    <div class="lw-dice-page__workspace">
-      <div class="lw-dice-page__stage-col">
-        <div class="lw-dice-page__viewport-wrap">
-          <canvas #diceCanvas class="lw-dice-page__canvas" aria-label="Babylon.js 3D Dice Forge Viewport"></canvas>
-          <div class="lw-dice-page__viewport-hud">
-            <lw-badge [label]="activeSkin().name" tone="gold" />
-            <lw-badge [label]="'Nat 20 FX: ' + activeSkin().nat20ShaderName" tone="emerald" />
-            <lw-badge [label]="'Nat 1 FX: ' + activeSkin().nat1ShaderName" tone="crimson" />
-          </div>
-        </div>
-
-        <lw-dice-roller-tray
-          [activeSkinName]="activeSkin().name"
-          (rollRequested)="handleTrayRoll($event)"
-        />
-
-        <div class="lw-dice-page__quick-bar">
-          <lw-button
-            variant="primary"
-            icon="Dices"
-            (pressed)="triggerSignaturePreset(20, 1, 8, 'Fivi Slingshot Tooth Strike', 'advantage')"
-          >
-            Roll 1d20+8 (ADV · Fivi Slingshot)
-          </lw-button>
-          <lw-button
-            variant="secondary"
-            icon="Swords"
-            (pressed)="triggerSignaturePreset(6, 2, 5, 'Munk Greatsword Cleave')"
-          >
-            Roll 2d6+5 (Munk Greatsword)
-          </lw-button>
-          <lw-button
-            variant="secondary"
-            (pressed)="triggerSignaturePreset(8, 3, 6, 'Kildrid Luminary Ward Pulse')"
-          >
-            Roll 3d8+6 (Kildrid Ward)
-          </lw-button>
-        </div>
+    <div class="header-metrics">
+      <div class="metric-pill gold">
+        <span>Loommarks Vault</span>
+        <strong>{{ loommarksBalance() | number }} Marks</strong>
+        <small>+15 per roll · +35 on Nat 20</small>
       </div>
+      <div class="metric-pill emerald">
+        <span>Equipped 3D Model</span>
+        <strong>{{ activeModel().name }}</strong>
+        <small>{{ customConfig().sizePreset | uppercase }} Scale · {{ activeSkin().name }}</small>
+      </div>
+    </div>
+  </header>
 
-      <div class="lw-dice-page__inspector-col">
-        <div class="lw-dice-page__customizer">
-          <h4>PBR Material & Rune Customizer</h4>
-          <div class="lw-dice-page__color-row">
-            <label>
-              <span>Base Albedo</span>
-              <input type="color" [value]="customBaseHex()" (input)="onBaseHexInput($event)" />
-            </label>
-            <label>
-              <span>Emissive Rune Glow</span>
-              <input type="color" [value]="customRuneHex()" (input)="onRuneHexInput($event)" />
-            </label>
-            <label class="lw-dice-page__slider-label">
-              <span>Metallic Specular ({{ (customMetallic() * 100).toFixed(0) }}%)</span>
-              <input
-                type="range"
-                min="0.1"
-                max="1"
-                step="0.04"
-                [value]="customMetallic()"
-                (input)="onMetallicInput($event)"
-              />
-            </label>
-          </div>
+  @if (statusBanner(); as banner) {
+    <div class="status-banner" role="status">
+      <span>{{ banner }}</span>
+      <button type="button" class="dismiss-btn" (click)="statusBanner.set(null)">Dismiss</button>
+    </div>
+  }
 
-          <div class="lw-dice-page__skin-list">
-            @for (skin of skins(); track skin.id) {
+  <div class="dice-forge-layout">
+    <!-- Left Column: Interactive Babylon.js 3D Stage + Tray + Campaign Milestones -->
+    <div class="stage-column">
+      <lw-panel
+        title="Interactive 3D Polyhedral Arena"
+        subtitle="Orbit camera with mouse/touch · Click any quick-die or roll formula to launch 3D physics trajectory"
+        [elevated]="true"
+      >
+        <div class="stage-toolbar">
+          <div class="focus-die-pills">
+            @for (dieOpt of dieFocusOptions; track dieOpt) {
               <button
                 type="button"
-                class="lw-dice-page__skin-card"
-                [class.lw-dice-page__skin-card--active]="activeSkinId() === skin.id"
-                (click)="selectSkin(skin)"
+                class="focus-pill"
+                [class.active]="focusDie() === dieOpt"
+                (click)="setFocusDie(dieOpt)"
               >
-                <div class="lw-dice-page__skin-swatches">
-                  <span class="lw-dice-page__swatch" [style.background]="skin.baseColorHex"></span>
-                  <span class="lw-dice-page__swatch" [style.background]="skin.runeColorHex"></span>
-                </div>
-                <div class="lw-dice-page__skin-info">
-                  <strong>{{ skin.name }}</strong>
-                  <span>{{ skin.materialType }} · {{ skin.unlockTier }}</span>
-                </div>
+                {{ dieOpt === 'all' ? 'Full Set (6)' : (dieOpt | uppercase) }}
               </button>
             }
           </div>
+
+          <div class="stage-quick-fx">
+            <lw-button label="Preview Nat 20 FX" variant="secondary" size="sm" (pressed)="previewCritEffect('nat20')" />
+            <lw-button label="Preview Crit Fail FX" variant="secondary" size="sm" (pressed)="previewCritEffect('critfail')" />
+          </div>
         </div>
 
-        <div class="lw-dice-page__ledger">
-          <h4>Authoritative Cryptographic Roll Ledger</h4>
-          @for (roll of rollHistory(); track roll.id) {
+        <div class="canvas-stage-wrapper">
+          <canvas #diceStageCanvas class="babylon-dice-canvas"></canvas>
+
+          @if (lastRoll(); as latest) {
             <div
-              class="lw-dice-page__roll-card"
-              [class.lw-dice-page__roll-card--nat20]="roll.isNat20"
-              [class.lw-dice-page__roll-card--nat1]="roll.isNat1"
+              class="stage-roll-overlay"
+              [class.crit-success]="latest.isCriticalSuccess"
+              [class.crit-fail]="latest.isCriticalFailure"
             >
-              <div class="lw-dice-page__roll-main">
-                <strong>{{ roll.formula }} · {{ roll.label }}</strong>
-                <span>
-                  Kept: [{{ roll.keptRolls.join(', ') }}]
-                  @if (roll.rawRolls.length !== roll.keptRolls.length) {
-                    (Raw Pool: [{{ roll.rawRolls.join(', ') }}])
-                  }
-                  · {{ roll.shaderTriggered }}
-                </span>
-                <code class="lw-dice-page__digest">{{ roll.verificationDigest }}</code>
+              <div class="overlay-top">
+                <span class="overlay-label">{{ latest.label }}</span>
+                <lw-badge
+                  [label]="latest.isCriticalSuccess ? 'NATURAL 20' : latest.isCriticalFailure ? 'CRITICAL FAIL' : latest.expression"
+                  [tone]="latest.isCriticalSuccess ? 'gold' : latest.isCriticalFailure ? 'crimson' : 'emerald'"
+                />
               </div>
-              <div class="lw-dice-page__roll-total">{{ roll.total }}</div>
+              <div class="overlay-Main">
+                <strong class="overlay-total">{{ latest.total }}</strong>
+                <span class="overlay-breakdown">
+                  Rolls: [{{ latest.diceResults.join(', ') }}]
+                  @if (latest.modifier !== 0) {
+                    · Mod {{ latest.modifier > 0 ? '+' + latest.modifier : latest.modifier }}
+                  }
+                </span>
+              </div>
+              <code class="overlay-hash">{{ latest.sha256Hash }}</code>
             </div>
           }
         </div>
-      </div>
+      </lw-panel>
+
+      <lw-dice-roller-tray
+        [activeSkinName]="activeSkin().name + ' · ' + (customConfig().sizePreset | uppercase)"
+        (rollRequested)="executeAuthoritativeRoll($event)"
+      />
+
+      <!-- Campaign Milestone Rewards Strip -->
+      <lw-panel
+        title="Campaign Milestone Dice Rewards"
+        subtitle="Earn exclusive dice skins and 3D forge models by completing campaign achievements"
+      >
+        <div class="milestones-grid">
+          @for (ms of milestones(); track ms.id) {
+            <div class="milestone-card" [class.claimed]="ms.isClaimed">
+              <div class="milestone-top">
+                <strong>{{ ms.title }}</strong>
+                <lw-badge
+                  [label]="ms.isClaimed ? 'Claimed' : '+' + ms.bonusLoommarks + ' Marks'"
+                  [tone]="ms.isClaimed ? 'emerald' : 'gold'"
+                />
+              </div>
+              <p>{{ ms.description }}</p>
+              <div class="milestone-footer">
+                <span class="reward-target">Reward: {{ ms.targetItemName }}</span>
+                @if (!ms.isClaimed) {
+                  <lw-button label="Claim Reward" variant="primary" size="sm" (pressed)="claimMilestoneReward(ms)" />
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </lw-panel>
     </div>
-  </lw-panel>
-</div>
+
+    <!-- Right Column: Skin Vault & Purchase/Reward Store + Full 3D Customizer -->
+    <div class="controls-column">
+      <lw-panel
+        title="Skin Vault &amp; Reward Store"
+        subtitle="Equip owned skins, claim milestone rewards, or unlock sets with Loommarks"
+        [elevated]="true"
+      >
+        <div class="vault-filter-tabs">
+          <button
+            type="button"
+            class="vault-tab"
+            [class.active]="vaultFilter() === 'all'"
+            (click)="vaultFilter.set('all')"
+          >
+            All ({{ skinCatalog().length }})
+          </button>
+          <button
+            type="button"
+            class="vault-tab"
+            [class.active]="vaultFilter() === 'owned'"
+            (click)="vaultFilter.set('owned')"
+          >
+            Owned ({{ unlockedSkinIds().length }})
+          </button>
+          <button
+            type="button"
+            class="vault-tab"
+            [class.active]="vaultFilter() === 'rewards'"
+            (click)="vaultFilter.set('rewards')"
+          >
+            Rewards &amp; Marks
+          </button>
+          <button
+            type="button"
+            class="vault-tab"
+            [class.active]="vaultFilter() === 'store'"
+            (click)="vaultFilter.set('store')"
+          >
+            Vault Store
+          </button>
+        </div>
+
+        <div class="skin-vault-grid">
+          @for (skin of filteredSkins(); track skin.id) {
+            <div
+              class="skin-card"
+              [class.active]="activeSkin().id === skin.id"
+              [class.locked]="!isSkinUnlocked(skin.id)"
+              (click)="selectOrUnlockSkin(skin)"
+            >
+              <div class="skin-swatch-orb" [style.background]="skin.baseColor" [style.borderColor]="skin.accentColor">
+                <span class="orb-num" [style.color]="skin.textColor">20</span>
+              </div>
+
+              <div class="skin-meta">
+                <div class="skin-title-row">
+                  <strong>{{ skin.name }}</strong>
+                  @if (isSkinUnlocked(skin.id)) {
+                    <lw-badge
+                      [label]="activeSkin().id === skin.id ? 'Equipped' : 'Unlocked'"
+                      [tone]="activeSkin().id === skin.id ? 'emerald' : 'neutral'"
+                    />
+                  } @else {
+                    <lw-badge [label]="skin.priceLabel" tone="gold" />
+                  }
+                </div>
+                <span class="skin-family">{{ skin.materialFamily }} · {{ skin.rarity }}</span>
+                <p class="skin-tagline">{{ skin.tagline }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </lw-panel>
+
+      <lw-dice-customizer-panel
+        [customConfig]="customConfig()"
+        [models]="modelCatalog()"
+        [unlockedModelIds]="unlockedModelIds()"
+        [nat20Effects]="nat20Effects()"
+        [critFailEffects]="critFailEffects()"
+        [soundProfiles]="soundProfiles()"
+        [soundVolume]="soundService.volume()"
+        [soundMuted]="soundService.muted()"
+        (configChange)="applyCustomChange($event)"
+        (unlockModelRequest)="unlockModelFromPanel($event)"
+        (previewCritEffect)="previewCritEffect($event)"
+        (testSoundRequest)="testRollSound($event)"
+        (volumeChange)="soundService.setVolume($event)"
+        (muteToggle)="soundService.setMuted(!soundService.muted())"
+        (resetToSkinDefault)="resetCustomToSkinDefaults()"
+        (saveLoadoutRequest)="saveActiveLoadout()"
+      />
+    </div>
+  </div>
+</section>

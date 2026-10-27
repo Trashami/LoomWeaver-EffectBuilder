@@ -297,3 +297,86 @@
   color: #eef7f2; font-size: 0.8rem; outline: none;
   &:focus { border-color: #49e892; }
 }
+
+.lw-char-sheet__spell-group-block {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.65rem; border-radius: 9px;
+  border: 1px solid rgba(55, 110, 84, 0.3); background: rgba(6, 16, 12, 0.78);
+}
+
+.lw-char-sheet__prep-pill {
+  display: inline-block; margin-left: 0.4rem; padding: 0.08rem 0.48rem;
+  border-radius: 999px; font-size: 0.66rem; font-weight: 600;
+  border: 1px solid rgba(217, 183, 122, 0.35); background: rgba(217, 183, 122, 0.12); color: #e8cd96;
+  &.is-prepared { border-color: rgba(73, 232, 146, 0.5); background: rgba(73, 232, 146, 0.16); color: #49e892; }
+}
+
+.lw-char-sheet__inline-btns { display: inline-flex; gap: 0.35rem; flex-shrink: 0; align-items: center; }
+
+.lw-char-sheet__equip-badge.is-remove {
+  border-color: rgba(255, 110, 110, 0.4); color: #ff9898;
+}
+
+.lw-char-sheet__rich-note-card {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.85rem 1rem; border-radius: 10px;
+  border: 1px solid rgba(217, 183, 122, 0.32); background: rgba(8, 22, 16, 0.88);
+}
+
+.lw-char-sheet__rich-note-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  strong { font-size: 0.92rem; color: #f6ead2; }
+}
+
+.lw-char-sheet__rich-note-body {
+  font-size: 0.84rem; line-height: 1.52; color: #e2eee7;
+}
+
+.lw-char-sheet__scope-badge {
+  padding: 0.14rem 0.55rem; border-radius: 999px; font-size: 0.68rem; font-weight: 700;
+  background: rgba(217, 183, 122, 0.16); border: 1px solid rgba(217, 183, 122, 0.4); color: #f0d59c;
+  &[data-scope='global'] { background: rgba(73, 232, 146, 0.16); border-color: rgba(73, 232, 146, 0.48); color: #49e892; }
+}
+
+.lw-char-sheet__met-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;
+}
+
+.lw-char-sheet__met-card {
+  text-align: left; display: flex; flex-direction: column; gap: 0.4rem;
+  padding: 0.85rem 0.95rem; border-radius: 10px;
+  border: 1px solid rgba(55, 110, 84, 0.38); background: rgba(8, 21, 16, 0.86);
+  color: #e9f3ee; cursor: pointer; transition: border-color 140ms ease, transform 140ms ease;
+  &:hover { border-color: #49e892; transform: translateY(-1px); }
+  h3 { margin: 0; font-family: var(--lw-font-display, Georgia, serif); font-size: 1rem; color: #f6ead2; }
+}
+
+.lw-char-sheet__met-card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.lw-char-sheet__met-role { margin: 0; font-size: 0.74rem; color: #d9b77a; font-weight: 600; }
+.lw-char-sheet__met-summary { margin: 0; font-size: 0.78rem; color: #b5c8be; line-height: 1.42; }
+.lw-char-sheet__met-cta { font-size: 0.74rem; font-weight: 700; color: #49e892; margin-top: auto; }
+.lw-char-sheet__hist-desc { margin: 0.2rem 0 0; font-size: 0.78rem; color: #c4d5cc; line-height: 1.4; }
+
+.lw-char-sheet__modal-backdrop {
+  position: fixed; inset: 0; z-index: 1150;
+  background: rgba(3, 9, 7, 0.82); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+}
+
+.lw-char-sheet__modal-card {
+  width: min(560px, 95vw); display: flex; flex-direction: column; gap: 0.65rem;
+  padding: 1.25rem 1.4rem; border-radius: 12px;
+  border: 1px solid rgba(217, 183, 122, 0.42); background: rgba(7, 19, 14, 0.98);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.78); color: #eef6f1;
+  &--large { width: min(740px, 95vw); }
+  h2 { margin: 0; font-family: var(--lw-font-display, Georgia, serif); font-size: 1.25rem; color: #f6ead2; }
+  p { margin: 0; font-size: 0.85rem; line-height: 1.5; }
+}
+
+.lw-char-sheet__modal-kicker { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; color: #49e892; }
+.lw-char-sheet__modal-badge {
+  align-self: flex-start; padding: 0.25rem 0.65rem; border-radius: 999px;
+  background: rgba(217, 183, 122, 0.16); border: 1px solid rgba(217, 183, 122, 0.45);
+  color: #f3d99f; font-size: 0.76rem; font-weight: 700;
+}
+.lw-char-sheet__modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 0.35rem; }

@@ -11,14 +11,125 @@
   overflow: hidden;
   border: 1px solid rgba(217, 183, 122, 0.32);
   background: radial-gradient(circle at 50% 25%, rgba(73, 232, 146, 0.1), #040b08 78%);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+
+  &--3d {
+    cursor: ew-resize;
+  }
+
+  &--dragging {
+    cursor: grabbing;
+  }
+
+  &:hover .lw-portrait-stage__toolbar {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .lw-portrait-stage__img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center top;
+  object-position: 50% 15%;
+  transform-origin: center center;
   display: block;
+  pointer-events: none;
+}
+
+.lw-portrait-stage__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+}
+
+.lw-portrait-stage__status {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  z-index: 2;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(73, 232, 146, 0.45);
+  background: rgba(5, 16, 12, 0.88);
+  color: #b7f5d2;
+  font-size: 0.7rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.lw-portrait-stage__toolbar {
+  position: absolute;
+  left: 0.55rem;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.36rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(73, 232, 146, 0.35);
+  background: rgba(5, 15, 11, 0.88);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.lw-portrait-stage--dragging .lw-portrait-stage__toolbar {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.lw-portrait-stage__hint {
+  font-size: 0.7rem;
+  color: #c5ddd0;
+  font-weight: 500;
+}
+
+.lw-portrait-stage__slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+
+  span {
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: #d9b77a;
+  }
+
+  input[type='range'] {
+    width: 100%;
+    accent-color: #49e892;
+    cursor: pointer;
+    height: 4px;
+  }
+}
+
+.lw-portrait-stage__reset-btn {
+  padding: 0.2rem 0.48rem;
+  border-radius: 5px;
+  border: 1px solid rgba(217, 183, 122, 0.45);
+  background: rgba(217, 183, 122, 0.14);
+  color: #f4e2b6;
+  font-size: 0.66rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: #49e892;
+    color: #ffffff;
+  }
 }
 
 .lw-portrait-stage__edit-btn {
@@ -57,6 +168,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  cursor: default;
 }
 
 .lw-portrait-stage__overlay-head {

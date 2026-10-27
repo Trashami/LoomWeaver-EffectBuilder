@@ -1,0 +1,46 @@
+@if (visible() && message()) {
+  <div
+    class="lw-toast"
+    [class.lw-toast--emerald]="variant() === 'emerald'"
+    [class.lw-toast--gold]="variant() === 'gold'"
+    [class.lw-toast--info]="variant() === 'info'"
+    [class.lw-toast--danger]="variant() === 'danger'"
+    [class.lw-toast--bottom-right]="position() === 'bottom-right'"
+    [class.lw-toast--top-right]="position() === 'top-right'"
+    [class.lw-toast--bottom-left]="position() === 'bottom-left'"
+    [class.lw-toast--top-center]="position() === 'top-center'"
+    [style.max-width]="maxWidth()"
+    role="status"
+    aria-live="polite"
+    (click)="dismissible() ? dismiss() : null"
+  >
+    <div class="lw-toast__content">
+      <div class="lw-toast__body">
+        @if (title()) {
+          <strong class="lw-toast__title">{{ title() }}</strong>
+        }
+        <span class="lw-toast__message">{{ message() }}</span>
+      </div>
+
+      @if (dismissible()) {
+        <button
+          type="button"
+          class="lw-toast__close"
+          aria-label="Dismiss notification"
+          (click)="dismiss(); $event.stopPropagation()"
+        >
+          <lw-icon name="close" [size]="13" />
+        </button>
+      }
+    </div>
+
+    @if (showProgress() && autoHide() && durationMs() > 0) {
+      <div class="lw-toast__progress-track">
+        <div
+          class="lw-toast__progress-bar"
+          [style.animation-duration.ms]="durationMs()"
+        ></div>
+      </div>
+    }
+  </div>
+}

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgpButton } from 'ng-primitives/button';
-import { LwBadgeComponent } from '../badge/badge.component';
 import { LwIconComponent } from '../icon/icon.component';
 import { LwMapDimensionMode } from '../map-studio-landing/map-studio-landing.component';
 
@@ -11,7 +10,7 @@ export type MapSceneScopeMode = 'battlemap' | 'world_overlay';
 @Component({
   selector: 'lw-map-studio-subbar',
   standalone: true,
-  imports: [FormsModule, NgpButton, LwBadgeComponent, LwIconComponent],
+  imports: [FormsModule, NgpButton, LwIconComponent],
   templateUrl: './map-studio-subbar.component.html',
   styleUrl: './map-studio-subbar.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

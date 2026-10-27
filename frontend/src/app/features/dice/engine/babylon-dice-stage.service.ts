@@ -1,279 +1,317 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable, NgZone } from '@angular/core';
 import {
-  ArcRotateCamera,
-  Color3,
-  Color4,
-  Engine,
-  HemisphericLight,
-  Mesh,
-  MeshBuilder,
-  PointLight,
-  Scene,
-  StandardMaterial,
-  Vector3,
+  ArcRotateCamera, Color3, Color4, DirectionalLight, Engine, GlowLayer,
+  HemisphericLight, Mesh, MeshBuilder, PointLight, Scene, StandardMaterial, Vector3
 } from '@babylonjs/core';
+import { DiceSoundService } from './audio';
+import {
+  createDieTrajectoryPlan, createFloatingResultBadge,
+  DiePhysicsTrajectoryPlan, evaluateDieTrajectoryStep
+} from './dice-physics-trajectory';
+import { DiceCritEffectsRunner, resolveCritFailEffect, resolveNat20Effect } from './effects';
+import {
+  applyVeinPulseToDieMaterials, buildBabylonPolyhedralDie, BuiltBabylonDieInstance,
+  disposeDieMaterials, hexToColor3, preloadDiceSurfaceAssets
+} from './materials';
+import {
+  DICE_SIZE_SCALE_MAP, DicePolyhedronType, FACE_VALUES,
+  getRotationForTopValue, resolveDiceModel
+} from './models';
+import {
+  createDefaultRuntimeConfigFromSkin, DiceCustomRuntimeConfig,
+  DiceSkinConfig, resolveDiceSkin
+} from './skins';
 
-export interface DiceStageSkinConfig {
-  readonly baseColorHex: string;
-  readonly runeColorHex: string;
-  readonly metallic: number;
-  readonly roughness: number;
+export interface DiceSkinPresetPayload {
+  id: string;
+  name: string;
+  materialFamily: string;
+  baseColorHex: string;
+  accentColorHex: string;
+  roughness: number;
+  metalness: number;
+  particleColorHex: string;
 }
+
+const SHOWCASE_DIE_TYPES: DicePolyhedronType[] = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'];
 
 @Injectable({ providedIn: 'root' })
 export class BabylonDiceStageService {
+  private readonly ngZone = inject(NgZone);
+  private readonly soundService = inject(DiceSoundService);
+  private readonly critEffectsRunner = new DiceCritEffectsRunner();
+
   private engine: Engine | null = null;
   private scene: Scene | null = null;
-  private diceMeshes: Mesh[] = [];
-  private fxMeshes: Mesh[] = [];
-  private activeSkin: DiceStageSkinConfig = {
-    baseColorHex: '#17151c',
-    runeColorHex: '#e5b85c',
-    metallic: 0.82,
-    roughness: 0.22,
-  };
+  private glowLayer: GlowLayer | null = null;
+  private accentPointLight: PointLight | null = null;
+  private trayRimMat: StandardMaterial | null = null;
 
-  initializeStage(canvas: HTMLCanvasElement): void {
+  private activeDice: BuiltBabylonDieInstance[] = [];
+  private activeBadges: Mesh[] = [];
+  private currentSkin: DiceSkinConfig = resolveDiceSkin('skin-obsidian-gold');
+  private currentCustom: DiceCustomRuntimeConfig = createDefaultRuntimeConfigFromSkin(this.currentSkin);
+  private focusDieType: DicePolyhedronType | 'all' = 'all';
+  private isRolling = false;
+  private rollAnimationTimer: number | null = null;
+  private resizeHandler = () => this.engine?.resize();
+
+  mountStage(canvas: HTMLCanvasElement, initialSkinIdOrPreset?: string | DiceSkinPresetPayload): void {
     this.dispose();
-    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
-    this.scene = new Scene(this.engine);
-    this.scene.clearColor = new Color4(0.05, 0.05, 0.08, 1);
+    const skinId = typeof initialSkinIdOrPreset === 'string' ? initialSkinIdOrPreset : initialSkinIdOrPreset?.id;
+    this.currentSkin = resolveDiceSkin(skinId);
+    this.currentCustom = createDefaultRuntimeConfigFromSkin(this.currentSkin);
 
-    const camera = new ArcRotateCamera(
-      'diceForgeCam',
-      -Math.PI / 2,
-      Math.PI / 3.1,
-      14,
-      Vector3.Zero(),
-      this.scene,
-    );
-    camera.lowerRadiusLimit = 8;
-    camera.upperRadiusLimit = 22;
-    camera.attachControl(canvas, true);
+    this.ngZone.runOutsideAngular(() => {
+      this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true });
+      const scene = new Scene(this.engine);
+      scene.clearColor = new Color4(0.02, 0.055, 0.042, 1.0);
+      this.scene = scene;
 
-    const hemi = new HemisphericLight('diceHemi', new Vector3(0, 1, 0), this.scene);
-    hemi.intensity = 0.85;
-    hemi.groundColor = new Color3(0.1, 0.08, 0.14);
+      const camera = new ArcRotateCamera('lw-dice-cam', -Math.PI / 2, Math.PI / 3.05, 12.4, new Vector3(0, 0.45, 0), scene);
+      camera.lowerRadiusLimit = 6.5;
+      camera.upperRadiusLimit = 20.0;
+      camera.lowerBetaLimit = 0.25;
+      camera.upperBetaLimit = Math.PI / 2.15;
+      camera.wheelPrecision = 36;
+      camera.attachControl(canvas, true);
 
-    const keyLight = new PointLight('diceKey', new Vector3(5, 9, -4), this.scene);
-    keyLight.intensity = 1.15;
-    keyLight.diffuse = Color3.FromHexString('#ffe299');
+      const hemi = new HemisphericLight('lw-dice-hemi', new Vector3(0, 1, 0), scene);
+      hemi.intensity = 0.86;
+      hemi.groundColor = new Color3(0.04, 0.1, 0.08);
 
-    this.buildOctagonalTray();
-    this.spawnShowcaseSet();
+      const dirLight = new DirectionalLight('lw-dice-dir', new Vector3(-0.45, -1, 0.35), scene);
+      dirLight.position = new Vector3(6, 12, -6);
+      dirLight.intensity = 1.15;
 
-    this.engine.runRenderLoop(() => {
-      this.scene?.render();
+      const pointLight = new PointLight('lw-dice-accent', new Vector3(0, 6.5, 0), scene);
+      pointLight.intensity = 0.85;
+      pointLight.diffuse = hexToColor3(this.currentCustom.glowColorHex);
+      this.accentPointLight = pointLight;
+
+      this.glowLayer = new GlowLayer('lw-dice-glow', scene, { mainTextureSamples: 4, blurKernelSize: 32 });
+      this.glowLayer.intensity = 0.48 * this.currentCustom.glowIntensity;
+
+      this.buildOctagonalTray(scene);
+      this.rebuildShowcaseDice();
+
+      void preloadDiceSurfaceAssets().then(() => {
+        if (this.scene && !this.isRolling) this.rebuildShowcaseDice();
+      });
+
+      const startClock = performance.now();
+      this.engine.runRenderLoop(() => {
+        if (!this.scene) return;
+        const elapsedSec = (performance.now() - startClock) * 0.001;
+        if (!this.isRolling) {
+          for (let i = 0; i < this.activeDice.length; i++) {
+            const die = this.activeDice[i];
+            die.mesh.rotation.y += 0.0045 + (i % 3) * 0.001;
+            die.mesh.rotation.x = Math.sin(elapsedSec * 1.1 + i) * 0.14;
+            applyVeinPulseToDieMaterials(die.faceMaterials, this.currentSkin, this.currentCustom, elapsedSec);
+          }
+        }
+        this.scene.render();
+      });
+
+      window.addEventListener('resize', this.resizeHandler);
     });
   }
 
-  applySkin(skin: DiceStageSkinConfig): void {
-    this.activeSkin = skin;
+  getCurrentCustomConfig(): DiceCustomRuntimeConfig {
+    return { ...this.currentCustom };
+  }
+
+  applySkin(skinOrPreset: DiceSkinConfig | DiceSkinPresetPayload | string): DiceCustomRuntimeConfig {
+    const id = typeof skinOrPreset === 'string' ? skinOrPreset : skinOrPreset.id;
+    this.currentSkin = resolveDiceSkin(id);
+    this.currentCustom = createDefaultRuntimeConfigFromSkin(this.currentSkin);
+    this.syncStageLightingAndRebuild();
+    return this.getCurrentCustomConfig();
+  }
+
+  applyCustomOverrides(overrides: Partial<DiceCustomRuntimeConfig>): DiceCustomRuntimeConfig {
+    if (overrides.skinId && overrides.skinId !== this.currentSkin.id) {
+      this.currentSkin = resolveDiceSkin(overrides.skinId);
+    }
+    this.currentCustom = { ...this.currentCustom, ...overrides, skinId: this.currentSkin.id };
+    this.syncStageLightingAndRebuild();
+    return this.getCurrentCustomConfig();
+  }
+
+  setShowcaseFocusDie(focus: DicePolyhedronType | 'all'): void {
+    this.focusDieType = focus;
+    if (!this.isRolling) this.rebuildShowcaseDice();
+  }
+
+  previewCritOutcomeEffect(outcomeKind: 'nat20' | 'critfail'): void {
     if (!this.scene) return;
-    for (const mesh of this.diceMeshes) {
-      const mat = mesh.material as StandardMaterial | null;
-      if (mat) {
-        mat.diffuseColor = Color3.FromHexString(skin.baseColorHex);
-        mat.emissiveColor = Color3.FromHexString(skin.runeColorHex).scale(0.32);
-        mat.specularColor = Color3.FromHexString(skin.runeColorHex).scale(skin.metallic);
-        mat.specularPower = Math.max(8, Math.round((1 - skin.roughness) * 96));
-      }
+    const origin = new Vector3(0, 0.65, 0);
+    if (outcomeKind === 'nat20') {
+      const preset = resolveNat20Effect(this.currentCustom.nat20EffectId);
+      this.soundService.playCriticalSuccessFanfare(this.currentCustom.soundProfileId);
+      this.critEffectsRunner.triggerCritEffect(preset, origin, this.scene, this.glowLayer, 0.52 * this.currentCustom.glowIntensity);
+    } else {
+      const preset = resolveCritFailEffect(this.currentCustom.critFailEffectId);
+      this.soundService.playCriticalFailureFracture();
+      this.critEffectsRunner.triggerCritEffect(preset, origin, this.scene, this.glowLayer, 0.42 * this.currentCustom.glowIntensity);
     }
   }
 
-  animateRoll(
-    sides: number,
-    count: number,
-    isNat20: boolean,
-    isNat1: boolean,
-    reducedMotion: boolean,
-  ): void {
+  animateRoll(expression: string, diceResults: number[], isCriticalSuccess: boolean, isCriticalFailure: boolean): void {
     if (!this.scene) return;
-    this.clearDiceAndFx();
+    if (this.rollAnimationTimer !== null) {
+      clearTimeout(this.rollAnimationTimer);
+      this.rollAnimationTimer = null;
+    }
 
-    const safeCount = Math.min(Math.max(count, 1), 8);
-    const polyType = this.mapSidesToPolyhedronType(sides);
+    this.clearFloatingBadges();
+    this.critEffectsRunner.clearActiveEffects();
+    this.isRolling = true;
 
-    for (let i = 0; i < safeCount; i++) {
-      const die = MeshBuilder.CreatePolyhedron(
-        `rolled-die-${i}`,
-        { type: polyType, size: 0.92 },
-        this.scene,
-      );
-      die.material = this.createDieMaterial(`die-mat-${i}`);
+    const dieType = this.parseDieTypeFromExpression(expression);
+    const results = diceResults.length > 0 ? diceResults : [20];
+    const model = resolveDiceModel(this.currentCustom.modelId);
+    const sizeScale = (DICE_SIZE_SCALE_MAP[this.currentCustom.sizePreset] ?? 1.0) * (model.scaleMultiplier ?? 1.0);
 
-      const angle = (i / safeCount) * Math.PI * 2;
-      const radius = safeCount === 1 ? 0 : 2.1;
-      const targetX = Math.cos(angle) * radius;
-      const targetZ = Math.sin(angle) * radius;
+    this.clearActiveDice();
+    const plans: DiePhysicsTrajectoryPlan[] = [];
 
-      if (reducedMotion) {
-        die.position = new Vector3(targetX, 0.85, targetZ);
-        die.rotation = new Vector3(0.4 * i, 0.8 * i, 0.25);
-      } else {
-        die.position = new Vector3(targetX * 0.4, 5.2 + i * 0.4, -3.5);
-        this.animateSingleDieTumble(die, new Vector3(targetX, 0.85, targetZ));
+    for (let i = 0; i < results.length; i++) {
+      const built = buildBabylonPolyhedralDie(`lw-roll-die-${i}`, dieType, this.currentSkin, this.currentCustom, model, this.scene);
+      const plan = createDieTrajectoryPlan(i, results.length, dieType, results[i], sizeScale);
+      built.mesh.position.copyFrom(plan.startPos);
+      built.mesh.rotationQuaternion = plan.startQuat.clone();
+      this.activeDice.push(built);
+      plans.push(plan);
+    }
+
+    this.soundService.playRollStartClatter(this.currentCustom.soundProfileId, results.length);
+    const startTime = performance.now();
+    const durationMs = 880;
+
+    const step = () => {
+      if (!this.scene) return;
+      const t = Math.min(1, (performance.now() - startTime) / durationMs);
+
+      for (let i = 0; i < this.activeDice.length; i++) {
+        const pose = evaluateDieTrajectoryStep(plans[i], t, sizeScale, intensity => {
+          if (i <= 1) this.soundService.playBounceImpact(this.currentCustom.soundProfileId, intensity);
+        });
+        this.activeDice[i].mesh.position.copyFrom(pose.position);
+        this.activeDice[i].mesh.rotationQuaternion = pose.rotationQuaternion;
       }
 
-      this.diceMeshes.push(die);
-    }
+      if (t < 1) {
+        this.rollAnimationTimer = window.setTimeout(step, 16);
+      } else {
+        this.isRolling = false;
+        this.rollAnimationTimer = null;
+        this.soundService.playSettleChime(this.currentCustom.soundProfileId);
 
-    if (isNat20) {
-      this.spawnOutcomeBurst('#ffe299', true, reducedMotion);
-    } else if (isNat1) {
-      this.spawnOutcomeBurst('#ff4d6d', false, reducedMotion);
-    }
+        for (let i = 0; i < this.activeDice.length; i++) {
+          const die = this.activeDice[i];
+          const val = results[i];
+          die.mesh.rotationQuaternion = getRotationForTopValue(dieType, val);
+          this.activeBadges.push(
+            createFloatingResultBadge(
+              val, die.mesh.position, this.currentCustom.glowColorHex,
+              isCriticalSuccess && val === Math.max(...FACE_VALUES[dieType]),
+              isCriticalFailure && val === 1, this.scene
+            )
+          );
+        }
+
+        if (isCriticalSuccess) this.previewCritOutcomeEffect('nat20');
+        else if (isCriticalFailure) this.previewCritOutcomeEffect('critfail');
+      }
+    };
+    step();
   }
 
   dispose(): void {
-    this.clearDiceAndFx();
+    window.removeEventListener('resize', this.resizeHandler);
+    if (this.rollAnimationTimer !== null) clearTimeout(this.rollAnimationTimer);
+    this.rollAnimationTimer = null;
+    this.critEffectsRunner.clearActiveEffects();
+    this.clearFloatingBadges();
+    this.clearActiveDice();
     this.scene?.dispose();
     this.engine?.dispose();
     this.scene = null;
     this.engine = null;
   }
 
-  private buildOctagonalTray(): void {
+  private syncStageLightingAndRebuild(): void {
     if (!this.scene) return;
+    const glowColor = hexToColor3(this.currentCustom.glowColorHex || this.currentSkin.emissiveColor);
+    if (this.accentPointLight) this.accentPointLight.diffuse = glowColor;
+    if (this.trayRimMat) this.trayRimMat.emissiveColor = glowColor.scale(0.28 * this.currentCustom.glowIntensity);
+    if (this.glowLayer) this.glowLayer.intensity = 0.48 * this.currentCustom.glowIntensity;
+    if (!this.isRolling) this.rebuildShowcaseDice();
+  }
 
-    const felt = MeshBuilder.CreateCylinder(
-      'trayFelt',
-      { diameter: 11.2, height: 0.3, tessellation: 8 },
-      this.scene,
-    );
-    felt.position.y = -0.15;
-    const feltMat = new StandardMaterial('trayFeltMat', this.scene);
-    feltMat.diffuseColor = Color3.FromHexString('#161324');
-    feltMat.specularColor = new Color3(0.08, 0.08, 0.1);
-    felt.material = feltMat;
+  private rebuildShowcaseDice(): void {
+    if (!this.scene) return;
+    this.clearFloatingBadges();
+    this.clearActiveDice();
 
-    const rim = MeshBuilder.CreateTorus(
-      'trayRim',
-      { diameter: 11.5, thickness: 0.65, tessellation: 8 },
-      this.scene,
-    );
-    rim.position.y = 0.25;
-    const rimMat = new StandardMaterial('trayRimMat', this.scene);
-    rimMat.diffuseColor = Color3.FromHexString('#3b2d1d');
-    rimMat.specularColor = Color3.FromHexString('#e5b85c');
+    const model = resolveDiceModel(this.currentCustom.modelId);
+    const types = this.focusDieType === 'all' ? SHOWCASE_DIE_TYPES : [this.focusDieType];
+
+    for (let i = 0; i < types.length; i++) {
+      const type = types[i];
+      const built = buildBabylonPolyhedralDie(`lw-showcase-${type}`, type, this.currentSkin, this.currentCustom, model, this.scene);
+      if (types.length === 1) {
+        built.mesh.position = new Vector3(0, 1.15, 0);
+        built.mesh.scaling.setAll(1.45);
+      } else {
+        const angle = (i / types.length) * Math.PI * 2 - Math.PI / 2;
+        built.mesh.position = new Vector3(Math.cos(angle) * 3.25, 0.98, Math.sin(angle) * 3.25);
+      }
+      const topQuat = getRotationForTopValue(type, Math.max(...FACE_VALUES[type]));
+      built.mesh.rotation = topQuat.toEulerAngles();
+      built.mesh.rotationQuaternion = null;
+      this.activeDice.push(built);
+    }
+  }
+
+  private buildOctagonalTray(scene: Scene): void {
+    const floor = MeshBuilder.CreateCylinder('lw-tray-floor', { diameter: 11.4, height: 0.35, tessellation: 8 }, scene);
+    floor.position.y = -0.18;
+    const floorMat = new StandardMaterial('lw-tray-floor-mat', scene);
+    floorMat.diffuseColor = new Color3(0.035, 0.085, 0.065);
+    floorMat.specularColor = new Color3(0.08, 0.16, 0.12);
+    floor.material = floorMat;
+
+    const rim = MeshBuilder.CreateTorus('lw-tray-rim', { diameter: 11.5, thickness: 0.42, tessellation: 8 }, scene);
+    rim.position.y = 0.08;
+    const rimMat = new StandardMaterial('lw-tray-rim-mat', scene);
+    rimMat.diffuseColor = new Color3(0.14, 0.12, 0.08);
+    rimMat.specularColor = new Color3(0.55, 0.46, 0.28);
+    rimMat.emissiveColor = hexToColor3(this.currentCustom.glowColorHex).scale(0.22);
     rim.material = rimMat;
+    this.trayRimMat = rimMat;
   }
 
-  private spawnShowcaseSet(): void {
-    if (!this.scene) return;
-    this.clearDiceAndFx();
-    const showcaseSides = [4, 6, 8, 12, 20];
-    showcaseSides.forEach((sides, idx) => {
-      const die = MeshBuilder.CreatePolyhedron(
-        `showcase-d${sides}`,
-        { type: this.mapSidesToPolyhedronType(sides), size: sides === 20 ? 1.05 : 0.82 },
-        this.scene!,
-      );
-      die.material = this.createDieMaterial(`showcase-mat-${sides}`);
-      const spread = (idx - 2) * 2.05;
-      die.position = new Vector3(spread, 0.9, idx % 2 === 0 ? 0.35 : -0.45);
-      die.rotation = new Vector3(0.35 * idx, 0.6 * idx, 0.2);
-      this.diceMeshes.push(die);
-    });
+  private parseDieTypeFromExpression(expression: string): DicePolyhedronType {
+    const match = /d(100|20|12|10|8|6|4)\b/i.exec(expression || '1d20');
+    return match ? (`d${match[1]}` as DicePolyhedronType) : 'd20';
   }
 
-  private animateSingleDieTumble(die: Mesh, target: Vector3): void {
-    if (!this.scene) return;
-    const start = die.position.clone();
-    const startTime = performance.now();
-    const durationMs = 720;
-
-    const obs = this.scene.onBeforeRenderObservable.add(() => {
-      const t = Math.min(1, (performance.now() - startTime) / durationMs);
-      const ease = 1 - Math.pow(1 - t, 3);
-      const bounce = Math.abs(Math.sin(t * Math.PI * 2.5)) * (1 - t) * 2.2;
-
-      die.position.x = start.x + (target.x - start.x) * ease;
-      die.position.z = start.z + (target.z - start.z) * ease;
-      die.position.y = target.y + (1 - ease) * 3.8 + bounce;
-
-      die.rotation.x += (1 - t) * 0.32;
-      die.rotation.y += (1 - t) * 0.28;
-      die.rotation.z += (1 - t) * 0.24;
-
-      if (t >= 1 && this.scene) {
-        this.scene.onBeforeRenderObservable.remove(obs);
-      }
-    });
-  }
-
-  private spawnOutcomeBurst(hexColor: string, isCriticalSuccess: boolean, reducedMotion: boolean): void {
-    if (!this.scene) return;
-    const ring = MeshBuilder.CreateTorus(
-      'outcomeRing',
-      { diameter: 2.4, thickness: 0.18, tessellation: 36 },
-      this.scene,
-    );
-    ring.position.y = 0.25;
-    const mat = new StandardMaterial('outcomeMat', this.scene);
-    mat.emissiveColor = Color3.FromHexString(hexColor);
-    mat.diffuseColor = Color3.FromHexString(hexColor);
-    mat.alpha = 0.85;
-    ring.material = mat;
-    this.fxMeshes.push(ring);
-
-    if (isCriticalSuccess) {
-      const pillar = MeshBuilder.CreateCylinder(
-        'nat20Pillar',
-        { diameterTop: 0.4, diameterBottom: 1.8, height: 5.5, tessellation: 24 },
-        this.scene,
-      );
-      pillar.position.y = 2.75;
-      const pMat = new StandardMaterial('pillarMat', this.scene);
-      pMat.emissiveColor = Color3.FromHexString(hexColor);
-      pMat.alpha = 0.32;
-      pillar.material = pMat;
-      this.fxMeshes.push(pillar);
+  private clearActiveDice(): void {
+    for (const d of this.activeDice) {
+      disposeDieMaterials(d);
+      d.mesh.dispose();
     }
-
-    if (reducedMotion) return;
-
-    const startTime = performance.now();
-    const obs = this.scene.onBeforeRenderObservable.add(() => {
-      const t = Math.min(1, (performance.now() - startTime) / 1100);
-      const scale = 1 + t * 2.8;
-      ring.scaling = new Vector3(scale, 1, scale);
-      mat.alpha = Math.max(0, 0.85 * (1 - t));
-      if (t >= 1 && this.scene) {
-        this.scene.onBeforeRenderObservable.remove(obs);
-      }
-    });
+    this.activeDice = [];
   }
 
-  private createDieMaterial(name: string): StandardMaterial {
-    const mat = new StandardMaterial(name, this.scene!);
-    mat.diffuseColor = Color3.FromHexString(this.activeSkin.baseColorHex);
-    mat.emissiveColor = Color3.FromHexString(this.activeSkin.runeColorHex).scale(0.32);
-    mat.specularColor = Color3.FromHexString(this.activeSkin.runeColorHex).scale(this.activeSkin.metallic);
-    mat.specularPower = Math.max(8, Math.round((1 - this.activeSkin.roughness) * 96));
-    return mat;
-  }
-
-  private mapSidesToPolyhedronType(sides: number): number {
-    switch (sides) {
-      case 4:
-        return 0; // Tetrahedron
-      case 6:
-        return 1; // Octahedron/Hexahedron proxy
-      case 8:
-        return 1; // Octahedron
-      case 10:
-      case 12:
-        return 2; // Dodecahedron
-      default:
-        return 3; // Icosahedron (d20 / d100)
+  private clearFloatingBadges(): void {
+    for (const badge of this.activeBadges) {
+      badge.material?.dispose();
+      badge.dispose();
     }
-  }
-
-  private clearDiceAndFx(): void {
-    for (const m of this.diceMeshes) m.dispose();
-    for (const f of this.fxMeshes) f.dispose();
-    this.diceMeshes = [];
-    this.fxMeshes = [];
+    this.activeBadges = [];
   }
 }

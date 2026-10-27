@@ -2,6 +2,7 @@ import {
   Color3,
   DirectionalLight,
   HemisphericLight,
+  Mesh,
   MeshBuilder,
   PointLight,
   Scene,
@@ -16,6 +17,7 @@ export interface CelestialLightConfig {
   readonly azimuthDeg: number;
   readonly altitudeDeg: number;
   readonly shadowDarkness: number;
+  readonly showSkyOrb?: boolean;
 }
 
 export class SceneLightingController {
@@ -25,6 +27,7 @@ export class SceneLightingController {
     azimuthDeg: 135,
     altitudeDeg: 42,
     shadowDarkness: 72,
+    showSkyOrb: false,
   };
 
   static syncLights(
@@ -57,7 +60,7 @@ export class SceneLightingController {
 
       const orb = MeshBuilder.CreateSphere(
         `lw-light-orb-${node.id}`,
-        { diameter: 0.52, segments: 8 },
+        { diameter: 0.48, segments: 8 },
         scene,
       );
       orb.position.set(node.x, Math.min(2.6, node.y * 0.55), node.z);
@@ -94,12 +97,12 @@ export class SceneLightingController {
       dirLight = new DirectionalLight('lw-celestial-dir', lightDir, scene);
       this.shadowGen = new ShadowGenerator(1024, dirLight);
       this.shadowGen.useBlurExponentialShadowMap = true;
-      this.shadowGen.blurKernel = 16;
+      this.shadowGen.blurKernel = 12;
     } else {
-      dirLight.direction = lightDir;
+      dirLight.direction.copyFrom(lightDir);
     }
 
-    dirLight.position = lightPos;
+    dirLight.position.copyFrom(lightPos);
     dirLight.intensity = config.mode === 'sun' ? 1.45 : 0.88;
     dirLight.diffuse = Color3.FromHexString(config.mode === 'sun' ? '#ffefd2' : '#9cc5ff');
     dirLight.specular = Color3.FromHexString(config.mode === 'sun' ? '#ffe0a3' : '#6c9be0');
@@ -108,21 +111,28 @@ export class SceneLightingController {
       this.shadowGen.darkness = Math.max(0, Math.min(0.95, (100 - config.shadowDarkness) / 100));
     }
 
-    // Visual Sun / Moon sky indicator orb
-    const existingSkyOrb = scene.getMeshByName('lw-celestial-sky-orb');
-    if (existingSkyOrb) {
-      existingSkyOrb.dispose();
+    // Reuse the Sun/Moon sky orb mesh without disposing/re-allocating on mouse move
+    let skyOrb = scene.getMeshByName('lw-celestial-sky-orb') as Mesh | null;
+    if (!skyOrb) {
+      skyOrb = MeshBuilder.CreateSphere(
+        'lw-celestial-sky-orb',
+        { diameter: 1.35, segments: 12 },
+        scene,
+      );
+      skyOrb.isPickable = false;
+      const skyMat = new StandardMaterial('lw-celestial-sky-mat', scene);
+      skyOrb.material = skyMat;
     }
-    const skyOrb = MeshBuilder.CreateSphere(
-      'lw-celestial-sky-orb',
-      { diameter: 1.45, segments: 12 },
-      scene,
-    );
-    skyOrb.position.set(lx * 0.55, Math.max(4.5, ly * 0.45), lz * 0.55);
-    const skyMat = new StandardMaterial('lw-celestial-sky-mat', scene);
-    skyMat.emissiveColor = Color3.FromHexString(config.mode === 'sun' ? '#ffd269' : '#9ec8ff');
-    skyOrb.material = skyMat;
-    skyOrb.isPickable = false;
+
+    const skyMat = skyOrb.material as StandardMaterial | null;
+    if (skyMat) {
+      skyMat.emissiveColor = Color3.FromHexString(
+        config.mode === 'sun' ? '#ffd269' : '#9ec8ff',
+      );
+      skyMat.diffuseColor = skyMat.emissiveColor;
+    }
+    skyOrb.position.set(lx * 0.55, Math.max(4.2, ly * 0.45), lz * 0.55);
+    skyOrb.setEnabled(Boolean(config.showSkyOrb));
   }
 
   static refreshShadowCasters(scene: Scene): void {
@@ -131,7 +141,11 @@ export class SceneLightingController {
     if (!shadowMap) return;
     shadowMap.renderList = [];
     for (const mesh of scene.meshes) {
-      if (mesh.name.startsWith('lw-wall-') || mesh.name.startsWith('lw-stamp-')) {
+      if (
+        mesh.name.startsWith('lw-wall-') ||
+        mesh.name.startsWith('lw-stamp-') ||
+        Boolean(mesh.metadata?.lwNodeName)
+      ) {
         shadowMap.renderList.push(mesh);
       }
     }

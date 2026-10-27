@@ -1,10 +1,37 @@
-<div class="lw-portrait-stage" [style.min-height]="minHeight()">
-  <img
-    [src]="portraitUrl()"
-    [alt]="characterName()"
-    class="lw-portrait-stage__img"
-    [style.min-height]="minHeight()"
-  />
+<div
+  class="lw-portrait-stage"
+  [class.lw-portrait-stage--dragging]="isDragging()"
+  [class.lw-portrait-stage--3d]="is3dMode()"
+  [style.min-height]="minHeight()"
+  (pointerdown)="onStagePointerDown($event)"
+  (pointermove)="onStagePointerMove($event)"
+  (pointerup)="onStagePointerUp($event)"
+  (pointercancel)="onStagePointerUp($event)"
+>
+  @if (is3dMode()) {
+    <canvas
+      #babylonCanvas
+      class="lw-portrait-stage__canvas"
+      [style.min-height]="minHeight()"
+      aria-label="3D Character Model Viewer"
+    ></canvas>
+
+    @if (modelLoading()) {
+      <div class="lw-portrait-stage__status">
+        <span>Loading 3D Character...</span>
+      </div>
+    }
+  } @else {
+    <img
+      [src]="portraitUrl()"
+      [alt]="characterName()"
+      class="lw-portrait-stage__img"
+      draggable="false"
+      [style.min-height]="minHeight()"
+      [style.object-position]="offsetX() + '% ' + offsetY() + '%'"
+      [style.transform]="'scale(' + zoomPercent() / 100 + ')'"
+    />
+  }
 
   <!-- Top-Right Edit Button -->
   <button
@@ -19,12 +46,74 @@
     <span>{{ pickerOpen() ? 'Close' : 'Edit' }}</span>
   </button>
 
+  @if (!pickerOpen()) {
+    <div class="lw-portrait-stage__toolbar">
+      @if (is3dMode()) {
+        <span class="lw-portrait-stage__hint">
+          Drag left or right to rotate 3D character
+        </span>
+        <button
+          ngpButton
+          type="button"
+          class="lw-portrait-stage__reset-btn"
+          (click)="resetAdjustment()"
+        >
+          Reset
+        </button>
+      } @else {
+        <label class="lw-portrait-stage__slider" title="Horizontal placement">
+          <span>X</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            [ngModel]="offsetX()"
+            (ngModelChange)="setOffsetX($event)"
+          />
+        </label>
+        <label class="lw-portrait-stage__slider" title="Vertical placement">
+          <span>Y</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            [ngModel]="offsetY()"
+            (ngModelChange)="setOffsetY($event)"
+          />
+        </label>
+        <label class="lw-portrait-stage__slider" title="Zoom scale">
+          <span>Z</span>
+          <input
+            type="range"
+            min="85"
+            max="165"
+            [ngModel]="zoomPercent()"
+            (ngModelChange)="setZoomPercent($event)"
+          />
+        </label>
+        <button
+          ngpButton
+          type="button"
+          class="lw-portrait-stage__reset-btn"
+          title="Reset portrait placement"
+          (click)="resetAdjustment()"
+        >
+          Reset
+        </button>
+      }
+    </div>
+  }
+
   @if (pickerOpen()) {
-    <div class="lw-portrait-stage__overlay" role="dialog" aria-label="Select or Upload Character Image">
+    <div
+      class="lw-portrait-stage__overlay"
+      role="dialog"
+      aria-label="Select or Upload Character Image"
+    >
       <div class="lw-portrait-stage__overlay-head">
         <div>
           <h3>Character Image</h3>
-          <p>Upload your own portrait or select from 5e-Tools and 3D character assets.</p>
+          <p>Upload your own portrait or select from 5e-Tools and 3D character models.</p>
         </div>
         <label class="lw-portrait-stage__upload-btn">
           <input
@@ -48,7 +137,7 @@
             [class.lw-portrait-stage__tab--active]="activeTab() === '5e-tools'"
             (click)="activeTab.set('5e-tools')"
           >
-            5e-Tools ({{ 33 }})
+            5e-Tools ({{ count5e }})
           </button>
           <button
             ngpButton
@@ -58,7 +147,7 @@
             [class.lw-portrait-stage__tab--active]="activeTab() === '3d-character'"
             (click)="activeTab.set('3d-character')"
           >
-            3D Characters ({{ 28 }})
+            3D Characters ({{ count3d }})
           </button>
         </div>
 
@@ -79,7 +168,7 @@
             ngpButton
             type="button"
             class="lw-portrait-stage__card"
-            [class.lw-portrait-stage__card--selected]="portraitUrl() === item.imageUrl"
+            [class.lw-portrait-stage__card--selected]="isPresetSelected(item)"
             (click)="selectPreset(item)"
           >
             <img [src]="item.imageUrl" [alt]="item.label" loading="lazy" />

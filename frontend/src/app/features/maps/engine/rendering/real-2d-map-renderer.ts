@@ -4,6 +4,7 @@ export interface Real2dRenderOptions {
   readonly hideGmSecrets: boolean;
   readonly selectedNodeId?: string;
   readonly gridStepWorld?: number;
+  readonly gridMode?: string;
   readonly ghostX?: number;
   readonly ghostZ?: number;
   readonly ghostLabel?: string;
@@ -49,23 +50,48 @@ export class Real2dMapRenderer {
     const shadowDx = -Math.cos(azRad) * shadowLenPx;
     const shadowDy = Math.sin(azRad) * shadowLenPx;
 
-    // 2. Tactical 5ft square grid
-    const gridStep = options.gridStepWorld ?? 1.5;
-    ctx.strokeStyle = 'rgba(73, 232, 146, 0.13)';
-    ctx.lineWidth = 1;
-    for (let gx = -16; gx <= 16; gx += gridStep) {
-      const sx = toScreenX(gx);
-      ctx.beginPath();
-      ctx.moveTo(sx, 0);
-      ctx.lineTo(sx, height);
-      ctx.stroke();
-    }
-    for (let gz = -12; gz <= 12; gz += gridStep) {
-      const sy = toScreenY(gz);
-      ctx.beginPath();
-      ctx.moveTo(0, sy);
-      ctx.lineTo(width, sy);
-      ctx.stroke();
+    // 2. Tactical floor grid (5 ft, 10 ft, Hex, or Off)
+    const mode = options.gridMode ?? '5 ft';
+    if (mode !== 'Off') {
+      ctx.strokeStyle = 'rgba(73, 232, 146, 0.14)';
+      ctx.lineWidth = 1;
+      if (mode === 'Hex') {
+        const hexR = 0.92;
+        const hexW = Math.sqrt(3) * hexR;
+        const rowH = 1.5 * hexR;
+        let rowIdx = 0;
+        for (let gz = -12; gz <= 12; gz += rowH) {
+          const offsetX = rowIdx % 2 === 1 ? hexW / 2 : 0;
+          for (let gx = -16 + offsetX; gx <= 16; gx += hexW) {
+            ctx.beginPath();
+            for (let i = 0; i <= 6; i++) {
+              const a = ((60 * i - 30) * Math.PI) / 180;
+              const sx = toScreenX(gx + Math.cos(a) * hexR);
+              const sy = toScreenY(gz + Math.sin(a) * hexR);
+              if (i === 0) ctx.moveTo(sx, sy);
+              else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+          }
+          rowIdx++;
+        }
+      } else {
+        const gridStep = mode === '10 ft' ? 3.0 : (options.gridStepWorld ?? 1.5);
+        for (let gx = -16; gx <= 16; gx += gridStep) {
+          const sx = toScreenX(gx);
+          ctx.beginPath();
+          ctx.moveTo(sx, 0);
+          ctx.lineTo(sx, height);
+          ctx.stroke();
+        }
+        for (let gz = -12; gz <= 12; gz += gridStep) {
+          const sy = toScreenY(gz);
+          ctx.beginPath();
+          ctx.moveTo(0, sy);
+          ctx.lineTo(width, sy);
+          ctx.stroke();
+        }
+      }
     }
 
     // 3. Water splines

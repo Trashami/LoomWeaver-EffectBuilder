@@ -1,163 +1,473 @@
-<div class="lw-page">
-  <lw-panel
-    eyebrow="Module 3 · Live VTT, Combat Engine & Babylon.js Renderer"
-    title="Arcane Screen · Round {{ vtt.activeRound() }}"
-    [subtitle]="store.activeCampaign().name + ' · Target Range, AC/DC Hit & Save Resolver, Action Economy & Automated XP'"
-    icon="shield"
-    [elevated]="true">
-    <div panelActions>
-      <lw-button variant="gold" size="sm" icon="swords" (pressed)="nextTurn()">
-        Advance Turn
-      </lw-button>
+<div class="lw-vtt-screen" [class.lw-vtt-screen--right-collapsed]="battle.rightPanelCollapsed()">
+  <header class="lw-vtt-header">
+    <div class="lw-vtt-header__left">
+      <span class="lw-vtt-live-pill"><span class="lw-vtt-live-dot"></span><span>Live VTT</span></span>
+      <label class="lw-vtt-enc-select" aria-label="Select Active Live Encounter">
+        <lw-icon name="swords" [size]="14" />
+        <select [ngModel]="vtt.activeEncounterId()" (ngModelChange)="switchLiveEncounter($event)">
+          @for (enc of vtt.encounterDetails(); track enc.id) {
+            <option [value]="enc.id">{{ enc.name }} ({{ enc.sessionTitle }})</option>
+          }
+        </select>
+      </label>
+      <span class="lw-vtt-round-pill">Round {{ vtt.activeRound() }}</span>
+      <span class="lw-vtt-timer-pill">{{ formattedTimer() }}</span>
+      <label class="lw-vtt-observer-select" title="Active Player Token for Line of Sight & Turn Actions">
+        <span>POV:</span>
+        <select [ngModel]="battle.activeObserverToken().key" (ngModelChange)="vtt.selectedAttackerKey.set($event)">
+          @for (hero of vtt.partyTokensInScene(); track hero.key) {
+            <option [value]="hero.key">{{ hero.name }} ({{ battle.playerSightDistanceFeet() }}ft LoS)</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="lw-vtt-header__right">
+      <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.openDmDrawer() === 'fog-settings'" (click)="battle.toggleDmDrawer('fog-settings')">
+        <span>Fog: {{ battle.fogMode() === 'los-only' ? 'LoS Only' : battle.fogMode() === 'explored-los' ? 'Traveled + LoS' : 'No Fog' }}</span>
+      </button>
+      <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="gridEnabled()" (click)="gridEnabled.set(!gridEnabled())">
+        <span>Grid</span>
+      </button>
+      <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.measureEnabled()" (click)="battle.toggleMeasureTool()">
+        <span>Measure</span>
+      </button>
+      <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.targetSelectionMode()" title="Toggle Multi-Target Selection (Shortcut: T, Exit: Esc)" (click)="battle.targetSelectionMode.set(!battle.targetSelectionMode())">
+        <span>Target [T] ({{ battle.multiTargetKeys().length }})</span>
+      </button>
       @if (store.viewerRole() === 'gm') {
-        <lw-button
-          variant="primary"
-          size="sm"
-          (pressed)="vtt.concludeEncounterAndAwardXp(vtt.activeEncounterId())">
-          Conclude Combat & Award XP
-        </lw-button>
+        <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.openDmDrawer() === 'quick-add'" (click)="battle.toggleDmDrawer('quick-add')">
+          <span>+ Monster / NPC</span>
+        </button>
+        <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.openDmDrawer() === 'dm-session'" (click)="battle.toggleDmDrawer('dm-session')">
+          <span>DM Tools</span>
+        </button>
       }
-      <a class="lw-link-pill" routerLink="/effects">Action & Effect Builder</a>
-      <a class="lw-link-pill" routerLink="/maps">Edit Scene in LoomMaps</a>
+      <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.openDmDrawer() === 'scene-roster'" (click)="battle.toggleDmDrawer('scene-roster')">
+        <span>Roster & Traps</span>
+      </button>
+      <lw-button variant="gold" size="sm" (pressed)="nextTurn()">Next Turn</lw-button>
+      <a class="lw-vtt-tool-btn" routerLink="/encounters">Build Encounters</a>
+      <button ngpButton type="button" class="lw-vtt-tool-btn lw-vtt-tool-btn--panel" (click)="battle.rightPanelCollapsed.set(!battle.rightPanelCollapsed())">
+        <span>{{ battle.rightPanelCollapsed() ? 'Open Panel' : 'Hide Panel' }}</span>
+      </button>
     </div>
+  </header>
 
-    @if (vtt.xpAwardBanner(); as banner) {
-      <div class="lw-xp-banner">
-        <lw-badge label="Automated XP Engine" tone="gold" />
-        <span>{{ banner }}</span>
-        <a class="lw-link-pill" routerLink="/characters">Promote Heroes in Character Studio</a>
-      </div>
-    }
+  <div class="lw-vtt-body">
+    <section class="lw-vtt-map-stage" aria-label="Interactive Encounter Battle Map">
+      <canvas #vttCanvas class="lw-vtt-babylon-canvas" aria-hidden="true"></canvas>
+      <div class="lw-vtt-map-backdrop" [style.backgroundImage]="'url(' + vtt.activeLiveEncounter().thumbnailUrl + ')'"></div>
 
-    <div class="lw-vtt-top">
-      <div class="lw-vtt-stage">
-        <div class="lw-vtt-hud">
-          <lw-badge [label]="'Attacker: ' + vtt.selectedAttacker().name" tone="emerald" />
-          <lw-badge [label]="'Target: ' + vtt.selectedTarget().name + ' (AC ' + vtt.selectedTarget().armorClass + ')'" tone="crimson" />
-          <lw-badge [label]="'Range: ' + vtt.targetDistanceFeet() + ' ft'" tone="gold" />
-          <lw-badge [label]="'FX Timeline: ' + stage.activeKeyframeLabel()" tone="neutral" />
-        </div>
+      <svg #battleSvg class="lw-vtt-svg" viewBox="0 0 1200 800" preserveAspectRatio="none" (mousemove)="onBattleMapPointerMove($event)" (click)="onBattleMapClick($event)">
+        <defs>
+          <mask id="vtt-los-only-mask">
+            <rect x="0" y="0" width="1200" height="800" fill="white" />
+            <polygon [attr.points]="battle.observerSightPolygonSvg()" fill="black" />
+          </mask>
+          <mask id="vtt-explored-mask">
+            <rect x="0" y="0" width="1200" height="800" fill="white" />
+            @for (c of battle.exploredCirclesSvg(); track c.id) {
+              <circle [attr.cx]="c.cx" [attr.cy]="c.cy" [attr.r]="c.r" fill="#666666" />
+            }
+            <polygon [attr.points]="battle.observerSightPolygonSvg()" fill="black" />
+          </mask>
+        </defs>
 
-        <canvas
-          #vttCanvas
-          class="lw-vtt-canvas"
-          aria-label="Babylon.js Live VTT Combat Stage"></canvas>
+        @if (gridEnabled()) {
+          <g class="lw-vtt-svg__grid">
+            @for (gx of gridVerticalLines; track gx) {
+              <line [attr.x1]="gx" y1="0" [attr.x2]="gx" y2="800" />
+            }
+            @for (gy of gridHorizontalLines; track gy) {
+              <line x1="0" [attr.y1]="gy" x2="1200" [attr.y2]="gy" />
+            }
+          </g>
+        }
 
-        <div class="lw-action-bar">
-          @for (rule of vtt.actionRules(); track rule.id) {
-            <button
-              type="button"
-              class="lw-action-chip"
-              (click)="fireAction(rule)">
-              <strong>{{ rule.name }}</strong>
-              <span>{{ rule.actionCost }} · {{ rule.rangeFeet }}ft · {{ rule.damageFormula }}</span>
-            </button>
+        <polygon class="lw-vtt-svg__los-poly" [attr.points]="battle.observerSightPolygonSvg()" />
+
+        <g class="lw-vtt-svg__walls">
+          @for (wall of battle.walls(); track wall.id) {
+            <line class="lw-vtt-wall-line" [attr.x1]="toSvgX(wall.x1)" [attr.y1]="toSvgY(wall.z1)" [attr.x2]="toSvgX(wall.x2)" [attr.y2]="toSvgY(wall.z2)" />
           }
-        </div>
-      </div>
+        </g>
 
-      <div class="lw-combat-log-panel">
-        <h4>Authoritative Combat & Roll Resolution Feed</h4>
-        <div class="lw-combat-logs">
-          @for (log of vtt.combatLogs(); track log.id) {
-            <div class="lw-log-entry" [class.lw-log-entry--hit]="log.hit">
-              <div class="lw-log-entry__head">
-                <lw-badge [label]="'R' + log.round + ' · ' + log.actionName" [tone]="log.hit ? 'gold' : 'neutral'" />
-                <span>{{ log.distanceFeet }}ft</span>
-              </div>
-              <p>{{ log.message }}</p>
-            </div>
+        @if (shouldRenderPlayerFog()) {
+          @if (battle.fogMode() === 'los-only') {
+            <rect x="0" y="0" width="1200" height="800" fill="rgba(3, 8, 6, 0.92)" mask="url(#vtt-los-only-mask)" />
+          } @else if (battle.fogMode() === 'explored-los') {
+            <rect x="0" y="0" width="1200" height="800" fill="rgba(3, 8, 6, 0.9)" mask="url(#vtt-explored-mask)" />
           }
-        </div>
-      </div>
-    </div>
+        }
 
-    <div class="lw-screen-grid">
-      <div class="lw-initiative-table">
-        <div class="lw-initiative-head">
-          <span>Combatant (Click to Target)</span>
-          <span>Init / AC / HP</span>
-          <span>Action Economy (Action · Bonus · Reaction · Move)</span>
-          <span>Role</span>
+        @if (battle.activeRangeAndAoePreview(); as aoe) {
+          <g class="lw-vtt-svg__aoe-group">
+            <line class="lw-vtt-cast-line" [class.blocked]="aoe.clamped.blockedByWall" [attr.x1]="toSvgX(aoe.clamped.start.x)" [attr.y1]="toSvgY(aoe.clamped.start.z)" [attr.x2]="toSvgX(aoe.clamped.end.x)" [attr.y2]="toSvgY(aoe.clamped.end.z)" />
+            <circle class="lw-vtt-aoe-circle" [class.blocked]="aoe.clamped.blockedByWall" [attr.cx]="toSvgX(aoe.clamped.end.x)" [attr.cy]="toSvgY(aoe.clamped.end.z)" [attr.r]="toSvgPx(aoe.aoeRadiusFeet)" />
+            <g [attr.transform]="'translate(' + toSvgX(aoe.clamped.end.x) + ',' + (toSvgY(aoe.clamped.end.z) - toSvgPx(aoe.aoeRadiusFeet) - 14) + ')'">
+              <rect x="-140" y="-22" width="280" height="24" rx="6" fill="rgba(5, 16, 12, 0.92)" stroke="#d9b77a" />
+              <text x="0" y="-6" text-anchor="middle" fill="#f3e8d0" font-size="12" font-weight="700">
+                {{ aoe.ability.name }}: {{ aoe.clamped.distanceFeet }}ft / {{ aoe.ability.rangeFeet }}ft · AoE {{ aoe.aoeRadiusFeet }}ft {{ aoe.clamped.blockedByWall ? '(WALL BLOCKED)' : '' }}
+              </text>
+            </g>
+          </g>
+        }
+
+        @if (battle.activeMovementPreview(); as mv) {
+          <g class="lw-vtt-svg__move-group">
+            <line class="lw-vtt-move-line" [class.blocked]="mv.blockedByWall" [attr.x1]="toSvgX(battle.activeObserverToken().x)" [attr.y1]="toSvgY(battle.activeObserverToken().z)" [attr.x2]="toSvgX(mv.destination.x)" [attr.y2]="toSvgY(mv.destination.z)" />
+            @for (wp of mv.waypoints; track $index) {
+              <circle [attr.cx]="toSvgX(wp.x)" [attr.cy]="toSvgY(wp.z)" r="5" fill="#49e892" />
+            }
+            <circle class="lw-vtt-move-ghost" [attr.cx]="toSvgX(mv.destination.x)" [attr.cy]="toSvgY(mv.destination.z)" r="24" />
+            <g [attr.transform]="'translate(' + toSvgX(mv.destination.x) + ',' + (toSvgY(mv.destination.z) - 34) + ')'">
+              <rect x="-130" y="-22" width="260" height="24" rx="6" fill="rgba(5, 16, 12, 0.94)" stroke="#49e892" />
+              <text x="0" y="-6" text-anchor="middle" fill="#49e892" font-size="12" font-weight="700">
+                Private Grid Move: {{ mv.distanceFeet }}ft / {{ battle.remainingMovementFeet() }}ft {{ mv.blockedByWall ? '(WALL)' : '' }}
+              </text>
+            </g>
+          </g>
+        }
+
+        @for (token of battle.visibleMapTokens(); track token.key) {
+          <g class="lw-vtt-token" [class.lw-vtt-token--targeted]="battle.multiTargetKeys().includes(token.key)" [class.lw-vtt-token--in-aoe]="battle.activeRangeAndAoePreview()?.highlightedKeys?.has(token.key)" [class.lw-vtt-token--hidden-los]="!battle.isTokenInPlayerLoS(token)" [attr.transform]="'translate(' + toSvgX(token.x) + ',' + toSvgY(token.z) + ')'" (click)="onTokenClicked($event, token)">
+            @if (battle.activeRangeAndAoePreview()?.highlightedKeys?.has(token.key)) {
+              <circle r="33" fill="rgba(217, 183, 122, 0.22)" stroke="#d9b77a" stroke-width="2.5" stroke-dasharray="5 3" />
+            }
+            @if (battle.multiTargetKeys().includes(token.key)) {
+              <circle r="29" fill="none" stroke="#ef5d72" stroke-width="2.5" />
+            }
+            <circle r="23" fill="#071510" [attr.stroke]="token.faction === 'hostile' ? '#ef5d72' : '#49e892'" stroke-width="3" />
+            <text x="0" y="4" text-anchor="middle" fill="#f3e8d0" font-size="12" font-weight="700">{{ token.name.slice(0, 2).toUpperCase() }}</text>
+            <rect x="-38" y="26" width="76" height="16" rx="4" fill="rgba(5, 14, 10, 0.9)" />
+            <text x="0" y="37" text-anchor="middle" fill="#d9e5df" font-size="10" font-weight="600">{{ token.name.slice(0, 12) }} ({{ token.currentHp }})</text>
+            @if (store.viewerRole() === 'gm' && token.faction === 'hostile' && !battle.isTokenInPlayerLoS(token)) {
+              <rect x="-36" y="-40" width="72" height="14" rx="4" fill="rgba(239, 93, 114, 0.9)" />
+              <text x="0" y="-30" text-anchor="middle" fill="#ffffff" font-size="9" font-weight="700">NO LOS (HIDDEN)</text>
+            }
+          </g>
+        }
+      </svg>
+
+      <div class="lw-vtt-hud-overlay">
+        <div class="lw-vtt-hud-pills">
+          <lw-badge [label]="'Active: ' + battle.activeObserverToken().name" tone="emerald" />
+          <lw-badge [label]="'Targets (' + battle.multiTargetKeys().length + ') · Shift+Click or [T]'" tone="crimson" />
+          @if (battle.activeRangeAndAoePreview(); as preview) {
+            <lw-badge [label]="'In Spell AoE: ' + preview.highlightedTokens.length + ' token(s)'" tone="gold" />
+          }
+          <span class="lw-vtt-status-readout">{{ dmToolReadout() }}</span>
         </div>
 
-        @for (row of vtt.tokens(); track row.key; let idx = $index) {
-          <div
-            class="lw-initiative-row"
-            [class.lw-initiative-row--active]="idx === vtt.activeTurnIndex()">
-            <div class="lw-initiative-row__id">
-              <strong>{{ row.name }}</strong>
-              <span>{{ row.roleLabel }}</span>
-            </div>
-            <div class="lw-initiative-row__stats">
-              <lw-badge [label]="'Init ' + row.initiative" tone="gold" />
-              <lw-badge [label]="'AC ' + row.armorClass" tone="neutral" />
-              <lw-badge
-                [label]="'HP ' + row.currentHp + '/' + row.maxHp"
-                [tone]="row.currentHp === 0 ? 'crimson' : 'emerald'" />
-            </div>
-            <div class="lw-initiative-row__economy">
-              <lw-button
-                [variant]="row.actionUsed ? 'danger' : 'secondary'"
-                size="sm"
-                (pressed)="vtt.toggleEconomySlot(row.key, 'actionUsed')">
-                {{ row.actionUsed ? 'Action Spent' : 'Action' }}
-              </lw-button>
-              <lw-button
-                [variant]="row.bonusUsed ? 'danger' : 'secondary'"
-                size="sm"
-                (pressed)="vtt.toggleEconomySlot(row.key, 'bonusUsed')">
-                {{ row.bonusUsed ? 'Bonus Spent' : 'Bonus' }}
-              </lw-button>
-              <lw-button
-                [variant]="row.reactionUsed ? 'danger' : 'secondary'"
-                size="sm"
-                (pressed)="vtt.toggleEconomySlot(row.key, 'reactionUsed')">
-                {{ row.reactionUsed ? 'React Spent' : 'Reaction' }}
-              </lw-button>
-              <span class="lw-move-tag">{{ row.movementFeet }}ft</span>
-            </div>
-            <div class="lw-initiative-row__targets">
-              <lw-button variant="ghost" size="sm" (pressed)="selectAttacker(row.key)">
-                Set Attacker
-              </lw-button>
-              <lw-button variant="gold" size="sm" (pressed)="selectTarget(row.key)">
-                Target
-              </lw-button>
-            </div>
+        @if (battle.measureEnabled()) {
+          <div class="lw-vtt-measure-bar">
+            <button ngpButton type="button" class="lw-vtt-subpill" [class.active]="battle.measureSubMode() === 'spell'" (click)="battle.toggleMeasureTool('spell')">Spell Range & AoE Measure</button>
+            <button ngpButton type="button" class="lw-vtt-subpill" [class.active]="battle.measureSubMode() === 'movement'" (click)="battle.toggleMeasureTool('movement')">Private Grid Movement ({{ battle.remainingMovementFeet() }}ft left)</button>
+            @if (battle.measureSubMode() === 'spell') {
+              <select class="lw-vtt-measure-select" aria-label="Select Spell to Measure" [ngModel]="battle.measuredAbilityId()" (ngModelChange)="battle.measuredAbilityId.set($event)">
+                @for (ab of battle.tacticalAbilities(); track ab.id) {
+                  <option [value]="ab.id">{{ ab.name }} (Max {{ ab.rangeFeet }}ft · AoE {{ ab.aoeRadiusFeet }}ft)</option>
+                }
+              </select>
+            } @else {
+              <button ngpButton type="button" class="lw-vtt-subpill lw-vtt-subpill--gold" (click)="commitMovePreview()">Commit Grid Move</button>
+            }
+            <button ngpButton type="button" class="lw-vtt-subpill" (click)="battle.cancelAllInteractiveModes()">Close [Esc]</button>
           </div>
         }
       </div>
 
-      <div class="lw-side-cards">
-        <lw-panel eyebrow="Scene NPCs & Secrets" title="Active Scene Dossiers" icon="users">
-          <div class="lw-npc-stack">
-            @for (npc of vtt.npcs(); track npc.compositeKey) {
-              <lw-npc-card
-                [npc]="npc"
-                variant="detailed"
-                [showGmSecret]="store.viewerRole() === 'gm'"
-                (npcSelected)="store.inspectEntity($event.compositeKey)" />
+      @if (battle.openDmDrawer() === 'fog-settings') {
+        <div class="lw-vtt-floating-drawer">
+          <div class="lw-vtt-drawer-head">
+            <h4>Encounter Vision & Fog of War Settings</h4>
+            <button ngpButton type="button" (click)="battle.openDmDrawer.set('none')">Close</button>
+          </div>
+          <div class="lw-vtt-drawer-grid">
+            <label class="lw-vtt-field">
+              <span>Encounter Fog of War Mode</span>
+              <select [ngModel]="battle.fogMode()" (ngModelChange)="battle.fogMode.set($event)">
+                <option value="los-only">Fog of War completely based on Line of Sight</option>
+                <option value="explored-los">Fog of War based on where they have traveled</option>
+                <option value="no-fog">No Fog at all</option>
+              </select>
+            </label>
+            <label class="lw-vtt-field">
+              <span>Player Sight Distance (ft)</span>
+              <input type="number" min="15" max="120" step="5" [ngModel]="battle.playerSightDistanceFeet()" (ngModelChange)="battle.playerSightDistanceFeet.set(+$event)" />
+            </label>
+            <label class="lw-vtt-check">
+              <input type="checkbox" [ngModel]="battle.hideOutOfSightMonsters()" (ngModelChange)="battle.hideOutOfSightMonsters.set($event)" />
+              <span>Hide monster tokens outside individual player sight distance & Line of Sight</span>
+            </label>
+            @if (store.viewerRole() === 'gm') {
+              <label class="lw-vtt-check">
+                <input type="checkbox" [ngModel]="battle.gmPreviewPlayerVision()" (ngModelChange)="battle.gmPreviewPlayerVision.set($event)" />
+                <span>Preview Player Fog & Hidden Monsters on GM Map</span>
+              </label>
             }
           </div>
-        </lw-panel>
+        </div>
+      }
 
-        <lw-panel eyebrow="Scoped Session Journal" title="Live Table Note" icon="book-open">
-          <textarea
-            class="lw-note-box"
-            rows="3"
-            [ngModel]="sessionNote()"
-            (ngModelChange)="sessionNote.set($event)"></textarea>
-          <div class="lw-guide-links">
-            <lw-badge
-              [label]="store.viewerRole() === 'gm' ? 'Scope: GM Private Canon' : 'Scope: Shared Party Note'"
-              tone="gold" />
-            <lw-button variant="secondary" size="sm" (pressed)="store.toggleLoomDrawer(true)">
-              Search in The Loom
-            </lw-button>
+      @if (battle.openDmDrawer() === 'quick-add') {
+        <div class="lw-vtt-floating-drawer">
+          <div class="lw-vtt-drawer-head">
+            <h4>Quick Add Monster or Session NPC to Encounter</h4>
+            <button ngpButton type="button" (click)="battle.openDmDrawer.set('none')">Close</button>
           </div>
-        </lw-panel>
-      </div>
-    </div>
-  </lw-panel>
+          <div class="lw-vtt-drawer-grid">
+            <div class="lw-vtt-field">
+              <span>Spawn Bestiary Monster onto Battle Map</span>
+              <div class="lw-vtt-inline-row">
+                <select [ngModel]="quickAddMonsterId()" (ngModelChange)="quickAddMonsterId.set($event)">
+                  @for (c of vtt.creatures(); track c.id) {
+                    <option [value]="c.id">{{ c.name }} (CR {{ c.challengeRating }} · HP {{ c.maxHp }})</option>
+                  }
+                </select>
+                <lw-button variant="primary" size="sm" (pressed)="spawnSelectedBestiaryMonster()">+ Add Monster</lw-button>
+              </div>
+            </div>
+            <div class="lw-vtt-field">
+              <span>Quick Add New NPC to Encounter & Region</span>
+              <div class="lw-vtt-inline-row">
+                <input type="text" placeholder="NPC Name (e.g. Artificer Venn)" [ngModel]="quickAddNpcName()" (ngModelChange)="quickAddNpcName.set($event)" />
+                <select [ngModel]="quickAddNpcDisposition()" (ngModelChange)="quickAddNpcDisposition.set($event)">
+                  <option value="Friendly">Friendly</option>
+                  <option value="Neutral">Neutral</option>
+                  <option value="Deceptive">Deceptive</option>
+                  <option value="Hostile">Hostile</option>
+                </select>
+                <lw-button variant="gold" size="sm" (pressed)="addQuickNpcToMap()">+ Add NPC</lw-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (battle.openDmDrawer() === 'dm-session') {
+        <div class="lw-vtt-floating-drawer">
+          <div class="lw-vtt-drawer-head">
+            <h4>DM Session Toolkit</h4>
+            <button ngpButton type="button" (click)="battle.openDmDrawer.set('none')">Close</button>
+          </div>
+          <div class="lw-vtt-drawer-grid">
+            <div class="lw-vtt-inline-row">
+              <span>Quick DCs:</span>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="rollQuickDcCheck(10, 'Easy')">DC 10 Easy</button>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="rollQuickDcCheck(15, 'Med')">DC 15 Med</button>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="rollQuickDcCheck(20, 'Hard')">DC 20 Hard</button>
+            </div>
+            <div class="lw-vtt-inline-row">
+              <select [ngModel]="selectedDiceFormula()" (ngModelChange)="selectedDiceFormula.set($event)">
+                <option value="1d20">1d20</option>
+                <option value="2d6">2d6</option>
+                <option value="3d8">3d8</option>
+                <option value="4d10">4d10</option>
+                <option value="1d100">1d100</option>
+              </select>
+              <button ngpButton type="button" class="lw-vtt-subpill lw-vtt-subpill--gold" (click)="rollSelectedDice()">Roll Dice</button>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="timerRunning.set(!timerRunning())">{{ timerRunning() ? 'Pause Timer' : 'Resume Timer' }}</button>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="vtt.concludeEncounterAndAwardXp(vtt.activeEncounterId())">Award XP</button>
+              <button ngpButton type="button" class="lw-vtt-subpill" (click)="openEditCurrentEncounter()">Edit Encounter</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (battle.openDmDrawer() === 'scene-roster') {
+        <div class="lw-vtt-floating-drawer">
+          <div class="lw-vtt-drawer-head">
+            <h4>Party, Scene Creatures & Active Traps</h4>
+            <button ngpButton type="button" (click)="battle.openDmDrawer.set('none')">Close</button>
+          </div>
+          <div class="lw-vtt-roster-strip">
+            @for (trap of vtt.activeLiveEncounter().traps; track trap.id) {
+              <div class="lw-vtt-trap-chip">
+                <strong>Trap: {{ trap.name }}</strong>
+                <span>{{ trap.saveOrAttack }} · {{ trap.damageFormula }} · Spot DC {{ trap.perceptionDc }}</span>
+              </div>
+            }
+            @for (cond of vtt.activeConditions(); track cond.id) {
+              <div class="lw-vtt-trap-chip">
+                <strong>{{ cond.name }} ({{ cond.durationLabel }})</strong>
+                <span>{{ cond.targetLabel }} · {{ cond.effectSummary }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <footer class="lw-vtt-action-bar" aria-label="Character Turn Action Bar">
+        <div class="lw-vtt-action-bar__top">
+          <div class="lw-vtt-actor-summary">
+            <div class="lw-vtt-actor-badge">{{ battle.activeObserverToken().name.slice(0, 2).toUpperCase() }}</div>
+            <div class="lw-vtt-actor-meta">
+              <strong>{{ battle.activeObserverToken().name }}</strong>
+              <span>HP {{ battle.activeObserverToken().currentHp }}/{{ battle.activeObserverToken().maxHp }} · AC {{ battle.activeObserverToken().armorClass }} · Move {{ battle.remainingMovementFeet() }}/{{ battle.activeObserverToken().movementFeet }}ft</span>
+            </div>
+          </div>
+
+          <div class="lw-vtt-economy-pips">
+            <button ngpButton type="button" class="lw-vtt-econ-pip" [class.spent]="battle.activeObserverToken().actionUsed" (click)="vtt.toggleEconomySlot(battle.activeObserverToken().key, 'actionUsed')">
+              Action: {{ battle.activeObserverToken().actionUsed ? 'Spent' : 'Ready' }}
+            </button>
+            <button ngpButton type="button" class="lw-vtt-econ-pip" [class.spent]="battle.activeObserverToken().bonusUsed" (click)="vtt.toggleEconomySlot(battle.activeObserverToken().key, 'bonusUsed')">
+              Bonus: {{ battle.activeObserverToken().bonusUsed ? 'Spent' : 'Ready' }}
+            </button>
+            <button ngpButton type="button" class="lw-vtt-econ-pip" [class.spent]="battle.activeObserverToken().reactionUsed" (click)="vtt.toggleEconomySlot(battle.activeObserverToken().key, 'reactionUsed')">
+              Reaction: {{ battle.activeObserverToken().reactionUsed ? 'Spent' : 'Ready' }}
+            </button>
+            <span class="lw-vtt-econ-pip">Free Action: Ready</span>
+          </div>
+
+          <div class="lw-vtt-category-tabs">
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'all'" (click)="battle.activeTurnCategory.set('all')">All</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'melee'" (click)="battle.activeTurnCategory.set('melee')">Melee Attacks</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'ranged'" (click)="battle.activeTurnCategory.set('ranged')">Ranged Attacks</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'spell'" (click)="battle.activeTurnCategory.set('spell')">Spells</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'bonus'" (click)="battle.activeTurnCategory.set('bonus')">Bonus Actions</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'reaction'" (click)="battle.activeTurnCategory.set('reaction')">Reactions</button>
+            <button ngpButton type="button" [class.active]="battle.activeTurnCategory() === 'free'" (click)="battle.activeTurnCategory.set('free')">Free Actions</button>
+          </div>
+        </div>
+
+        <div class="lw-vtt-action-bar__cards">
+          @for (ab of battle.filteredTurnAbilities(); track ab.id) {
+            <button ngpButton type="button" class="lw-vtt-ability-card" [class.lw-vtt-ability-card--pending]="battle.pendingAbility()?.id === ab.id" [class.lw-vtt-ability-card--disabled]="!battle.isAbilityAvailableOnTurn(ab)" (click)="selectTurnAbility(ab)">
+              <div class="lw-vtt-ability-card__head">
+                <strong>{{ ab.name }}</strong>
+                <span class="lw-vtt-ability-cost">{{ ab.actionCost }}</span>
+              </div>
+              <div class="lw-vtt-ability-card__sub">
+                <span>{{ ab.rangeFeet }}ft range · AoE {{ ab.aoeRadiusFeet }}ft</span>
+                <strong>{{ ab.damageFormula }}</strong>
+              </div>
+            </button>
+          }
+        </div>
+      </footer>
+    </section>
+
+    @if (!battle.rightPanelCollapsed()) {
+      <aside class="lw-vtt-right-panel" aria-label="Encounter Information & Role-Scoped Drawer">
+        <nav class="lw-vtt-right-tabs" aria-label="Encounter Drawer Tabs">
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'chat'" (click)="battle.activeRightTab.set('chat')">Chat</button>
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'combat-log'" (click)="battle.activeRightTab.set('combat-log')">Combat Log</button>
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'initiative'" (click)="battle.activeRightTab.set('initiative')">Initiative</button>
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'quests'" (click)="battle.activeRightTab.set('quests')">Quests</button>
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'npcs'" (click)="battle.activeRightTab.set('npcs')">NPCs</button>
+          <button ngpButton type="button" [class.active]="battle.activeRightTab() === 'lore'" (click)="battle.activeRightTab.set('lore')">Lore</button>
+        </nav>
+
+        <div class="lw-vtt-right-content">
+          @if (battle.activeRightTab() === 'chat') {
+            <div class="lw-vtt-tab-pane">
+              <div class="lw-vtt-tab-list">
+                @for (msg of battle.visibleChatMessages(); track msg.id) {
+                  <article class="lw-vtt-item-card" [class.gm-secret]="!msg.revealedToPlayers">
+                    <div class="lw-vtt-item-card__head"><strong>{{ msg.senderName }}</strong><span>{{ msg.timestamp }}</span></div>
+                    <p>{{ msg.text }}</p>
+                    @if (store.viewerRole() === 'gm') {
+                      <button ngpButton type="button" class="lw-vtt-reveal-btn" (click)="battle.toggleChatRevealed(msg.id)">
+                        {{ msg.revealedToPlayers ? 'Visible to Players' : 'GM Only (Click to Reveal)' }}
+                      </button>
+                    }
+                  </article>
+                }
+              </div>
+              <div class="lw-vtt-chat-composer">
+                <input type="text" placeholder="Send message to table..." [ngModel]="chatDraft()" (ngModelChange)="chatDraft.set($event)" (keyup.enter)="submitChat()" />
+                @if (store.viewerRole() === 'gm') {
+                  <label class="lw-vtt-check"><input type="checkbox" [ngModel]="chatWhisperGmOnly()" (ngModelChange)="chatWhisperGmOnly.set($event)" /><span>GM</span></label>
+                }
+                <lw-button variant="gold" size="sm" (pressed)="submitChat()">Send</lw-button>
+              </div>
+            </div>
+          }
+
+          @if (battle.activeRightTab() === 'combat-log') {
+            <div class="lw-vtt-tab-list">
+              @for (entry of vtt.combatLogs(); track entry.id) {
+                <article class="lw-vtt-item-card">
+                  <div class="lw-vtt-item-card__head"><strong>Round {{ entry.round }} · {{ entry.actionName }}</strong><span>{{ entry.hit ? 'HIT' : 'MISS' }}</span></div>
+                  <p>{{ entry.message }}</p>
+                </article>
+              }
+            </div>
+          }
+
+          @if (battle.activeRightTab() === 'initiative') {
+            <div class="lw-vtt-tab-list">
+              @for (row of battle.visibleMapTokens(); track row.key) {
+                <div class="lw-vtt-init-row" [class.active]="row.key === battle.activeObserverToken().key" [class.targeted]="battle.multiTargetKeys().includes(row.key)" (click)="onTokenClicked($event, row)">
+                  <div class="lw-vtt-init-row__badge" [class.hostile]="row.faction === 'hostile'">{{ row.initiative }}</div>
+                  <div class="lw-vtt-init-row__body">
+                    <strong>{{ row.name }}</strong>
+                    <span>HP {{ row.currentHp }}/{{ row.maxHp }} · AC {{ row.armorClass }}</span>
+                    @if (store.viewerRole() === 'gm' && row.faction === 'hostile' && !battle.isTokenInPlayerLoS(row)) {
+                      <small class="lw-vtt-hidden-note">Hidden from Player LoS</small>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          @if (battle.activeRightTab() === 'quests') {
+            <div class="lw-vtt-tab-list">
+              @for (q of battle.visibleQuests(); track q.id) {
+                <article class="lw-vtt-item-card" [class.gm-secret]="!q.revealedToPlayers">
+                  <div class="lw-vtt-item-card__head"><strong>{{ q.title }}</strong><span>{{ q.status }}</span></div>
+                  <p>{{ q.summary }}</p>
+                  @if (store.viewerRole() === 'gm') {
+                    <p class="lw-vtt-gm-secret">{{ q.gmSecret }}</p>
+                    <button ngpButton type="button" class="lw-vtt-reveal-btn" (click)="battle.toggleQuestRevealed(q.id)">
+                      {{ q.revealedToPlayers ? 'Revealed to Players' : 'Hidden (Click to Reveal)' }}
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          }
+
+          @if (battle.activeRightTab() === 'npcs') {
+            <div class="lw-vtt-tab-list">
+              @for (npc of battle.visibleNpcs(); track npc.id) {
+                <article class="lw-vtt-item-card" [class.gm-secret]="!npc.revealedToPlayers">
+                  <div class="lw-vtt-item-card__head"><strong>{{ npc.name }}</strong><span>{{ npc.scope }} · {{ npc.disposition }}</span></div>
+                  <small>{{ npc.title }} · {{ npc.locationName }}</small>
+                  <p>{{ npc.summary }}</p>
+                  @if (store.viewerRole() === 'gm') {
+                    <p class="lw-vtt-gm-secret">GM Secret: {{ npc.gmSecret }}</p>
+                    <button ngpButton type="button" class="lw-vtt-reveal-btn" (click)="battle.toggleNpcRevealed(npc.id)">
+                      {{ npc.revealedToPlayers ? 'Revealed to Players' : 'Hidden (Click to Reveal)' }}
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          }
+
+          @if (battle.activeRightTab() === 'lore') {
+            <div class="lw-vtt-tab-list">
+              @for (lore of battle.visibleLore(); track lore.id) {
+                <article class="lw-vtt-item-card" [class.gm-secret]="!lore.revealedToPlayers">
+                  <div class="lw-vtt-item-card__head"><strong>{{ lore.title }}</strong><span>{{ lore.category }}</span></div>
+                  <p>{{ lore.summary }}</p>
+                  @if (store.viewerRole() === 'gm') {
+                    <p class="lw-vtt-gm-secret">{{ lore.gmNotes }}</p>
+                    <button ngpButton type="button" class="lw-vtt-reveal-btn" (click)="battle.toggleLoreRevealed(lore.id)">
+                      {{ lore.revealedToPlayers ? 'Revealed to Players' : 'Hidden (Click to Reveal)' }}
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          }
+        </div>
+      </aside>
+    }
+  </div>
 </div>

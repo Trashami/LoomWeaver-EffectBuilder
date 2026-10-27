@@ -32,6 +32,7 @@ import {
   LwMapViewportBarComponent,
   LwSelectedSceneNode,
   LwTerrainSculptOp,
+  LwToastNotificationComponent,
   MapEditorModeTab,
 } from '../../shared/ui/public-api';
 import { MapHistoryEngineService } from './application/map-history-engine.service';
@@ -68,6 +69,7 @@ import { WallMeshBuilder } from './engine/walls/wall-mesh.builder';
     LwMapViewportBarComponent,
     LwMapPropertiesInspectorComponent,
     LwMapAssetPickerModalComponent,
+    LwToastNotificationComponent,
   ],
   templateUrl: './maps.page.html',
   styleUrl: './maps.page.scss',
@@ -89,7 +91,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   readonly assetModalOpen = signal<boolean>(false);
   readonly dimensionMode = signal<LwMapDimensionMode>('3d');
   readonly leftDockCollapsed = signal<boolean>(false);
-  readonly rightDockCollapsed = signal<boolean>(false);
+  readonly rightDockCollapsed = signal<boolean>(true);
 
   readonly mapTitle = signal<string>('The Forgotten Crypt');
   readonly gridCols = signal<number>(50);
@@ -240,7 +242,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.wallStartAnchor.set(null);
     this.activeDockToolId.set('select');
     this.leftDockCollapsed.set(false);
-    this.rightDockCollapsed.set(false);
+    this.rightDockCollapsed.set(true);
     this.showLandingHub.set(false);
     this.mountStudioViewports();
 
@@ -276,7 +278,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.wallStartAnchor.set(null);
     this.activeDockToolId.set('select');
     this.leftDockCollapsed.set(false);
-    this.rightDockCollapsed.set(false);
+    this.rightDockCollapsed.set(true);
     this.showLandingHub.set(false);
     this.mountStudioViewports();
   }
@@ -329,6 +331,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       annotate: 'stamps',
     };
     this.activeToolId.set(mapToEngineTool[dockToolId] ?? 'stamps');
+    this.pushCelestialLightToStage();
     this.syncGhostCursorToStage();
   }
 
@@ -398,7 +401,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
               : 'prop';
     this.stage.setGhostConfig(
       {
-        enabled: tool !== 'select' && tool !== 'floor-bump',
+        enabled: tool !== 'select' && tool !== 'floor-bump' && tool !== 'sun-moon',
         label: node.name,
         kind,
         modelUrl: node.modelUrl,
@@ -417,6 +420,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   onCanvasHoverAt(hx: number, hz: number): void {
     if (this.activeDockToolId() === 'sun-moon') {
       this.celestialAzimuthDeg.set(Math.round(((Math.atan2(hz, hx) * 180) / Math.PI + 360) % 360));
+      this.celestialAltitudeDeg.set(
+        Math.max(10, Math.min(86, Math.round(85 - Math.min(20, Math.hypot(hx, hz)) * 3.4))),
+      );
       this.pushCelestialLightToStage();
     }
     if (this.show2dCanvas()) this.render2dViewport(hx, hz);
@@ -451,8 +457,8 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
     if (dockTool === 'terrain') {
       this.stage.sculptTerrainAt(
-        px,
-        pz,
+        x,
+        z,
         this.terrainBrushRadius(),
         this.terrainBrushDelta(),
         this.terrainSculptOp(),
@@ -461,11 +467,18 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (dockTool === 'sun-moon') {
-      this.celestialAzimuthDeg.set(Math.round(((Math.atan2(pz, px) * 180) / Math.PI + 360) % 360));
+      this.celestialAzimuthDeg.set(Math.round(((Math.atan2(z, x) * 180) / Math.PI + 360) % 360));
       this.celestialAltitudeDeg.set(
-        Math.max(10, Math.min(86, Math.round(85 - Math.min(20, Math.hypot(px, pz)) * 3.4))),
+        Math.max(10, Math.min(86, Math.round(85 - Math.min(20, Math.hypot(x, z)) * 3.4))),
       );
+      // Lock the Sun/Moon at the clicked location, release mouse movement, and hide the sky orb
+      this.activeDockToolId.set('select');
       this.pushCelestialLightToStage();
+      this.syncGhostCursorToStage();
+      const bodyLabel = this.celestialMode() === 'sun' ? 'Sun' : 'Moon';
+      this.pngPipelineBanner.set(
+        `Placed ${bodyLabel} at Azimuth ${this.celestialAzimuthDeg()}° / Altitude ${this.celestialAltitudeDeg()}°.`,
+      );
       return;
     }
 
@@ -599,14 +612,21 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       azimuthDeg: this.celestialAzimuthDeg(),
       altitudeDeg: this.celestialAltitudeDeg(),
       shadowDarkness: this.shadowDarkness(),
+      showSkyOrb: this.activeDockToolId() === 'sun-moon',
     });
+  }
+
+  onGridModeChange(mode: string): void {
+    this.gridSizeLabel.set(mode);
+    this.stage.setGridMode(mode);
+    this.render2dViewport();
   }
 
   on2dCanvasMove(event: MouseEvent): void {
     const canvas = this.canvas2dRef?.nativeElement;
     if (!canvas) return;
     const coords = Real2dMapRenderer.screenToWorld(canvas, event.clientX, event.clientY);
-    this.render2dViewport(coords.x, coords.z);
+    this.onCanvasHoverAt(coords.x, coords.z);
   }
 
   on2dCanvasClick(event: MouseEvent): void {
@@ -622,6 +642,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     Real2dMapRenderer.renderSceneToCanvas(canvas, this.sceneGraph(), {
       hideGmSecrets: this.showPlayerSafeOnly(),
       selectedNodeId: this.selectedNode().id,
+      gridMode: this.gridSizeLabel(),
       ghostX,
       ghostZ,
       ghostLabel: this.selectedNode().name,

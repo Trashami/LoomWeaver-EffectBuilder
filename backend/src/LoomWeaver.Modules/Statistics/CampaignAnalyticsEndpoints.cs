@@ -156,7 +156,7 @@ public static class CampaignAnalyticsEndpoints
                     "Land the final killing blow on an ancient bound dragon using a slingshot loaded with a tooth.",
                     "Mythic Feat",
                     "Mythic",
-                    "Sparkles",
+                    "Bolt",
                     1,
                     1,
                     true,
