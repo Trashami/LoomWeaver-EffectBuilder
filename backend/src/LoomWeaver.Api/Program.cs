@@ -79,6 +79,7 @@ namespace LoomWeaver.Api
                         path.Contains("/actions/", StringComparison.OrdinalIgnoreCase) ||
                         path.Contains("/maps/", StringComparison.OrdinalIgnoreCase) ||
                         path.Contains("/summon-assets/", StringComparison.OrdinalIgnoreCase) ||
+                        path.Contains("/character-sheet/", StringComparison.OrdinalIgnoreCase) ||
                         path.EndsWith("/auth/login", StringComparison.OrdinalIgnoreCase) ||
                         path.EndsWith("/auth/register", StringComparison.OrdinalIgnoreCase) ||
                         path.EndsWith("/auth/google", StringComparison.OrdinalIgnoreCase) ||

@@ -54,6 +54,7 @@
   grid-template-columns: 1fr;
   background: #040b08;
   overflow: hidden;
+  touch-action: none;
 
   &--split {
     grid-template-columns: 1fr 1fr;
@@ -68,6 +69,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  touch-action: none;
 
   &--hidden {
     display: none;
@@ -80,6 +82,7 @@
   display: block;
   outline: none;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .lw-maps-studio__pane-tag {
@@ -115,8 +118,11 @@
 
   &--left {
     left: 0;
+    top: auto;
+    bottom: 2.6rem;
+    transform: none;
     border-left: none;
-    border-radius: 0 8px 8px 0;
+    border-radius: 0 6px 6px 0;
   }
 
   &--right {

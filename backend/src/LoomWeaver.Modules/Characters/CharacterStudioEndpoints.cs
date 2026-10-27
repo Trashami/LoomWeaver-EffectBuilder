@@ -14,6 +14,8 @@ public static class CharacterStudioEndpoints
 
     public static void MapCharacterStudioEndpoints(this IEndpointRouteBuilder group)
     {
+        group.MapCharacterSheetLiveTelemetryEndpoints();
+
         group.MapGet("/campaigns/{campaignId:int}/character-studio", (int campaignId) =>
         {
             var list = Sheets

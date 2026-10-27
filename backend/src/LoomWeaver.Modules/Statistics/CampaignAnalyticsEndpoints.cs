@@ -1,4 +1,5 @@
 using LoomWeaver.Domain;
+using LoomWeaver.Modules.Characters;
 using LoomWeaver.Modules.Dice;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -13,14 +14,15 @@ public static class CampaignAnalyticsEndpoints
         api.MapGet("/campaigns/{campaignId:int}/analytics", (int campaignId) =>
         {
             var recentRolls = DiceForgeEndpoints.GetRecentRolls();
+            var sheetStats = CharacterSheetLiveTelemetryEndpoints.GetAllTelemetry();
             var d20Rolls = recentRolls
                 .Where(r => r.Sides == 20)
                 .SelectMany(r => r.KeptRolls)
                 .ToList();
 
-            var baseRollCount = 412 + recentRolls.Count;
-            var nat20Count = 29 + recentRolls.Count(r => r.IsNat20);
-            var nat1Count = 14 + recentRolls.Count(r => r.IsNat1);
+            var baseRollCount = sheetStats.Sum(s => s.TotalSessionRolls) + recentRolls.Count;
+            var nat20Count = sheetStats.Sum(s => s.Nat20Count) + recentRolls.Count(r => r.IsNat20);
+            var nat1Count = sheetStats.Sum(s => s.CritFailCount) + recentRolls.Count(r => r.IsNat1);
             var avgD20 = d20Rolls.Count > 0
                 ? Math.Round((11.4 * 20 + d20Rolls.Average()) / 21.0, 2)
                 : 11.42;

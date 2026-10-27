@@ -13,11 +13,11 @@ export const DEFAULT_MAP_DOCK_TOOLS: readonly MapDockToolItem[] = [
   { id: 'select', label: 'Select', icon: 'cursor', layerHint: 'Select & Inspect Properties' },
   { id: 'floor-bump', label: 'Flooring', icon: 'pipette', layerHint: '2D Bump/Height Floor Texture' },
   { id: 'terrain', label: 'Raise/Lower', icon: 'map', layerHint: 'Raise or Lower Terrain Heightfield' },
-  { id: 'wall', label: 'Wall Line', icon: 'shield', layerHint: 'Draw Custom Gapless 3D Wall Line' },
-  { id: 'room', label: 'Shapes', icon: 'grid', layerHint: 'Gapless 3D Wall Room / Circle / Octagon' },
-  { id: 'door', label: 'Door', icon: 'key-round', layerHint: 'Portals, Archways & Secret Doors' },
-  { id: 'objects', label: 'Objects', icon: 'cube', layerHint: 'Place 3D Assets or 2D Bump Stamps (Ghost)' },
-  { id: 'lighting', label: 'Lights', icon: 'zap', layerHint: 'Point Lights, Spotlights & Sun/Moon' },
+  { id: 'wall', label: 'Wall Line', icon: 'shield', layerHint: 'Draw Grid-Snapped 3D Textured Wall Line' },
+  { id: 'room', label: 'Shapes', icon: 'grid', layerHint: 'Grid-Snapped 3D Wall Room / Circle / Octagon' },
+  { id: 'door', label: 'Door', icon: 'key-round', layerHint: 'Portals, Archways & Wall-Cutout Doors' },
+  { id: 'objects', label: 'Objects', icon: 'cube', layerHint: 'Place 1x1x1 3D Assets or 2D Floor Stamps' },
+  { id: 'lighting', label: 'Lights', icon: 'zap', layerHint: 'Torches, Lanterns, Spotlights & Glow' },
   { id: 'sun-moon', label: 'Sun/Moon', icon: 'compass', layerHint: 'Adjust Sun & Moon Shadow Position' },
   { id: 'water', label: 'Water', icon: 'globe', layerHint: 'Spline Rivers, Pools & Ocean' },
   { id: 'scatter', label: 'Scatter', icon: 'layers', layerHint: 'Seeded Foliage & Rock Brush' },
@@ -37,4 +37,5 @@ export class LwMapToolDockComponent {
   readonly activeToolId = input<string>('select');
 
   readonly toolSelected = output<string>();
+  readonly collapseRequested = output<void>();
 }

@@ -1,16 +1,29 @@
 <aside class="lw-tool-dock" role="toolbar" aria-label="Map Authoring Tools">
-  @for (tool of tools(); track tool.id) {
-    <button
-      ngpButton
-      type="button"
-      class="lw-tool-dock__btn"
-      [class.lw-tool-dock__btn--active]="activeToolId() === tool.id"
-      [attr.aria-pressed]="activeToolId() === tool.id"
-      [title]="tool.label + ' — ' + tool.layerHint"
-      (click)="toolSelected.emit(tool.id)"
-    >
-      <lw-icon [name]="tool.icon" [size]="18" />
-      <span class="lw-tool-dock__label">{{ tool.label }}</span>
-    </button>
-  }
+  <div class="lw-tool-dock__list">
+    @for (tool of tools(); track tool.id) {
+      <button
+        ngpButton
+        type="button"
+        class="lw-tool-dock__btn"
+        [class.lw-tool-dock__btn--active]="activeToolId() === tool.id"
+        [attr.aria-pressed]="activeToolId() === tool.id"
+        [title]="tool.label + ' — ' + tool.layerHint"
+        (click)="toolSelected.emit(tool.id)"
+      >
+        <lw-icon [name]="tool.icon" [size]="18" />
+        <span class="lw-tool-dock__label">{{ tool.label }}</span>
+      </button>
+    }
+  </div>
+
+  <button
+    ngpButton
+    type="button"
+    class="lw-tool-dock__collapse-btn"
+    title="Collapse Left Tool Menu"
+    (click)="collapseRequested.emit()"
+  >
+    <lw-icon name="chevron_left" [size]="16" />
+    <span class="lw-tool-dock__label">Hide</span>
+  </button>
 </aside>

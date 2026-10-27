@@ -1,26 +1,5 @@
 <header class="lw-subbar" role="region" aria-label="Map Studio Campaign, Session & Publish Bar">
   <div class="lw-subbar__left">
-    <button
-      ngpButton
-      type="button"
-      class="lw-subbar__icon-btn"
-      title="Return to LoomMaps Landing Hub (Create New or Open Existing Map)"
-      (click)="backRequested.emit()"
-    >
-      <lw-icon name="arrow-left" [size]="15" />
-    </button>
-
-    <button
-      ngpButton
-      type="button"
-      class="lw-subbar__icon-btn"
-      [class.lw-subbar__icon-btn--active]="!leftCollapsed()"
-      title="Toggle Left Tool Dock"
-      (click)="toggleLeftDock.emit()"
-    >
-      <lw-icon name="menu" [size]="15" />
-    </button>
-
     <div class="lw-subbar__title-group">
       @if (editingTitle()) {
         <input
