@@ -2,8 +2,7 @@
 <article ngpTabset [ngpTabsetValue]="activeTab()" class="lw-char-sheet" aria-label="Character Sheet Viewer">
   <div class="lw-char-sheet__crumb-bar">
     <div class="lw-char-sheet__crumbs">
-      <span class="lw-char-sheet__crumb-link">Characters</span>
-      <span class="lw-char-sheet__crumb-sep">/</span>
+      <span class="lw-char-sheet__crumb-link">Characters</span><span class="lw-char-sheet__crumb-sep">/</span>
       <span class="lw-char-sheet__crumb-current">{{ s.name }}</span>
     </div>
     <div class="lw-char-sheet__switcher">
@@ -23,9 +22,7 @@
           <span class="lw-char-sheet__role-badge"><lw-icon name="user" [size]="12" /> {{ s.roleBadge }}</span>
         </div>
         <p class="lw-char-sheet__subtitle">Level {{ s.level }} · {{ s.ancestryOrClan }} · {{ s.classOrArchetype }} · {{ s.subclass }}</p>
-        <div class="lw-char-sheet__tags">
-          @for (tag of s.tags; track tag) { <span class="lw-char-sheet__tag">{{ tag }}</span> }
-        </div>
+        <div class="lw-char-sheet__tags">@for (tag of s.tags; track tag) { <span class="lw-char-sheet__tag">{{ tag }}</span> }</div>
       </div>
     </div>
     <div class="lw-char-sheet__hero-right">
@@ -133,8 +130,7 @@
               @let sv = saveForAbility(ab.code);
               <div class="lw-char-sheet__equip-item">
                 <div class="lw-char-sheet__ability-box" [class.lw-char-sheet__ability-box--primary]="ab.code === primaryAbilityCode()">
-                  <span class="lw-char-sheet__ability-code">{{ ab.code }}</span>
-                  <strong class="lw-char-sheet__ability-score">{{ ab.score }}</strong>
+                  <span class="lw-char-sheet__ability-code">{{ ab.code }}</span><strong class="lw-char-sheet__ability-score">{{ ab.score }}</strong>
                 </div>
                 <div class="lw-char-sheet__equip-copy">
                   <strong>{{ ab.label }} · Modifier {{ formatMod(ab.modifier) }}</strong>
@@ -270,9 +266,7 @@
                 }
               </div>
             </div>
-          } @empty {
-            <p class="lw-char-sheet__muted">No spells currently in your Spellbook. Scribe or prepare spells from the 5e Compendium on the right.</p>
-          }
+          } @empty { <p class="lw-char-sheet__muted">No spells currently in your Spellbook.</p> }
         </section>
         <section class="lw-char-sheet__card">
           <header class="lw-char-sheet__card-head"><h2>5e Spell Compendium (Scribe / Prepare)</h2></header>
@@ -309,10 +303,7 @@
               @for (eq of equippedItems(); track eq.id) {
                 <div class="lw-char-sheet__equip-item">
                   <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'shield'" [size]="16" tone="gold" /></span>
-                  <div class="lw-char-sheet__equip-copy">
-                    <strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong>
-                    <small>{{ eq.summary }} · {{ eq.bonusLabel }}</small>
-                  </div>
+                  <div class="lw-char-sheet__equip-copy"><strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong><small>{{ eq.summary }} · {{ eq.bonusLabel }}</small></div>
                   <div class="lw-char-sheet__inline-btns">
                     <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="toggleEquipmentItem(eq)">To Pack</button>
                     <button ngpButton type="button" class="lw-char-sheet__equip-badge is-remove" (click)="equipmentRemoved.emit(eq.id)">Remove</button>
@@ -327,10 +318,7 @@
               @for (eq of backpackItems(); track eq.id) {
                 <div class="lw-char-sheet__equip-item">
                   <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'layers'" [size]="16" tone="gold" /></span>
-                  <div class="lw-char-sheet__equip-copy">
-                    <strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong>
-                    <small>{{ eq.summary }} · {{ eq.bonusLabel }}</small>
-                  </div>
+                  <div class="lw-char-sheet__equip-copy"><strong>{{ eq.name }} · <span class="lw-char-sheet__muted">{{ eq.slot }}</span></strong><small>{{ eq.summary }} · {{ eq.bonusLabel }}</small></div>
                   <div class="lw-char-sheet__inline-btns">
                     <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="toggleEquipmentItem(eq)">Equip</button>
                     <button ngpButton type="button" class="lw-char-sheet__equip-badge is-remove" (click)="equipmentRemoved.emit(eq.id)">Remove</button>
@@ -346,10 +334,7 @@
           <div class="lw-char-sheet__equip-list">
             @for (item of filteredEquipmentCatalog(); track item.id) {
               <div class="lw-char-sheet__equip-item">
-                <div class="lw-char-sheet__equip-copy">
-                  <strong>{{ item.name }} ({{ item.slot }})</strong>
-                  <small>{{ item.summary }} · {{ item.bonusLabel }}</small>
-                </div>
+                <div class="lw-char-sheet__equip-copy"><strong>{{ item.name }} ({{ item.slot }})</strong><small>{{ item.summary }} · {{ item.bonusLabel }}</small></div>
                 <div class="lw-char-sheet__inline-btns">
                   <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="equipmentAdded.emit({ item, equipNow: true })">+ Equip</button>
                   <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="equipmentAdded.emit({ item, equipNow: false })">+ Pack</button>
@@ -373,10 +358,7 @@
               @for (eq of equippedItems(); track eq.id) {
                 <div class="lw-char-sheet__equip-item">
                   <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'shield'" [size]="15" tone="gold" /></span>
-                  <div class="lw-char-sheet__equip-copy">
-                    <strong>{{ eq.name }}</strong>
-                    <small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small>
-                  </div>
+                  <div class="lw-char-sheet__equip-copy"><strong>{{ eq.name }}</strong><small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small></div>
                   <button ngpButton type="button" class="lw-char-sheet__equip-badge lw-char-sheet__equip-badge--active" (click)="toggleEquipmentItem(eq)">Equipped (Move to Pack)</button>
                 </div>
               } @empty { <p class="lw-char-sheet__muted">No items equipped.</p> }
@@ -388,10 +370,7 @@
               @for (eq of backpackItems(); track eq.id) {
                 <div class="lw-char-sheet__equip-item">
                   <span class="lw-char-sheet__equip-icon"><lw-icon [name]="eq.icon || 'layers'" [size]="15" tone="gold" /></span>
-                  <div class="lw-char-sheet__equip-copy">
-                    <strong>{{ eq.name }}</strong>
-                    <small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small>
-                  </div>
+                  <div class="lw-char-sheet__equip-copy"><strong>{{ eq.name }}</strong><small>{{ eq.slot }} · {{ eq.summary }} ({{ eq.bonusLabel }})</small></div>
                   <button ngpButton type="button" class="lw-char-sheet__equip-badge" (click)="toggleEquipmentItem(eq)">In Backpack (Equip)</button>
                 </div>
               } @empty { <p class="lw-char-sheet__muted">Backpack is empty.</p> }

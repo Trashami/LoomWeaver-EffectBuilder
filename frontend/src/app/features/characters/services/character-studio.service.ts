@@ -38,20 +38,12 @@ export class CharacterStudioService {
   readonly ancestrySearchQuery = signal<string>('');
 
   readonly creatorDraft = signal<CharacterCreatorDraftVm>({
-    name: 'Ciarán Fiachra',
-    pronouns: 'He/Him',
-    alignment: 'Neutral Good',
+    name: 'Ciarán Fiachra', pronouns: 'He/Him', alignment: 'Neutral Good',
     quote: '"Knowledge preserves what time would otherwise forget."',
-    portraitUrl: '/assets/5e-tools/races/PHB/Elf.webp',
-    level: 1,
-    ancestryId: 'elf',
-    subraceId: 'high-elf',
-    classId: 'wizard',
-    subclass: 'School of Evocation',
-    backgroundId: 'sage',
-    selectedSkills: ['Arcana', 'History', 'Investigation', 'Perception'],
-    selectedFeatId: 'Warcaster',
-    startingPack: 'Starting Equipment',
+    portraitUrl: '/assets/5e-tools/races/PHB/Elf.webp', level: 1,
+    ancestryId: 'elf', subraceId: 'high-elf', classId: 'wizard', subclass: 'School of Evocation',
+    backgroundId: 'sage', selectedSkills: ['Arcana', 'History', 'Investigation', 'Perception'],
+    selectedFeatId: 'Warcaster', startingPack: 'Starting Equipment',
     equipmentItems: wizardDefaultEquipment('ciaran'),
     equippedItemIds: ['ciaran-focus', 'ciaran-spellbook', 'ciaran-robe', 'ciaran-belt'],
     backpackItemIds: ['ciaran-ring', 'ciaran-pack'],
@@ -64,48 +56,36 @@ export class CharacterStudioService {
 
   readonly userOwnedSheets = computed<readonly CharacterSheetVm[]>(() => {
     const profile = this.auth.activeProfile();
-    const all = this.sheets();
     if (!profile || profile.accountId === 'unauthenticated') return [];
     const bound = (profile.boundCharacter || '').trim().toLowerCase();
-    return all.filter((s) => {
+    return this.sheets().filter((s) => {
       if (s.ownerAccountId === profile.accountId) return true;
       if (s.ownerUsername && s.ownerUsername.toLowerCase() === (profile.username || '').toLowerCase()) return true;
-      if (bound && bound !== 'gm' && bound !== 'none') {
-        return s.name.toLowerCase().includes(bound) || s.characterKey.toLowerCase().includes(bound);
-      }
-      return false;
+      return bound && bound !== 'gm' && bound !== 'none'
+        ? s.name.toLowerCase().includes(bound) || s.characterKey.toLowerCase().includes(bound)
+        : false;
     });
   });
 
   readonly hasUserCharacters = computed<boolean>(() => this.userOwnedSheets().length > 0);
-
   readonly activeSheet = computed<CharacterSheetVm>(() => {
-    const key = this.selectedCharacterKey();
     const list = this.sheets();
-    const found = list.find((s) => s.characterKey === key) ?? list[0];
+    const found = list.find((s) => s.characterKey === this.selectedCharacterKey()) ?? list[0];
     return this.recalculate(found, this.activeSystem());
   });
 
   private lastInitializedAccountId = '';
 
   constructor() {
-    effect(
-      () => {
-        const profile = this.auth.activeProfile();
-        const owned = this.userOwnedSheets();
-        if (profile.accountId !== this.lastInitializedAccountId) {
-          this.lastInitializedAccountId = profile.accountId;
-          if (owned.length > 0) {
-            this.selectedCharacterKey.set(owned[0].characterKey);
-            this.viewMode.set('viewer');
-          } else {
-            this.selectedCharacterKey.set('char-dal');
-            this.viewMode.set('roster');
-          }
-        }
-      },
-      { allowSignalWrites: true },
-    );
+    effect(() => {
+      const profile = this.auth.activeProfile();
+      const owned = this.userOwnedSheets();
+      if (profile.accountId !== this.lastInitializedAccountId) {
+        this.lastInitializedAccountId = profile.accountId;
+        this.selectedCharacterKey.set(owned.length > 0 ? owned[0].characterKey : 'char-dal');
+        this.viewMode.set(owned.length > 0 ? 'viewer' : 'roster');
+      }
+    }, { allowSignalWrites: true });
   }
 
   syncDefaultViewForSignedInUser(requestedMode?: string | null, focusKey?: string | null): void {
@@ -115,10 +95,6 @@ export class CharacterStudioService {
     }
     if (requestedMode === 'creator' || requestedMode === 'create') {
       this.openCreatorWizard();
-      return;
-    }
-    if (requestedMode === 'viewer' || requestedMode === 'sheet') {
-      this.viewMode.set('viewer');
       return;
     }
     const owned = this.userOwnedSheets();
@@ -139,60 +115,33 @@ export class CharacterStudioService {
     if (fromExisting) {
       this.isEditingCharacter.set(true);
       this.editingCharacterKey.set(fromExisting.characterKey);
-      const scoreOf = (code: AbilityScoreVm['code']) =>
-        fromExisting.abilities.find((a) => a.code === code)?.score ?? 12;
-      const matchedAncestry =
-        ancestries.find((a) => fromExisting.ancestryOrClan.toLowerCase().includes(a.name.toLowerCase())) ??
-        ancestries[1];
-      const matchedSubrace =
-        matchedAncestry.subraces.find((sr) => fromExisting.subrace.toLowerCase().includes(sr.name.toLowerCase())) ??
-        matchedAncestry.subraces[0];
-      const matchedClass =
-        classes.find((c) => fromExisting.classOrArchetype.toLowerCase().includes(c.name.toLowerCase())) ??
-        classes[0];
-      const matchedBg =
-        backgrounds.find((b) => fromExisting.backgroundName.toLowerCase().includes(b.name.toLowerCase())) ??
-        backgrounds[0];
+      const scoreOf = (code: AbilityScoreVm['code']) => fromExisting.abilities.find((a) => a.code === code)?.score ?? 12;
+      const matchedAncestry = ancestries.find((a) => fromExisting.ancestryOrClan.toLowerCase().includes(a.name.toLowerCase())) ?? ancestries[1];
+      const matchedSubrace = matchedAncestry.subraces.find((sr) => fromExisting.subrace.toLowerCase().includes(sr.name.toLowerCase())) ?? matchedAncestry.subraces[0];
+      const matchedClass = classes.find((c) => fromExisting.classOrArchetype.toLowerCase().includes(c.name.toLowerCase())) ?? classes[0];
+      const matchedBg = backgrounds.find((b) => fromExisting.backgroundName.toLowerCase().includes(b.name.toLowerCase())) ?? backgrounds[0];
 
       this.creatorDraft.set({
-        name: fromExisting.name,
-        pronouns: fromExisting.pronouns,
-        alignment: fromExisting.alignment,
-        quote: fromExisting.quote,
-        portraitUrl: fromExisting.portraitUrl,
-        level: fromExisting.level,
-        ancestryId: matchedAncestry.id,
-        subraceId: matchedSubrace?.id ?? matchedAncestry.subraces[0]?.id ?? 'high-elf',
-        classId: matchedClass.id,
-        subclass: fromExisting.subclass || matchedClass.subclassDefault,
-        backgroundId: matchedBg.id,
-        selectedSkills: fromExisting.skills.filter((s) => s.proficient).map((s) => s.label),
+        name: fromExisting.name, pronouns: fromExisting.pronouns, alignment: fromExisting.alignment,
+        quote: fromExisting.quote, portraitUrl: fromExisting.portraitUrl, level: fromExisting.level,
+        ancestryId: matchedAncestry.id, subraceId: matchedSubrace?.id ?? matchedAncestry.subraces[0]?.id ?? 'high-elf',
+        classId: matchedClass.id, subclass: fromExisting.subclass || matchedClass.subclassDefault,
+        backgroundId: matchedBg.id, selectedSkills: fromExisting.skills.filter((s) => s.proficient).map((s) => s.label),
         selectedFeatId: fromExisting.featureCards.find((f) => f.category === 'feat')?.title ?? 'Warcaster',
         startingPack: 'Starting Equipment',
         equipmentItems: [...fromExisting.equipment],
         equippedItemIds: fromExisting.equipment.filter((e) => e.equipped).map((e) => e.id),
         backpackItemIds: fromExisting.equipment.filter((e) => !e.equipped).map((e) => e.id),
-        personalityTrait: fromExisting.personality.personality,
-        ideal: fromExisting.personality.ideals,
-        bond: fromExisting.personality.bonds,
-        flaw: fromExisting.personality.flaws,
-        abilities: {
-          STR: scoreOf('STR'),
-          DEX: scoreOf('DEX'),
-          CON: scoreOf('CON'),
-          INT: scoreOf('INT'),
-          WIS: scoreOf('WIS'),
-          CHA: scoreOf('CHA'),
-        },
+        personalityTrait: fromExisting.personality.personality, ideal: fromExisting.personality.ideals,
+        bond: fromExisting.personality.bonds, flaw: fromExisting.personality.flaws,
+        abilities: { STR: scoreOf('STR'), DEX: scoreOf('DEX'), CON: scoreOf('CON'), INT: scoreOf('INT'), WIS: scoreOf('WIS'), CHA: scoreOf('CHA') },
       });
     } else {
       this.isEditingCharacter.set(false);
       this.editingCharacterKey.set(null);
       this.creatorStep.set(1);
       this.creatorDraft.update((cur) => ({
-        ...cur,
-        level: 1,
-        equipmentItems: wizardDefaultEquipment('new'),
+        ...cur, level: 1, equipmentItems: wizardDefaultEquipment('new'),
         abilities: { STR: 8, DEX: 14, CON: 14, INT: 15, WIS: 12, CHA: 10 },
       }));
     }
@@ -218,18 +167,14 @@ export class CharacterStudioService {
     const maxScore = isEdit ? 20 : 18;
     this.creatorDraft.update((cur) => ({
       ...cur,
-      abilities: {
-        ...cur.abilities,
-        [code]: Math.max(minScore, Math.min(maxScore, (cur.abilities[code] ?? 10) + delta)),
-      },
+      abilities: { ...cur.abilities, [code]: Math.max(minScore, Math.min(maxScore, (cur.abilities[code] ?? 10) + delta)) },
     }));
   }
 
   toggleCreatorSkill(skillLabel: string): void {
     this.creatorDraft.update((cur) => {
       const exists = cur.selectedSkills.includes(skillLabel);
-      const next = exists ? cur.selectedSkills.filter((s) => s !== skillLabel) : [...cur.selectedSkills, skillLabel];
-      return { ...cur, selectedSkills: next };
+      return { ...cur, selectedSkills: exists ? cur.selectedSkills.filter((s) => s !== skillLabel) : [...cur.selectedSkills, skillLabel] };
     });
   }
 
@@ -258,66 +203,33 @@ export class CharacterStudioService {
       { code: 'WIS', label: 'Wisdom', score: draft.abilities.WIS, modifier: 0 },
       { code: 'CHA', label: 'Charisma', score: draft.abilities.CHA, modifier: 0 },
     ];
-
-    const resolvedEquipment: EquipmentLoadoutItemVm[] = draft.equipmentItems?.length
-      ? [...draft.equipmentItems]
-      : [...wizardDefaultEquipment(slug)];
+    const resolvedEquipment = draft.equipmentItems?.length ? [...draft.equipmentItems] : [...wizardDefaultEquipment(slug)];
 
     const baseSheet: CharacterSheetVm = {
-      compositeKey: `1:Character:${charKey}`,
-      characterKey: charKey,
+      compositeKey: `1:Character:${charKey}`, characterKey: charKey,
       ownerAccountId: existingSheet?.ownerAccountId ?? profile.accountId,
       ownerUsername: existingSheet?.ownerUsername ?? profile.username,
-      campaignId: 1,
-      name: cleanName,
-      roleBadge: 'Player Character',
+      campaignId: 1, name: cleanName, roleBadge: 'Player Character',
       portraitUrl: draft.portraitUrl || subrace?.portraitUrl || ancestry.portraitUrl,
-      pronouns: draft.pronouns || 'He/Him',
-      alignment: draft.alignment || 'Neutral Good',
-      quote: draft.quote || bg.defaultQuote,
-      ancestryOrClan: ancestry.name,
-      subrace: subrace?.name ?? ancestry.name,
-      classOrArchetype: cls.name,
-      subclass: draft.subclass || cls.subclassDefault,
-      backgroundName: bg.name,
-      backgroundSummary: bg.summary,
+      pronouns: draft.pronouns || 'He/Him', alignment: draft.alignment || 'Neutral Good',
+      quote: draft.quote || bg.defaultQuote, ancestryOrClan: ancestry.name,
+      subrace: subrace?.name ?? ancestry.name, classOrArchetype: cls.name,
+      subclass: draft.subclass || cls.subclassDefault, backgroundName: bg.name, backgroundSummary: bg.summary,
       tags: ['Party Member', subrace?.name ?? ancestry.name, bg.name, cls.name, 'Cinth'],
-      systemCode: this.activeSystem(),
-      level: draft.level ?? existingSheet?.level ?? 5,
-      currentXp: existingSheet?.currentXp ?? 14250,
-      nextLevelXp: existingSheet?.nextLevelXp ?? 15000,
+      systemCode: this.activeSystem(), level: draft.level ?? existingSheet?.level ?? 5,
+      currentXp: existingSheet?.currentXp ?? 14250, nextLevelXp: existingSheet?.nextLevelXp ?? 15000,
       levelUpEligible: existingSheet?.levelUpEligible ?? true,
-      maxHp: 32,
-      currentHp: 32,
-      armorClass: 15,
-      initiativeBonus: 3,
-      speedFeet: ancestry.speedFeet ?? 30,
-      proficiencyBonus: 3,
-      primaryAttackBonus: 7,
+      maxHp: 32, currentHp: 32, armorClass: 15, initiativeBonus: 3, speedFeet: ancestry.speedFeet ?? 30,
+      proficiencyBonus: 3, primaryAttackBonus: 7,
       actionEconomySummary: '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move',
-      abilities,
-      savingThrows: buildSavingThrows(abilities, 3, cls.savingThrows),
+      abilities, savingThrows: buildSavingThrows(abilities, 3, cls.savingThrows),
       skills: buildSkillsList(abilities, 3, draft.selectedSkills),
       spellGroups: existingSheet?.spellGroups?.length ? existingSheet.spellGroups : cls.startingSpells,
       equipment: resolvedEquipment.length ? resolvedEquipment : wizardDefaultEquipment(slug),
       featureCards: [
         ...cls.features,
-        ...ancestry.traits.map((t) => ({
-          id: `anc-${slug}-${t.id}`,
-          title: `${ancestry.name}: ${t.title}`,
-          category: 'ancestry' as const,
-          summary: t.description,
-          icon: t.icon,
-          tone: 'emerald' as const,
-        })),
-        {
-          id: `feat-${slug}-custom`,
-          title: draft.selectedFeatId || 'Warcaster',
-          category: 'feat',
-          summary: 'Selected Feat & Tactical Mastery.',
-          icon: 'swords',
-          tone: 'gold',
-        },
+        ...ancestry.traits.map((t) => ({ id: `anc-${slug}-${t.id}`, title: `${ancestry.name}: ${t.title}`, category: 'ancestry' as const, summary: t.description, icon: t.icon, tone: 'emerald' as const })),
+        { id: `feat-${slug}-custom`, title: draft.selectedFeatId || 'Warcaster', category: 'feat', summary: 'Selected Feat & Tactical Mastery.', icon: 'swords', tone: 'gold' },
       ],
       features: [...cls.features.map((f) => f.title), ...ancestry.traits.map((t) => t.title), draft.selectedFeatId || 'Warcaster'],
       personality: {
@@ -327,16 +239,11 @@ export class CharacterStudioService {
         flaws: draft.flaw || bg.personality.flaws,
       },
       connections: existingSheet?.connections ?? DEFAULT_CONNECTIONS,
-      notes: existingSheet?.notes ?? [
-        `Created in Character Studio for ${this.store.activeCampaign().name}.`,
-        `Starting Equipment Pack: ${draft.startingPack} · Proficient Skills: ${draft.selectedSkills.join(', ')}.`,
-      ],
+      notes: existingSheet?.notes ?? [`Created in Character Studio for ${this.store.activeCampaign().name}.`],
       richNotes: existingSheet?.richNotes ?? [],
       metEntities: existingSheet?.metEntities ?? this.catalog.metEntities(),
       campaignHistory: existingSheet?.campaignHistory ?? this.catalog.campaignHistory(),
-      historyEvents: existingSheet?.historyEvents ?? [
-        `Created as a ${subrace?.name ?? ancestry.name} ${cls.name} (${draft.subclass || cls.subclassDefault}) with the ${bg.name} background.`,
-      ],
+      historyEvents: existingSheet?.historyEvents ?? [`Created as a ${subrace?.name ?? ancestry.name} ${cls.name}.`],
     };
 
     const calculated = this.recalculate(baseSheet, this.activeSystem());
@@ -355,9 +262,7 @@ export class CharacterStudioService {
     this.sheets.update((list) =>
       list.map((sheet) => {
         if (sheet.characterKey !== key) return sheet;
-        const abilities = sheet.abilities.map((a) =>
-          a.code === code ? { ...a, score: Math.max(6, Math.min(22, a.score + delta)) } : a,
-        );
+        const abilities = sheet.abilities.map((a) => (a.code === code ? { ...a, score: Math.max(6, Math.min(22, a.score + delta)) } : a));
         return this.recalculate({ ...sheet, abilities }, this.activeSystem());
       }),
     );
@@ -376,26 +281,16 @@ export class CharacterStudioService {
 
   addEquipmentFromDatabase(item: EquipmentLoadoutItemVm, equipNow: boolean): void {
     const key = this.selectedCharacterKey();
-    const instanceId = `${item.id}-${Date.now().toString(36).slice(-4)}`;
-    const newItem: EquipmentLoadoutItemVm = { ...item, id: instanceId, equipped: equipNow };
+    const newItem: EquipmentLoadoutItemVm = { ...item, id: `${item.id}-${Date.now().toString(36).slice(-4)}`, equipped: equipNow };
     this.sheets.update((list) =>
-      list.map((sheet) => {
-        if (sheet.characterKey !== key) return sheet;
-        return this.recalculate({ ...sheet, equipment: [newItem, ...sheet.equipment] }, this.activeSystem());
-      }),
+      list.map((sheet) => (sheet.characterKey === key ? this.recalculate({ ...sheet, equipment: [newItem, ...sheet.equipment] }, this.activeSystem()) : sheet)),
     );
   }
 
   removeEquipmentItem(equipmentId: string): void {
     const key = this.selectedCharacterKey();
     this.sheets.update((list) =>
-      list.map((sheet) => {
-        if (sheet.characterKey !== key) return sheet;
-        return this.recalculate(
-          { ...sheet, equipment: sheet.equipment.filter((e) => e.id !== equipmentId) },
-          this.activeSystem(),
-        );
-      }),
+      list.map((sheet) => (sheet.characterKey === key ? this.recalculate({ ...sheet, equipment: sheet.equipment.filter((e) => e.id !== equipmentId) }, this.activeSystem()) : sheet)),
     );
   }
 
@@ -406,9 +301,7 @@ export class CharacterStudioService {
         if (sheet.characterKey !== key) return sheet;
         const spellGroups = sheet.spellGroups.map((grp) => ({
           ...grp,
-          spells: grp.spells.map((sp) =>
-            sp.id === spellId ? { ...sp, prepared: grp.isCantrip ? true : !sp.prepared } : sp,
-          ),
+          spells: grp.spells.map((sp) => (sp.id === spellId ? { ...sp, prepared: grp.isCantrip ? true : !sp.prepared } : sp)),
         }));
         return { ...sheet, spellGroups };
       }),
@@ -426,11 +319,7 @@ export class CharacterStudioService {
         const existsGrp = sheet.spellGroups.some((g) => g.groupId === groupId);
         const spellEntry: CharacterSpellVm = { ...spell, prepared: isCantrip ? true : prepared };
         const spellGroups = existsGrp
-          ? sheet.spellGroups.map((g) =>
-              g.groupId === groupId && !g.spells.some((s) => s.name === spell.name)
-                ? { ...g, spells: [...g.spells, spellEntry] }
-                : g,
-            )
+          ? sheet.spellGroups.map((g) => (g.groupId === groupId && !g.spells.some((s) => s.name === spell.name) ? { ...g, spells: [...g.spells, spellEntry] } : g))
           : [...sheet.spellGroups, { groupId, label: groupLabel, slotsRemaining: 2, slotsMax: 2, isCantrip, spells: [spellEntry] }];
         return { ...sheet, spellGroups };
       }),
@@ -442,9 +331,7 @@ export class CharacterStudioService {
     this.sheets.update((list) =>
       list.map((sheet) => {
         if (sheet.characterKey !== key) return sheet;
-        const equipment = sheet.equipment.map((eq) =>
-          eq.id === equipmentId ? { ...eq, entitlement: 'purchased' as const, equipped: true } : eq,
-        );
+        const equipment = sheet.equipment.map((eq) => (eq.id === equipmentId ? { ...eq, entitlement: 'purchased' as const, equipped: true } : eq));
         return this.recalculate({ ...sheet, equipment }, this.activeSystem());
       }),
     );
@@ -466,19 +353,14 @@ export class CharacterStudioService {
       list.map((sheet) => {
         if (sheet.characterKey !== key) return sheet;
         const nextLevel = sheet.level + 1;
-        const abilities = sheet.abilities.map((a) =>
-          a.code === abilityBoost ? { ...a, score: Math.min(22, a.score + 1) } : a,
-        );
+        const abilities = sheet.abilities.map((a) => (a.code === abilityBoost ? { ...a, score: Math.min(22, a.score + 1) } : a));
         const features = [...sheet.features, `Lv.${nextLevel}: ${featureName}`];
         const featureCards = [
           ...sheet.featureCards,
           { id: `feat-lv-${nextLevel}`, title: `Lv.${nextLevel} · ${featureName} (+1 ${abilityBoost})`, category: 'feat' as const, summary: `Unlocked at Level ${nextLevel} along with +1 ${abilityBoost}.`, icon: 'zap', tone: 'gold' as const },
         ];
         const historyEvents = [`Advanced to Level ${nextLevel}: selected ${featureName} and +1 ${abilityBoost}.`, ...sheet.historyEvents];
-        return this.recalculate(
-          { ...sheet, level: nextLevel, nextLevelXp: sheet.nextLevelXp + 14000, abilities, features, featureCards, historyEvents },
-          this.activeSystem(),
-        );
+        return this.recalculate({ ...sheet, level: nextLevel, nextLevelXp: sheet.nextLevelXp + 14000, abilities, features, featureCards, historyEvents }, this.activeSystem());
       }),
     );
   }
@@ -495,11 +377,7 @@ export class CharacterStudioService {
     this.sheets.update((list) =>
       list.map((s) =>
         s.characterKey === key
-          ? {
-              ...s,
-              richNotes: [note, ...(s.richNotes ?? [])],
-              notes: [`[${note.visibility.toUpperCase()}] ${note.title}: ${note.contentText}`, ...s.notes],
-            }
+          ? { ...s, richNotes: [note, ...(s.richNotes ?? [])], notes: [`[${note.visibility.toUpperCase()}] ${note.title}: ${note.contentText}`, ...s.notes] }
           : s,
       ),
     );
@@ -510,36 +388,22 @@ export class CharacterStudioService {
     this.updateCreatorDraft({ name: name.trim() || 'Vandia Vanguard', subclass: archetype });
     const created = this.finalizeWizardCharacter();
     this.sheets.update((list) =>
-      list.map((s) =>
-        s.characterKey === created.characterKey
-          ? this.recalculate({ ...s, ancestryOrClan: ancestry, classOrArchetype: archetype, level: 7 }, this.activeSystem())
-          : s,
-      ),
+      list.map((s) => (s.characterKey === created.characterKey ? this.recalculate({ ...s, ancestryOrClan: ancestry, classOrArchetype: archetype, level: 7 }, this.activeSystem()) : s)),
     );
   }
 
   private registerInCampaignStore(sheet: CharacterSheetVm): void {
     this.store.registerEntity({
-      compositeKey: sheet.compositeKey,
-      entityKey: sheet.characterKey,
-      campaignId: sheet.campaignId,
-      entityType: 'Character',
-      name: sheet.name,
-      subtitle: `${sheet.ancestryOrClan} · ${sheet.classOrArchetype}`,
-      visibility: 'players',
-      canonStatus: 'approved',
+      compositeKey: sheet.compositeKey, entityKey: sheet.characterKey, campaignId: sheet.campaignId,
+      entityType: 'Character', name: sheet.name, subtitle: `${sheet.ancestryOrClan} · ${sheet.classOrArchetype}`,
+      visibility: 'players', canonStatus: 'approved',
       summary: `Level ${sheet.level} ${sheet.ancestryOrClan} ${sheet.classOrArchetype} (HP ${sheet.maxHp}, AC ${sheet.armorClass}).`,
       routeLink: `/characters?focus=${sheet.characterKey}`,
     });
     this.adventureGuide.populateCharacterOrNpc({
-      compositeKey: sheet.compositeKey,
-      name: sheet.name,
-      role: `${sheet.ancestryOrClan} · ${sheet.classOrArchetype}`,
-      dispositionLabel: 'Party Hero',
-      motive: `Active party member (Lv.${sheet.level}, HP ${sheet.maxHp}, AC ${sheet.armorClass}).`,
-      artworkUrl: sheet.portraitUrl,
-      sessionId: 'session-15',
-      locationNodeId: 'node-room-c1-nave',
+      compositeKey: sheet.compositeKey, name: sheet.name, role: `${sheet.ancestryOrClan} · ${sheet.classOrArchetype}`,
+      dispositionLabel: 'Party Hero', motive: `Active party member (Lv.${sheet.level}, HP ${sheet.maxHp}, AC ${sheet.armorClass}).`,
+      artworkUrl: sheet.portraitUrl, sessionId: 'session-15', locationNodeId: 'node-room-c1-nave',
       routeLink: `/characters?focus=${sheet.characterKey}`,
     });
   }
@@ -569,17 +433,9 @@ export class CharacterStudioService {
     const skills = buildSkillsList(abilities, prof, proficientSkills);
 
     return {
-      ...sheet,
-      systemCode,
-      abilities,
-      savingThrows,
-      skills,
-      proficiencyBonus: prof,
-      armorClass,
-      maxHp,
-      currentHp: maxHp,
-      initiativeBonus: dexMod,
-      primaryAttackBonus,
+      ...sheet, systemCode, abilities, savingThrows, skills,
+      proficiencyBonus: prof, armorClass, maxHp, currentHp: maxHp,
+      initiativeBonus: dexMod, primaryAttackBonus,
       actionEconomySummary: '1 Action · 1 Bonus Action · 1 Reaction · 30ft Move',
       metEntities: sheet.metEntities ?? this.catalog.metEntities(),
       campaignHistory: sheet.campaignHistory ?? this.catalog.campaignHistory(),

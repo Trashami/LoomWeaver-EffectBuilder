@@ -23,7 +23,7 @@ import { adaptEffectForCampaign, downloadStandaloneEffectFile, parseStandaloneEf
 import { EffectPreviewComponent } from './shared/effect-preview.component';
 import { TimelineComponent, ClipChange } from './shared/timeline/timeline.component';
 import { EffectApiService, EffectListing } from './effect-api.service';
-import { CINEMATIC_DEFAULTS,CinematicSettings,GameplaySettings,GAMEPLAY_DEFAULTS,createMageHandEffect, MageHandSettings, createFireballComposition, FireMaterialSettings, FIRE_MATERIAL_CONTROLS, createFireHitEffect, FIRE_HIT_CONTROLS, FireHitSettings, MISSILE_CONTROLS, MagicMissileSettings, PreviewScene, defaultScene, WHIP_CONTROLS, WHIP_DEFAULTS, WhipSettings, BLEND_MODES, EFFECT_KINDS, VARIANTS, EffectDefinition, EffectKind, EffectLayer, EffectMotion, EffectAssignment, createEffect, createLayer, defaultMotion, effectDuration, makePresets, newId, parseEffect, PROJECTILE_ELEMENTS, PROJECTILE_SHAPES, PROJECTILE_CORE_CONTROLS, ProjectileCoreSettings, ProjectileElement, ProjectileCoreShape, defaultProjectileCoreForVariant, parseProjectileCore } from './effects/effect-definition';
+import { CINEMATIC_DEFAULTS,CinematicSettings,GameplaySettings,GAMEPLAY_DEFAULTS,createMageHandEffect, MageHandSettings, createFireballComposition, FireMaterialSettings, FIRE_MATERIAL_CONTROLS, createFireHitEffect, FIRE_HIT_CONTROLS, FireHitSettings, MISSILE_CONTROLS, MagicMissileSettings, PreviewScene, defaultScene, WHIP_CONTROLS, WHIP_DEFAULTS, WhipSettings, BLEND_MODES, EFFECT_KINDS, VARIANTS, EffectDefinition, EffectKind, EffectLayer, EffectMotion, EffectAssignment, createEffect, createLayer, defaultMotion, effectDuration, makePresets, newId, parseEffect, PROJECTILE_ELEMENTS, PROJECTILE_SHAPES, PROJECTILE_CORE_CONTROLS, ProjectileCoreSettings, ProjectileElement, ProjectileCoreShape, defaultProjectileCoreForVariant, parseProjectileCore, SkyProjectileSettings, SkyBeamSettings, SkyLightningSettings, SKY_ORIGIN_CONTROLS, SKY_BEAM_CONTROLS, SKY_LIGHTNING_CONTROLS, parseSkyProjectile, parseSkyBeam, parseSkyLightning } from './effects/effect-definition';
 @Component({ selector: 'mw-root', standalone: true, imports: [OptionGridComponent, UserMenuComponent, SplitterComponent, FormsModule, SpellPickerComponent, ButtonComponent, IconComponent, ModalComponent, AuthModalComponent, EffectPreviewComponent, TimelineComponent], templateUrl: './app.component.html', styleUrl: './app.component.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class AppComponent {
   private readonly http=inject(HttpClient);private readonly destroyRef=inject(DestroyRef);
@@ -73,6 +73,59 @@ export class AppComponent {
   readonly projectileElements = PROJECTILE_ELEMENTS;
   readonly projectileShapes = PROJECTILE_SHAPES;
   readonly projectileControls = PROJECTILE_CORE_CONTROLS;
+  readonly skyOriginControls = SKY_ORIGIN_CONTROLS;
+  readonly skyBeamControls = SKY_BEAM_CONTROLS;
+  readonly skyLightningControls = SKY_LIGHTNING_CONTROLS;
+  readonly fullscreenPreview = signal(false);
+  @HostListener('window:keydown.escape') onEscapeKey(): void {
+    if (this.fullscreenPreview()) this.fullscreenPreview.set(false);
+  }
+  skyProjectileSettings(layer: EffectLayer): SkyProjectileSettings {
+    return parseSkyProjectile(layer.skyProjectile, layer.variant, layer.color);
+  }
+  skyProjectile<K extends keyof SkyProjectileSettings>(key: K, value: SkyProjectileSettings[K]): void {
+    const l = this.selected();
+    if (!l || l.kind !== 'sky_projectile') return;
+    const cur = this.skyProjectileSettings(l);
+    this.updateLayer({
+      skyProjectile: parseSkyProjectile({ ...cur, [key]: value }, l.variant, l.color),
+    });
+  }
+  applySkyProjectileElementPreset(elementId: ProjectileElement): void {
+    const l = this.selected();
+    if (!l || l.kind !== 'sky_projectile') return;
+    const preset = this.projectileElements.find((e) => e.id === elementId);
+    if (!preset) return;
+    const cur = this.skyProjectileSettings(l);
+    this.updateLayer({
+      color: preset.color,
+      secondaryColor: preset.secondaryColor,
+      skyProjectile: parseSkyProjectile(
+        { ...cur, element: preset.id, shape: preset.shape },
+        l.variant,
+        preset.color
+      ),
+    });
+    this.replay();
+  }
+  skyBeamSettings(layer: EffectLayer): SkyBeamSettings {
+    return parseSkyBeam(layer.skyBeam);
+  }
+  skyBeam<K extends keyof SkyBeamSettings>(key: K, value: SkyBeamSettings[K]): void {
+    const l = this.selected();
+    if (!l || l.kind !== 'sky_beam') return;
+    const cur = this.skyBeamSettings(l);
+    this.updateLayer({ skyBeam: parseSkyBeam({ ...cur, [key]: value }) });
+  }
+  skyLightningSettings(layer: EffectLayer): SkyLightningSettings {
+    return parseSkyLightning(layer.skyLightning);
+  }
+  skyLightning<K extends keyof SkyLightningSettings>(key: K, value: SkyLightningSettings[K]): void {
+    const l = this.selected();
+    if (!l || l.kind !== 'sky_lightning') return;
+    const cur = this.skyLightningSettings(l);
+    this.updateLayer({ skyLightning: parseSkyLightning({ ...cur, [key]: value }) });
+  }
   projectileCoreSettings(layer: EffectLayer): ProjectileCoreSettings {
     return parseProjectileCore(layer.projectileCore, layer.variant, layer.color);
   }
@@ -256,7 +309,7 @@ export class AppComponent {
   scene(scene:PreviewScene):void{this.definition.update(d=>({...d,previewScene:scene}));}
   resetScene():void{this.update({previewScene:defaultScene()});}
   whip(key: keyof WhipSettings, value: number): void { const l = this.selected(); if (l) this.updateLayer({ whip: { ...(l.whip ?? WHIP_DEFAULTS), [key]: Number(value) } }); }
-  kind(kind: EffectKind): void { const variant = VARIANTS[kind][0].id; const defaults = createLayer(kind); this.updateLayer({ kind, variant, ...(kind !== 'projectile' ? {missile:undefined,mageHand:undefined,projectileCore:undefined} : {projectileCore:defaults.projectileCore}), ...(kind!=='burst'?{fireHit:undefined}:{}),fireMaterial:undefined,cinematic:defaults.cinematic, size: defaults.size, anchor: defaults.anchor, ...(kind === 'whip' ? {color: defaults.color, secondaryColor: defaults.secondaryColor, duration: defaults.duration} : {}), motion: defaultMotion(kind, variant) }); this.replay(); }
+  kind(kind: EffectKind): void { const variant = VARIANTS[kind][0].id; const defaults = createLayer(kind); this.updateLayer({ kind, variant, ...(kind !== 'projectile' ? {missile:undefined,mageHand:undefined,projectileCore:undefined} : {projectileCore:defaults.projectileCore}), ...(kind !== 'sky_projectile' ? {skyProjectile:undefined} : {skyProjectile:defaults.skyProjectile}), ...(kind !== 'sky_beam' ? {skyBeam:undefined} : {skyBeam:defaults.skyBeam}), ...(kind !== 'sky_lightning' ? {skyLightning:undefined} : {skyLightning:defaults.skyLightning}), ...(kind!=='burst'?{fireHit:undefined}:{}),fireMaterial:undefined,cinematic:defaults.cinematic, size: defaults.size, anchor: defaults.anchor, ...(kind === 'whip' ? {color: defaults.color, secondaryColor: defaults.secondaryColor, duration: defaults.duration} : {}), motion: defaultMotion(kind, variant) }); this.replay(); }
   variant(id: string): void { const l = this.selected(); if (l) { const nextCore = l.kind==='projectile'&&!l.mageHand&&!l.missile?{...this.projectileCoreSettings(l),shape:(id==='shard'?'lance':id==='meteor'||id==='comet'?'comet':id==='swarm'?'prism':'sphere') as ProjectileCoreShape}:l.projectileCore; this.updateLayer({ variant: id, ...(l.kind==='projectile'?{projectileCore:nextCore}:{}), motion: {...defaultMotion(l.kind, id),...(l.kind==='cone'?{direction:0}:{})},...(l.cinematic&&l.kind==='cone'?{cinematic:{...l.cinematic,element:id==='frost'||id==='shards'?'ice':id==='poison'?'gas':id==='force'?'force':'fire'}}:{}) }); this.replay(); } }
   add(kind: EffectKind): void { if (this.definition().layers.length >= 16) return; const l = createLayer(kind); this.update({ layers: [...this.definition().layers, l] }); this.selectedId.set(l.id);this.dialog.set(null);this.workspace.set('layers'); this.replay(); }
   toggle(id: string): void { const l = this.definition().layers.find(l => l.id === id); if (l) this.updateLayer({ enabled: !l.enabled }, id); }

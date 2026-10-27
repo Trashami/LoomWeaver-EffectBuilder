@@ -96,7 +96,7 @@ def deploy_to_server() -> None:
     remote_script = r"""#!/usr/bin/env bash
 set -e
 
-RELEASE_DIR="/var/www/effectbuilder/releases/unified-v18"
+RELEASE_DIR="/var/www/effectbuilder/releases/unified-v19"
 echo "1. Extracting EffectBuilder client + Unified .NET backend to $RELEASE_DIR..."
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
@@ -316,7 +316,7 @@ def push_repos() -> None:
             EB_ROOT,
             "commit",
             "-m",
-            "Add water-floor token submersion, camera pan on Move Map, Low/Med/High visuals, 145k normal-mapped 3D terrain, and 2D HD top-down mode",
+            "Add Full Screen Preview with mouse camera orbit/pan/zoom, lock studio camera, fix double scrollbar, fix single-line beam, and add Sky Projectile, Sky Beam, and Sky Lightning effects",
         )
 
     remotes = subprocess.run(
@@ -354,7 +354,7 @@ def push_repos() -> None:
             ROOT,
             "commit",
             "-m",
-            "Add 13 new core effect kinds (130 styles), 3D Forest Road Map, 3D Sorceress + 3 Goblin tokens, and MySQL map asset sync",
+            "Update EffectBuilder Studio: Full Screen Preview camera, stylized scrollbars, single-line beam, and Sky Projectile, Sky Beam, and Sky Lightning base effects",
         )
     run_git(ROOT, "push", "-u", "origin", "master", "--force")
     run_git(ROOT, "push", "origin", "master:dev", "--force")

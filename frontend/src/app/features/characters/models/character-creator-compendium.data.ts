@@ -13,270 +13,130 @@ import {
 
 export const CREATOR_BACKGROUNDS: readonly CreatorBackgroundOptionVm[] = [
   {
-    id: 'sage',
-    name: 'Sage',
-    tagline: 'Researcher of ancient libraries, observatories, and arcane lore.',
-    summary: 'Years spent in scriptoriums and archives deciphering pre-war chronicles and magical theory.',
-    source: 'PHB',
+    id: 'sage', name: 'Sage', tagline: 'Researcher of ancient libraries, observatories, and arcane lore.',
+    summary: 'Years spent in scriptoriums and archives deciphering pre-war chronicles and magical theory.', source: 'PHB',
     recommendedClasses: ['wizard', 'sorcerer', 'warlock', 'artificer', 'cleric', 'bard'],
     recommendedAncestries: ['elf', 'human', 'gnome', 'tiefling', 'aasimar', 'kalashtar'],
-    skillProficiencies: ['Arcana', 'History'],
-    toolProficiencies: ['Calligrapher Supplies'],
-    featureName: 'Researcher',
+    skillProficiencies: ['Arcana', 'History'], toolProficiencies: ['Calligrapher Supplies'], featureName: 'Researcher',
     defaultQuote: '"Knowledge preserves what time would otherwise forget."',
-    personality: {
-      personality: 'Methodical, curious, and always cross-referencing inscriptions.',
-      ideals: 'Truth should be recorded, not buried beneath politics.',
-      bonds: 'An ancient manuscript with missing pages that points to forgotten history.',
-      flaws: 'Will risk danger to read an unsealed rune or inscription.',
-    },
+    personality: { personality: 'Methodical, curious, and always cross-referencing inscriptions.', ideals: 'Truth should be recorded, not buried beneath politics.', bonds: 'An ancient manuscript with missing pages that points to forgotten history.', flaws: 'Will risk danger to read an unsealed rune or inscription.' },
   },
   {
-    id: 'acolyte',
-    name: 'Acolyte',
-    tagline: 'Devoted temple initiate steeped in sacred rites and sanctuary vows.',
-    summary: 'Served in the moonlit temples of Ekkos or an ancient monastic sanctuary tending the abandoned.',
-    source: 'PHB',
+    id: 'acolyte', name: 'Acolyte', tagline: 'Devoted temple initiate steeped in sacred rites and sanctuary vows.',
+    summary: 'Served in the moonlit temples of Ekkos or an ancient monastic sanctuary tending the abandoned.', source: 'PHB',
     recommendedClasses: ['cleric', 'paladin', 'monk', 'druid', 'warlock'],
     recommendedAncestries: ['aasimar', 'human', 'dwarf', 'elf', 'dragonborn', 'firbolg'],
-    skillProficiencies: ['Insight', 'Religion'],
-    toolProficiencies: ['Herbalism Kit'],
-    featureName: 'Shelter of the Faithful',
+    skillProficiencies: ['Insight', 'Religion'], toolProficiencies: ['Herbalism Kit'], featureName: 'Shelter of the Faithful',
     defaultQuote: '"No soul left behind in the dark is truly forgotten."',
-    personality: {
-      personality: 'Compassionate, observant, and calm amidst crisis.',
-      ideals: 'Mercy and shelter belong to the outcast first.',
-      bonds: 'The temple sanctuary that took me in when I had nothing.',
-      flaws: 'Judges harshly those who exploit faith for power.',
-    },
+    personality: { personality: 'Compassionate, observant, and calm amidst crisis.', ideals: 'Mercy and shelter belong to the outcast first.', bonds: 'The temple sanctuary that took me in when I had nothing.', flaws: 'Judges harshly those who exploit faith for power.' },
   },
   {
-    id: 'criminal',
-    name: 'Criminal / Spy',
-    tagline: 'Operative of shadow networks, cipher drops, and rooftop routes.',
-    summary: 'Navigated smugglers coves, black-market auctions, and whispered intelligence across Vandia and Cinth.',
-    source: 'PHB',
+    id: 'criminal', name: 'Criminal / Spy', tagline: 'Operative of shadow networks, cipher drops, and rooftop routes.',
+    summary: 'Navigated smugglers coves, black-market auctions, and whispered intelligence across Vandia and Cinth.', source: 'PHB',
     recommendedClasses: ['rogue', 'bard', 'ranger', 'warlock', 'monk'],
     recommendedAncestries: ['tiefling', 'halfling', 'half-elf', 'changeling', 'human', 'tabaxi'],
-    skillProficiencies: ['Deception', 'Stealth'],
-    toolProficiencies: ['Thieves Tools', 'Gaming Set'],
-    featureName: 'Criminal Contact',
+    skillProficiencies: ['Deception', 'Stealth'], toolProficiencies: ['Thieves Tools', 'Gaming Set'], featureName: 'Criminal Contact',
     defaultQuote: '"Every locked door is just an invitation written in brass."',
-    personality: {
-      personality: 'Always sits facing the exit and notices who is watching.',
-      ideals: 'Loyalty to the crew outweighs the decrees of lords.',
-      bonds: 'A debt owed to a contact who smuggled me out of captivity.',
-      flaws: 'Struggles to leave a valuable relic unpocketed.',
-    },
+    personality: { personality: 'Always sits facing the exit and notices who is watching.', ideals: 'Loyalty to the crew outweighs the decrees of lords.', bonds: 'A debt owed to a contact who smuggled me out of captivity.', flaws: 'Struggles to leave a valuable relic unpocketed.' },
   },
   {
-    id: 'soldier',
-    name: 'Soldier',
-    tagline: 'Seasoned vanguard of border campaigns and siege lines.',
-    summary: 'Trained in formation tactics, watch-post discipline, and holding the line under arcane bombardment.',
-    source: 'PHB',
+    id: 'soldier', name: 'Soldier', tagline: 'Seasoned vanguard of border campaigns and siege lines.',
+    summary: 'Trained in formation tactics, watch-post discipline, and holding the line under arcane bombardment.', source: 'PHB',
     recommendedClasses: ['fighter', 'paladin', 'barbarian', 'ranger'],
     recommendedAncestries: ['dragonborn', 'half-orc', 'dwarf', 'goliath', 'human'],
-    skillProficiencies: ['Athletics', 'Intimidation'],
-    toolProficiencies: ['Land Vehicles', 'Gaming Set'],
-    featureName: 'Military Rank',
+    skillProficiencies: ['Athletics', 'Intimidation'], toolProficiencies: ['Land Vehicles', 'Gaming Set'], featureName: 'Military Rank',
     defaultQuote: '"Stand firm. The line holds where we plant our boots."',
-    personality: {
-      personality: 'Direct, watchful, and protective of companions in the rear.',
-      ideals: 'Courage means standing between danger and those who cannot fight.',
-      bonds: 'The mentor who taught me to hold a blade and never yield.',
-      flaws: 'Refuses to retreat while an ally remains behind.',
-    },
+    personality: { personality: 'Direct, watchful, and protective of companions in the rear.', ideals: 'Courage means standing between danger and those who cannot fight.', bonds: 'The mentor who taught me to hold a blade and never yield.', flaws: 'Refuses to retreat while an ally remains behind.' },
   },
   {
-    id: 'noble',
-    name: 'Noble / Exile Line',
-    tagline: 'Heir to a storied house, royal lineage, or displaced court.',
-    summary: 'Educated in statecraft, heraldry, and ancient obligation, carrying a name that opens doors or draws blades.',
-    source: 'PHB',
+    id: 'noble', name: 'Noble / Exile Line', tagline: 'Heir to a storied house, royal lineage, or displaced court.',
+    summary: 'Educated in statecraft, heraldry, and ancient obligation, carrying a name that opens doors or draws blades.', source: 'PHB',
     recommendedClasses: ['paladin', 'bard', 'sorcerer', 'fighter', 'wizard', 'ranger'],
     recommendedAncestries: ['elf', 'human', 'half-elf', 'dragonborn', 'tiefling', 'aasimar'],
-    skillProficiencies: ['History', 'Persuasion'],
-    toolProficiencies: ['Dragonchess Set'],
-    featureName: 'Position of Privilege',
+    skillProficiencies: ['History', 'Persuasion'], toolProficiencies: ['Dragonchess Set'], featureName: 'Position of Privilege',
     defaultQuote: '"A crown is only worth the people it shelters."',
-    personality: {
-      personality: 'Composed, dignified, and acutely aware of historical duty.',
-      ideals: 'True nobility walks beside the world rather than ruling above it.',
-      bonds: 'An ancestral heritage that must be earned before it is claimed.',
-      flaws: 'Bears the guilt of ancestral failures personally.',
-    },
+    personality: { personality: 'Composed, dignified, and acutely aware of historical duty.', ideals: 'True nobility walks beside the world rather than ruling above it.', bonds: 'An ancestral heritage that must be earned before it is claimed.', flaws: 'Bears the guilt of ancestral failures personally.' },
   },
   {
-    id: 'outlander',
-    name: 'Outlander',
-    tagline: 'Borderland pathfinder raised beyond city walls.',
-    summary: 'Tracked game and read weather patterns across the Plains of Vistagh, Duskwood, and mountain passes.',
-    source: 'PHB',
+    id: 'outlander', name: 'Outlander', tagline: 'Borderland pathfinder raised beyond city walls.',
+    summary: 'Tracked game and read weather patterns across the Plains of Vistagh, Duskwood, and mountain passes.', source: 'PHB',
     recommendedClasses: ['ranger', 'barbarian', 'druid', 'fighter', 'monk'],
     recommendedAncestries: ['elf', 'goliath', 'half-orc', 'firbolg', 'tabaxi', 'halfling'],
-    skillProficiencies: ['Athletics', 'Survival'],
-    toolProficiencies: ['Cartographer Tools'],
-    featureName: 'Wanderer',
+    skillProficiencies: ['Athletics', 'Survival'], toolProficiencies: ['Cartographer Tools'], featureName: 'Wanderer',
     defaultQuote: '"The wind tells you who crossed the ridge an hour ago."',
-    personality: {
-      personality: 'Alert to tracks, silence, and shifts in the stone.',
-      ideals: 'The wild remembers older truths than city charters.',
-      bonds: 'The border roads and companions who travel them with me.',
-      flaws: 'Restless inside walled courts and crowded halls.',
-    },
+    personality: { personality: 'Alert to tracks, silence, and shifts in the stone.', ideals: 'The wild remembers older truths than city charters.', bonds: 'The border roads and companions who travel them with me.', flaws: 'Restless inside walled courts and crowded halls.' },
   },
   {
-    id: 'guild-artisan',
-    name: 'Guild Artisan (Cinth)',
-    tagline: 'Sworn craftsperson of the Artificers Guild, smiths, or stonecutters.',
-    summary: 'Trained in Cinth or the dwarven holds to answer magical dominance with precision craft and metallurgy.',
-    source: 'PHB',
+    id: 'guild-artisan', name: 'Guild Artisan (Cinth)', tagline: 'Sworn craftsperson of the Artificers Guild, smiths, or stonecutters.',
+    summary: 'Trained in Cinth or the dwarven holds to answer magical dominance with precision craft and metallurgy.', source: 'PHB',
     recommendedClasses: ['artificer', 'fighter', 'wizard', 'bard', 'rogue', 'cleric'],
     recommendedAncestries: ['dwarf', 'gnome', 'human', 'half-elf', 'goliath'],
-    skillProficiencies: ['Insight', 'Persuasion'],
-    toolProficiencies: ['Tinker Tools', 'Smith Tools'],
-    featureName: 'Guild Membership',
+    skillProficiencies: ['Insight', 'Persuasion'], toolProficiencies: ['Tinker Tools', 'Smith Tools'], featureName: 'Guild Membership',
     defaultQuote: '"Good steel and honest gears never lie about their tolerances."',
-    personality: {
-      personality: 'Inspects stonework, hinges, and mechanisms wherever they go.',
-      ideals: 'Craft and intellect give ordinary folk an answer to tyrants.',
-      bonds: 'The Guild hall in Cinth and the masters who shared their blueprints.',
-      flaws: 'Cannot resist dismantling an unfamiliar mechanism.',
-    },
+    personality: { personality: 'Inspects stonework, hinges, and mechanisms wherever they go.', ideals: 'Craft and intellect give ordinary folk an answer to tyrants.', bonds: 'The Guild hall in Cinth and the masters who shared their blueprints.', flaws: 'Cannot resist dismantling an unfamiliar mechanism.' },
   },
   {
-    id: 'charlatan',
-    name: 'Charlatan',
-    tagline: 'Master of assumed identities, forged seals, and silver-tongued Gambits.',
-    summary: 'Talked through velvet ropes and high-society galas with quick wit and quicker fingers.',
-    source: 'PHB',
+    id: 'charlatan', name: 'Charlatan', tagline: 'Master of assumed identities, forged seals, and silver-tongued Gambits.',
+    summary: 'Talked through velvet ropes and high-society galas with quick wit and quicker fingers.', source: 'PHB',
     recommendedClasses: ['bard', 'rogue', 'warlock', 'sorcerer'],
     recommendedAncestries: ['changeling', 'tiefling', 'half-elf', 'halfling', 'human', 'fairy'],
-    skillProficiencies: ['Deception', 'Sleight of Hand'],
-    toolProficiencies: ['Disguise Kit', 'Forgery Kit'],
-    featureName: 'False Identity',
+    skillProficiencies: ['Deception', 'Sleight of Hand'], toolProficiencies: ['Disguise Kit', 'Forgery Kit'], featureName: 'False Identity',
     defaultQuote: '"People see the coat of arms they want to believe in."',
-    personality: {
-      personality: 'Charming, improvisational, and deflects serious questions with humor.',
-      ideals: 'Freedom means never letting anyone pin down your true name.',
-      bonds: 'A handful of misfits who know who I really am.',
-      flaws: 'Uses jokes to avoid speaking plainly about fear.',
-    },
+    personality: { personality: 'Charming, improvisational, and deflects serious questions with humor.', ideals: 'Freedom means never letting anyone pin down your true name.', bonds: 'A handful of misfits who know who I really am.', flaws: 'Uses jokes to avoid speaking plainly about fear.' },
   },
   {
-    id: 'folk-hero',
-    name: 'Folk Hero',
-    tagline: 'Champion of village hearth and common folk against raiders.',
-    summary: 'Rose from humble origins to defend a frontier village when no lord sent aid.',
-    source: 'PHB',
+    id: 'folk-hero', name: 'Folk Hero', tagline: 'Champion of village hearth and common folk against raiders.',
+    summary: 'Rose from humble origins to defend a frontier village when no lord sent aid.', source: 'PHB',
     recommendedClasses: ['fighter', 'paladin', 'ranger', 'barbarian', 'druid', 'monk'],
     recommendedAncestries: ['human', 'halfling', 'dwarf', 'half-orc', 'goliath'],
-    skillProficiencies: ['Animal Handling', 'Survival'],
-    toolProficiencies: ['Carpenter Tools'],
-    featureName: 'Rustic Hospitality',
+    skillProficiencies: ['Animal Handling', 'Survival'], toolProficiencies: ['Carpenter Tools'], featureName: 'Rustic Hospitality',
     defaultQuote: '"Someone had to stand in the road. It might as well be me."',
-    personality: {
-      personality: 'Warm-hearted, plain-spoken, and fearless when innocents are threatened.',
-      ideals: 'Strength exists to protect the village, not impress the court.',
-      bonds: 'The village where I grew up and the mentor who trained me.',
-      flaws: 'Charges headfirst into overwhelming odds.',
-    },
+    personality: { personality: 'Warm-hearted, plain-spoken, and fearless when innocents are threatened.', ideals: 'Strength exists to protect the village, not impress the court.', bonds: 'The village where I grew up and the mentor who trained me.', flaws: 'Charges headfirst into overwhelming odds.' },
   },
   {
-    id: 'hermit',
-    name: 'Hermit',
-    tagline: 'Secluded seeker who uncovered an ancient, dangerous truth.',
-    summary: 'Spent years in quiet exile contemplating the remnants of creation and the scars of old wars.',
-    source: 'PHB',
+    id: 'hermit', name: 'Hermit', tagline: 'Secluded seeker who uncovered an ancient, dangerous truth.',
+    summary: 'Spent years in quiet exile contemplating the remnants of creation and the scars of old wars.', source: 'PHB',
     recommendedClasses: ['druid', 'monk', 'cleric', 'wizard', 'warlock', 'sorcerer'],
     recommendedAncestries: ['firbolg', 'kalashtar', 'elf', 'dwarf', 'human', 'aasimar'],
-    skillProficiencies: ['Medicine', 'Religion'],
-    toolProficiencies: ['Herbalism Kit'],
-    featureName: 'Discovery',
+    skillProficiencies: ['Medicine', 'Religion'], toolProficiencies: ['Herbalism Kit'], featureName: 'Discovery',
     defaultQuote: '"Silence teaches what shouting scholars never hear."',
-    personality: {
-      personality: 'Thoughtful, measured, and speaks only when words matter.',
-      ideals: 'Ancient power must be understood lest it consume the world again.',
-      bonds: 'A secret discovery regarding the six Luminaries of creation.',
-      flaws: 'Keeps dangerous knowledge to themselves too long.',
-    },
+    personality: { personality: 'Thoughtful, measured, and speaks only when words matter.', ideals: 'Ancient power must be understood lest it consume the world again.', bonds: 'A secret discovery regarding the six Luminaries of creation.', flaws: 'Keeps dangerous knowledge to themselves too long.' },
   },
   {
-    id: 'urchin',
-    name: 'Urchin',
-    tagline: 'Street survivor of Vandia harbor alleys and Cinth rooftops.',
-    summary: 'Grew up dodging harbor patrols and slipping through narrow passages unnoticed.',
-    source: 'PHB',
+    id: 'urchin', name: 'Urchin', tagline: 'Street survivor of Vandia harbor alleys and Cinth rooftops.',
+    summary: 'Grew up dodging harbor patrols and slipping through narrow passages unnoticed.', source: 'PHB',
     recommendedClasses: ['rogue', 'monk', 'ranger', 'bard', 'warlock'],
     recommendedAncestries: ['halfling', 'tiefling', 'goblin', 'tabaxi', 'human', 'half-elf'],
-    skillProficiencies: ['Sleight of Hand', 'Stealth'],
-    toolProficiencies: ['Disguise Kit', 'Thieves Tools'],
-    featureName: 'City Secrets',
+    skillProficiencies: ['Sleight of Hand', 'Stealth'], toolProficiencies: ['Disguise Kit', 'Thieves Tools'], featureName: 'City Secrets',
     defaultQuote: '"If there is a roof, there is a highway."',
-    personality: {
-      personality: 'Quick-witted, scrappy, and fiercely loyal to found family.',
-      ideals: 'The street looks after its own when the towers look away.',
-      bonds: 'The companions who became the first real home I ever knew.',
-      flaws: 'Hoards odd trinkets and food out of old habit.',
-    },
+    personality: { personality: 'Quick-witted, scrappy, and fiercely loyal to found family.', ideals: 'The street looks after its own when the towers look away.', bonds: 'The companions who became the first real home I ever knew.', flaws: 'Hoards odd trinkets and food out of old habit.' },
   },
   {
-    id: 'sailor',
-    name: 'Sailor / Skyship Crew',
-    tagline: 'Corsair of the Bay of Forgotten Treasures and high skyship lanes.',
-    summary: 'Sailed coastal runners out of Vandia or crewed experimental aether-rigged skyships.',
-    source: 'PHB',
+    id: 'sailor', name: 'Sailor / Skyship Crew', tagline: 'Corsair of the Bay of Forgotten Treasures and high skyship lanes.',
+    summary: 'Sailed coastal runners out of Vandia or crewed experimental aether-rigged skyships.', source: 'PHB',
     recommendedClasses: ['rogue', 'fighter', 'ranger', 'bard', 'artificer', 'sorcerer'],
     recommendedAncestries: ['human', 'half-orc', 'tabaxi', 'elf', 'halfling', 'dragonborn'],
-    skillProficiencies: ['Athletics', 'Perception'],
-    toolProficiencies: ['Navigator Tools', 'Water & Air Vehicles'],
-    featureName: 'Ship Passage',
+    skillProficiencies: ['Athletics', 'Perception'], toolProficiencies: ['Navigator Tools', 'Water & Air Vehicles'], featureName: 'Ship Passage',
     defaultQuote: '"That ship is mine. The captain just has not accepted the paperwork yet."',
-    personality: {
-      personality: 'Bold, superstitious about weather, and at home on a pitching deck.',
-      ideals: 'A good vessel and an open horizon beat any palace.',
-      bonds: 'A prized ship—sea-going or sky-borne—that I claim by right.',
-      flaws: 'Holds a lifelong grudge against anyone who loses a ship.',
-    },
+    personality: { personality: 'Bold, superstitious about weather, and at home on a pitching deck.', ideals: 'A good vessel and an open horizon beat any palace.', bonds: 'A prized ship—sea-going or sky-borne—that I claim by right.', flaws: 'Holds a lifelong grudge against anyone who loses a ship.' },
   },
   {
-    id: 'feylost',
-    name: 'Feylost',
-    tagline: 'Outcast wanderer touched by the strange logic of the Feywild.',
-    summary: 'Drifted between the Feywild and the mortal world, carrying sideways humor and an ache to belong.',
-    source: 'Homebrew',
+    id: 'feylost', name: 'Feylost', tagline: 'Outcast wanderer touched by the strange logic of the Feywild.',
+    summary: 'Drifted between the Feywild and the mortal world, carrying sideways humor and an ache to belong.', source: 'Homebrew',
     recommendedClasses: ['bard', 'warlock', 'druid', 'ranger', 'sorcerer', 'rogue'],
     recommendedAncestries: ['fairy', 'satyr', 'elf', 'halfling', 'half-elf', 'goblin'],
-    skillProficiencies: ['Deception', 'Survival'],
-    toolProficiencies: ['Musical Instrument'],
-    featureName: 'Feywild Visitor',
+    skillProficiencies: ['Deception', 'Survival'], toolProficiencies: ['Musical Instrument'], featureName: 'Feywild Visitor',
     defaultQuote: '"I am not lost. The road just moved while I was looking at a beetle."',
-    personality: {
-      personality: 'Makes sideways observations and sudden blunt truths when nervous.',
-      ideals: 'Even strange outcast things deserve a place by the fire.',
-      bonds: 'A bizarre companion item and the party that never cast me out.',
-      flaws: 'Terrified of not belonging anywhere, hiding it behind absurd jokes.',
-    },
+    personality: { personality: 'Makes sideways observations and sudden blunt truths when nervous.', ideals: 'Even strange outcast things deserve a place by the fire.', bonds: 'A bizarre companion item and the party that never cast me out.', flaws: 'Terrified of not belonging anywhere, hiding it behind absurd jokes.' },
   },
   {
-    id: 'archaeologist',
-    name: 'Archaeologist / Stone-Scholar',
-    tagline: 'Delver of dwarven runes, pre-war vaults, and living architecture.',
-    summary: 'Reads the history and lies carved into foundations, cavern walls, and ancient monuments.',
-    source: 'PHB',
+    id: 'archaeologist', name: 'Archaeologist / Stone-Scholar', tagline: 'Delver of dwarven runes, pre-war vaults, and living architecture.',
+    summary: 'Reads the history and lies carved into foundations, cavern walls, and ancient monuments.', source: 'PHB',
     recommendedClasses: ['wizard', 'artificer', 'cleric', 'bard', 'fighter', 'rogue'],
     recommendedAncestries: ['dwarf', 'gnome', 'human', 'elf', 'tabaxi'],
-    skillProficiencies: ['History', 'Survival'],
-    toolProficiencies: ['Mason Tools', 'Cartographer Tools'],
-    featureName: 'Historical Knowledge',
+    skillProficiencies: ['History', 'Survival'], toolProficiencies: ['Mason Tools', 'Cartographer Tools'], featureName: 'Historical Knowledge',
     defaultQuote: '"Men lie in books. They have a harder time lying in load-bearing stone."',
-    personality: {
-      personality: 'Touches walls and pillars to feel the age and stress of the stone.',
-      ideals: 'Understand what was built before you tear it down.',
-      bonds: 'A vow to uncover the truth buried beneath the mountain runes.',
-      flaws: 'Stops to examine ancient masonry even when the ceiling is collapsing.',
-    },
+    personality: { personality: 'Touches walls and pillars to feel the age and stress of the stone.', ideals: 'Understand what was built before you tear it down.', bonds: 'A vow to uncover the truth buried beneath the mountain runes.', flaws: 'Stops to examine ancient masonry even when the ceiling is collapsing.' },
   },
 ];
 
@@ -360,173 +220,22 @@ export const CREATOR_SPELL_DATABASE: readonly CharacterSpellVm[] = [
 ];
 
 export const DEFAULT_MET_ENTITIES: readonly CharacterMetEntityVm[] = [
-  {
-    id: 'met-npc-emrys',
-    compositeKey: '1:NPC:npc-emrys',
-    name: 'Emrys of the Reformed Council',
-    entityType: 'NPC',
-    roleOrRegion: 'Council of Magic Envoy · Cinth Gala',
-    dispositionOrStatus: 'Guarded / Suspicious',
-    sessionMet: 'Session 6 — The Masque of Cinth',
-    summary: 'Met at the Lord of Cinth gala presenting himself as an arcane reformer advocating open magical education.',
-    details: 'Spoke warmly of reforming the old wizard-only Council of Magic and inquired casually about the party return route toward Vandia through the southern mountain pass.',
-    playerNotesOrClues: 'His interest in our route past the southern mountain felt too specific; Kycius noticed his gaze linger on our packs.',
-    routeLink: '/world-lore',
-    connectedNames: ['Cinth', 'Council of Magic', 'The Priors', 'Southern Mountain Cave'],
-  },
-  {
-    id: 'met-npc-artificer-guildmaster',
-    compositeKey: '1:NPC:npc-cinth-artificers',
-    name: 'Guildmaster Bram & The Cinth Artificers Guild',
-    entityType: 'NPC',
-    roleOrRegion: 'Brass Foundry Quarter · Cinth',
-    dispositionOrStatus: 'Trusted Ally',
-    sessionMet: 'Session 5 — Forges of Cinth',
-    summary: 'Non-magical engineers and craftspeople building mechanical and runic defenses after the Moonlight Wars.',
-    details: 'Welcomed the party into their foundry workshops, proving that craft, risk, and intellect can answer unchecked mage authority without bowing to the Council.',
-    playerNotesOrClues: 'Supplied calibrated brass components and warned us that several Priors students never returned with their magic intact.',
-    routeLink: '/world-lore',
-    connectedNames: ['Cinth', 'Artificers Guild', 'Captain Kutler'],
-  },
-  {
-    id: 'met-npc-kutler',
-    compositeKey: '1:NPC:npc-captain-kutler',
-    name: 'Captain Kutler',
-    entityType: 'NPC',
-    roleOrRegion: 'Skyship Commander · Lost Isles Investigator',
-    dispositionOrStatus: 'Rival / Reluctant Ally',
-    sessionMet: 'Session 1 & Session 8 — Return Above the Peaks',
-    summary: 'Returned from the Lost Isles piloting an experimental flying skyship after abandoning the stolen sea vessel.',
-    details: 'Brings urgent intelligence linking Chokrah shipments, the Council of Magic school, and what the Priors are secretly doing to gifted children.',
-    playerNotesOrClues: 'Fivi immediately claimed his skyship as hers in compensation for losing "her" sea ship; Kutler refuses to hand over the helm.',
-    routeLink: '/world-lore',
-    connectedNames: ['Vandia', 'Lost Isles', 'Fivi', 'Chokrah Trade'],
-  },
-  {
-    id: 'met-npc-malric',
-    compositeKey: '1:NPC:npc-brother-malric',
-    name: 'Brother Malric',
-    entityType: 'NPC',
-    roleOrRegion: 'Ekkos Sanctuary · Vandia Cliffside',
-    dispositionOrStatus: 'Friendly',
-    sessionMet: 'Session 2 — The Well of Life',
-    summary: 'Keeper of the old Ekkos shrine for the abandoned near the southwest coast.',
-    details: 'Shared the earliest hymns of Ekkos as Mother of the Abandoned before the Priors co-opted her temples.',
-    playerNotesOrClues: 'Confirmed the hexagon alignment of the six ancient Luminaries across Icrandor.',
-    routeLink: '/world-lore',
-    connectedNames: ['Vandia', 'Well of Life', 'Sister Elowen'],
-  },
-  {
-    id: 'met-place-cinth',
-    compositeKey: '1:Location:loc-cinth',
-    name: 'City of Cinth',
-    entityType: 'Place',
-    roleOrRegion: 'Inland Metropolis · Northeast of Vandia',
-    dispositionOrStatus: 'Contested Court',
-    sessionMet: 'Session 5 — Arrival from the Plains of Vistagh',
-    summary: 'Inland seat of power where the Artificers Guild, the Reformed Council of Magic, and hidden vampire courts collide.',
-    details: 'The party reputation preceded them here, earning an invitation to the Lord of Cinth gala where a vampire coup was thwarted.',
-    playerNotesOrClues: 'High watchtowers, brass foundries, and Council recruitment halls.',
-    routeLink: '/maps',
-    connectedNames: ['Emrys', 'Artificers Guild', 'Plains of Vistagh'],
-  },
-  {
-    id: 'met-place-vandia',
-    compositeKey: '1:Location:loc-vandia',
-    name: 'Vandia & The Cliffside House',
-    entityType: 'Place',
-    roleOrRegion: 'Southwest Coast · Bay of Forgotten Treasures',
-    dispositionOrStatus: 'Party Home Base',
-    sessionMet: 'Session 1 — The Cliff Edge',
-    summary: 'Coastal port city on the Bay of Forgotten Treasures where the party cliffside house stands.',
-    details: 'Starting point of the northeast road toward Cinth and site of the triangle route leading to the Well of Life.',
-    playerNotesOrClues: 'Safe harbor and repository for the party early records.',
-    routeLink: '/maps',
-    connectedNames: ['Well of Life', 'Bay of Forgotten Treasures', 'Captain Kutler'],
-  },
-  {
-    id: 'met-place-plains-of-red',
-    compositeKey: '1:Location:loc-plains-of-red',
-    name: 'The Plains of Red & Southern Mountain Pass',
-    entityType: 'Place',
-    roleOrRegion: 'Northeast Road Between Fey Forest & Southern Mountains',
-    dispositionOrStatus: 'Ominous / Haunted',
-    sessionMet: 'Session 4 — The Road to Cinth',
-    summary: 'Blood-named plains where men slaughtered the fey a thousand years ago, bordering the poisoned forest above the trapped dragon mountain.',
-    details: 'On the first journey to Cinth, Kildrid felt the rhythmic clawing of runes deep beneath the southern mountain stone from miles away.',
-    playerNotesOrClues: 'The forest above the mountain is sickened by ancient dragon blood.',
-    routeLink: '/maps',
-    connectedNames: ['Cinth', 'Vandia', 'Shadow of the Mountain'],
-  },
+  { id: 'met-npc-emrys', compositeKey: '1:NPC:npc-emrys', name: 'Emrys of the Reformed Council', entityType: 'NPC', roleOrRegion: 'Council of Magic Envoy · Cinth Gala', dispositionOrStatus: 'Guarded / Suspicious', sessionMet: 'Session 6 — The Masque of Cinth', summary: 'Met at the Lord of Cinth gala presenting himself as an arcane reformer advocating open magical education.', details: 'Spoke warmly of reforming the old wizard-only Council of Magic and inquired casually about the party return route toward Vandia through the southern mountain pass.', playerNotesOrClues: 'His interest in our route past the southern mountain felt too specific; Kycius noticed his gaze linger on our packs.', routeLink: '/world-lore', connectedNames: ['Cinth', 'Council of Magic', 'The Priors', 'Southern Mountain Cave'] },
+  { id: 'met-npc-artificer-guildmaster', compositeKey: '1:NPC:npc-cinth-artificers', name: 'Guildmaster Bram & The Cinth Artificers Guild', entityType: 'NPC', roleOrRegion: 'Brass Foundry Quarter · Cinth', dispositionOrStatus: 'Trusted Ally', sessionMet: 'Session 5 — Forges of Cinth', summary: 'Non-magical engineers and craftspeople building mechanical and runic defenses after the Moonlight Wars.', details: 'Welcomed the party into their foundry workshops, proving that craft, risk, and intellect can answer unchecked mage authority without bowing to the Council.', playerNotesOrClues: 'Supplied calibrated brass components and warned us that several Priors students never returned with their magic intact.', routeLink: '/world-lore', connectedNames: ['Cinth', 'Artificers Guild', 'Captain Kutler'] },
+  { id: 'met-npc-kutler', compositeKey: '1:NPC:npc-captain-kutler', name: 'Captain Kutler', entityType: 'NPC', roleOrRegion: 'Skyship Commander · Lost Isles Investigator', dispositionOrStatus: 'Rival / Reluctant Ally', sessionMet: 'Session 1 & Session 8 — Return Above the Peaks', summary: 'Returned from the Lost Isles piloting an experimental flying skyship after abandoning the stolen sea vessel.', details: 'Brings urgent intelligence linking Chokrah shipments, the Council of Magic school, and what the Priors are secretly doing to gifted children.', playerNotesOrClues: 'Fivi immediately claimed his skyship as hers in compensation for losing "her" sea ship; Kutler refuses to hand over the helm.', routeLink: '/world-lore', connectedNames: ['Vandia', 'Lost Isles', 'Fivi', 'Chokrah Trade'] },
+  { id: 'met-npc-malric', compositeKey: '1:NPC:npc-brother-malric', name: 'Brother Malric', entityType: 'NPC', roleOrRegion: 'Ekkos Sanctuary · Vandia Cliffside', dispositionOrStatus: 'Friendly', sessionMet: 'Session 2 — The Well of Life', summary: 'Keeper of the old Ekkos shrine for the abandoned near the southwest coast.', details: 'Shared the earliest hymns of Ekkos as Mother of the Abandoned before the Priors co-opted her temples.', playerNotesOrClues: 'Confirmed the hexagon alignment of the six ancient Luminaries across Icrandor.', routeLink: '/world-lore', connectedNames: ['Vandia', 'Well of Life', 'Sister Elowen'] },
+  { id: 'met-place-cinth', compositeKey: '1:Location:loc-cinth', name: 'City of Cinth', entityType: 'Place', roleOrRegion: 'Inland Metropolis · Northeast of Vandia', dispositionOrStatus: 'Contested Court', sessionMet: 'Session 5 — Arrival from the Plains of Vistagh', summary: 'Inland seat of power where the Artificers Guild, the Reformed Council of Magic, and hidden vampire courts collide.', details: 'The party reputation preceded them here, earning an invitation to the Lord of Cinth gala where a vampire coup was thwarted.', playerNotesOrClues: 'High watchtowers, brass foundries, and Council recruitment halls.', routeLink: '/maps', connectedNames: ['Emrys', 'Artificers Guild', 'Plains of Vistagh'] },
+  { id: 'met-place-vandia', compositeKey: '1:Location:loc-vandia', name: 'Vandia & The Cliffside House', entityType: 'Place', roleOrRegion: 'Southwest Coast · Bay of Forgotten Treasures', dispositionOrStatus: 'Party Home Base', sessionMet: 'Session 1 — The Cliff Edge', summary: 'Coastal port city on the Bay of Forgotten Treasures where the party cliffside house stands.', details: 'Starting point of the northeast road toward Cinth and site of the triangle route leading to the Well of Life.', playerNotesOrClues: 'Safe harbor and repository for the party early records.', routeLink: '/maps', connectedNames: ['Well of Life', 'Bay of Forgotten Treasures', 'Captain Kutler'] },
+  { id: 'met-place-plains-of-red', compositeKey: '1:Location:loc-plains-of-red', name: 'The Plains of Red & Southern Mountain Pass', entityType: 'Place', roleOrRegion: 'Northeast Road Between Fey Forest & Southern Mountains', dispositionOrStatus: 'Ominous / Haunted', sessionMet: 'Session 4 — The Road to Cinth', summary: 'Blood-named plains where men slaughtered the fey a thousand years ago, bordering the poisoned forest above the trapped dragon mountain.', details: 'On the first journey to Cinth, Kildrid felt the rhythmic clawing of runes deep beneath the southern mountain stone from miles away.', playerNotesOrClues: 'The forest above the mountain is sickened by ancient dragon blood.', routeLink: '/maps', connectedNames: ['Cinth', 'Vandia', 'Shadow of the Mountain'] },
 ];
 
 export const DEFAULT_CAMPAIGN_HISTORY: readonly CharacterCampaignHistoryEventVm[] = [
-  {
-    id: 'hist-1',
-    category: 'Session',
-    title: 'Session 1 — The Cliffside House & The Well of Life',
-    sessionLabel: 'Session 1 · Southwest Coast',
-    locationName: 'Vandia & Northeast Triangle Route',
-    summary: 'The party gathered at the cliffside house near Vandia and followed the northeast triangle route to the Well of Life, confronting the dragon-thing guardian.',
-    outcomeOrReward: 'Recovered Luminary & Ancient Clues · +350 XP',
-    routeLink: '/loom',
-    compositeKey: '1:Session:ses-1',
-  },
-  {
-    id: 'hist-2',
-    category: 'Encounter',
-    title: 'Encounter — Guardian of the Well of Life',
-    sessionLabel: 'Session 2 · Tactical Combat',
-    locationName: 'The Well of Life (Northeast of Vandia)',
-    summary: 'Coordinated party battle against the corrupted draconic guardian protecting the sunken wellspring.',
-    outcomeOrReward: 'Combat Victory · Party Level Up to Lv. 4',
-    routeLink: '/encounters',
-    compositeKey: '1:Encounter:enc-well-of-life',
-  },
-  {
-    id: 'hist-3',
-    category: 'Session',
-    title: 'Session 4 — The Road to Cinth & Tremors in the Stone',
-    sessionLabel: 'Session 4 · Overland Journey',
-    locationName: 'Southern Mountain Road & Plains of Red',
-    summary: 'Traveled northeast from Vandia toward Cinth. Passed the poisoned southern mountain where Kildrid sensed ancient runes being clawed deep underground, and Kycius stitched the containment pocket inside Dolly mouth.',
-    outcomeOrReward: 'Safe Passage to Cinth · Laksis Joins the Party',
-    routeLink: '/maps',
-    compositeKey: '1:Session:ses-4',
-  },
-  {
-    id: 'hist-4',
-    category: 'Quest',
-    title: 'Quest Completed — Covenant with the Cinth Artificers Guild',
-    sessionLabel: 'Session 5 · Cinth Foundry Quarter',
-    locationName: 'City of Cinth',
-    summary: 'Befriended the Artificers Guild in Cinth, uncovering how non-magical craft answers the Council of Magic monopoly and learning of the Priors Chokrah rituals.',
-    outcomeOrReward: 'Quest Completed · Guild Alliance & Masterwork Gear',
-    routeLink: '/world-lore',
-    compositeKey: '1:Quest:qst-artificers-guild',
-  },
-  {
-    id: 'hist-5',
-    category: 'Encounter',
-    title: 'Encounter — Blood at the Lord of Cinth Gala',
-    sessionLabel: 'Session 6 · Ballroom Ambush',
-    locationName: 'Lord of Cinth Manor',
-    summary: 'Invited to the high gala where vampires launched a coordinated strike to convert the nobility and seize Cinth. Met Emrys for the first time.',
-    outcomeOrReward: 'Vampire Coven Routed · +900 XP',
-    routeLink: '/encounters',
-    compositeKey: '1:Encounter:enc-cinth-gala',
-  },
-  {
-    id: 'hist-6',
-    category: 'Milestone',
-    title: 'Campaign Milestone — Shadow Beneath the Mountain',
-    sessionLabel: 'Session 8 · Return Toward Vandia',
-    locationName: 'Runed Cavern Under the Southern Mountain',
-    summary: 'Diverted into the mountain cavern by Emrys deception, fought the century-bound dragon, witnessed Fivi final slingshot tooth strike, and saw Captain Kutler descend in his skyship.',
-    outcomeOrReward: 'Book One Climax · Level 7 Milestone',
-    routeLink: '/loom',
-    compositeKey: '1:Session:ses-8',
-  },
+  { id: 'hist-1', category: 'Session', title: 'Session 1 — The Cliffside House & The Well of Life', sessionLabel: 'Session 1 · Southwest Coast', locationName: 'Vandia & Northeast Triangle Route', summary: 'The party gathered at the cliffside house near Vandia and followed the northeast triangle route to the Well of Life, confronting the dragon-thing guardian.', outcomeOrReward: 'Recovered Luminary & Ancient Clues · +350 XP', routeLink: '/loom', compositeKey: '1:Session:ses-1' },
+  { id: 'hist-2', category: 'Encounter', title: 'Encounter — Guardian of the Well of Life', sessionLabel: 'Session 2 · Tactical Combat', locationName: 'The Well of Life (Northeast of Vandia)', summary: 'Coordinated party battle against the corrupted draconic guardian protecting the sunken wellspring.', outcomeOrReward: 'Combat Victory · Party Level Up to Lv. 4', routeLink: '/encounters', compositeKey: '1:Encounter:enc-well-of-life' },
+  { id: 'hist-3', category: 'Session', title: 'Session 4 — The Road to Cinth & Tremors in the Stone', sessionLabel: 'Session 4 · Overland Journey', locationName: 'Southern Mountain Road & Plains of Red', summary: 'Traveled northeast from Vandia toward Cinth. Passed the poisoned southern mountain where Kildrid sensed ancient runes being clawed deep underground, and Kycius stitched the containment pocket inside Dolly mouth.', outcomeOrReward: 'Safe Passage to Cinth · Laksis Joins the Party', routeLink: '/maps', compositeKey: '1:Session:ses-4' },
+  { id: 'hist-4', category: 'Quest', title: 'Quest Completed — Covenant with the Cinth Artificers Guild', sessionLabel: 'Session 5 · Cinth Foundry Quarter', locationName: 'City of Cinth', summary: 'Befriended the Artificers Guild in Cinth, uncovering how non-magical craft answers the Council of Magic monopoly and learning of the Priors Chokrah rituals.', outcomeOrReward: 'Quest Completed · Guild Alliance & Masterwork Gear', routeLink: '/world-lore', compositeKey: '1:Quest:qst-artificers-guild' },
+  { id: 'hist-5', category: 'Encounter', title: 'Encounter — Blood at the Lord of Cinth Gala', sessionLabel: 'Session 6 · Ballroom Ambush', locationName: 'Lord of Cinth Manor', summary: 'Invited to the high gala where vampires launched a coordinated strike to convert the nobility and seize Cinth. Met Emrys for the first time.', outcomeOrReward: 'Vampire Coven Routed · +900 XP', routeLink: '/encounters', compositeKey: '1:Encounter:enc-cinth-gala' },
+  { id: 'hist-6', category: 'Milestone', title: 'Campaign Milestone — Shadow Beneath the Mountain', sessionLabel: 'Session 8 · Return Toward Vandia', locationName: 'Runed Cavern Under the Southern Mountain', summary: 'Diverted into the mountain cavern by Emrys deception, fought the century-bound dragon, witnessed Fivi final slingshot tooth strike, and saw Captain Kutler descend in his skyship.', outcomeOrReward: 'Book One Climax · Level 7 Milestone', routeLink: '/loom', compositeKey: '1:Session:ses-8' },
 ];
 
 export const DEFAULT_MENTIONABLE_ENTITIES: readonly LwNoteMentionTagVm[] = [
@@ -577,12 +286,7 @@ export function buildSavingThrows(
 ): readonly SavingThrowVm[] {
   return abilities.map((a) => {
     const proficient = proficientCodes.includes(a.code);
-    return {
-      code: a.code,
-      label: a.label,
-      proficient,
-      bonus: a.modifier + (proficient ? proficiencyBonus : 0),
-    };
+    return { code: a.code, label: a.label, proficient, bonus: a.modifier + (proficient ? proficiencyBonus : 0) };
   });
 }
 
@@ -596,26 +300,11 @@ export function buildSkillsList(
     const ability = abilities.find((a) => a.code === sk.abilityCode);
     const mod = ability?.modifier ?? 0;
     const proficient = normalizedSet.has(sk.label.toLowerCase()) || normalizedSet.has(sk.id.toLowerCase());
-    return {
-      id: sk.id,
-      label: sk.label,
-      abilityCode: sk.abilityCode,
-      proficient,
-      bonus: mod + (proficient ? proficiencyBonus : 0),
-    };
+    return { id: sk.id, label: sk.label, abilityCode: sk.abilityCode, proficient, bonus: mod + (proficient ? proficiencyBonus : 0) };
   });
 }
 
-const POINT_BUY_COST_TABLE: Record<number, number> = {
-  8: 0,
-  9: 1,
-  10: 2,
-  11: 3,
-  12: 4,
-  13: 5,
-  14: 7,
-  15: 9,
-};
+const POINT_BUY_COST_TABLE: Record<number, number> = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
 
 export function getPointBuyCostForScore(baseScore: number): number {
   const clamped = Math.max(8, Math.min(15, Math.floor(baseScore)));
@@ -623,29 +312,19 @@ export function getPointBuyCostForScore(baseScore: number): number {
 }
 
 export function calculatePointBuySpent(scores: Readonly<Record<string, number>>): number {
-  return Object.values(scores).reduce((sum, score) => {
-    if (score <= 15) {
-      return sum + getPointBuyCostForScore(score);
-    }
-    return sum + 9 + (score - 15) * 2;
-  }, 0);
+  return Object.values(scores).reduce((sum, score) => (score <= 15 ? sum + getPointBuyCostForScore(score) : sum + 9 + (score - 15) * 2), 0);
 }
 
 export function calculateLevelUpAsiPoints(level: number, classId: string): number {
   const normalizedClass = (classId || '').toLowerCase();
   const asiThresholds = [4, 8, 12, 16, 19];
-  if (normalizedClass.includes('fighter')) {
-    asiThresholds.push(6, 14);
-  } else if (normalizedClass.includes('rogue')) {
-    asiThresholds.push(10);
-  }
-  const unlockedAsis = asiThresholds.filter((lvl) => level >= lvl).length;
-  return unlockedAsis * 2;
+  if (normalizedClass.includes('fighter')) asiThresholds.push(6, 14);
+  else if (normalizedClass.includes('rogue')) asiThresholds.push(10);
+  return asiThresholds.filter((lvl) => level >= lvl).length * 2;
 }
 
 export function calculateMaxPreparedSpells(level: number, primaryAbilityScore: number): number {
-  const abilityMod = Math.floor((primaryAbilityScore - 10) / 2);
-  return Math.max(1, level + abilityMod);
+  return Math.max(1, level + Math.floor((primaryAbilityScore - 10) / 2));
 }
 
 export function getSpellPreparationRuleExplanation(
@@ -654,44 +333,33 @@ export function getSpellPreparationRuleExplanation(
   spellName: string,
   spellLevel: number,
   makingPrepared: boolean
-): {
-  title: string;
-  ruleHeading: string;
-  durationBadge: string;
-  explanation: string;
-  levelFeatureNote: string;
-} {
+): { title: string; ruleHeading: string; durationBadge: string; explanation: string; levelFeatureNote: string } {
   const normalizedClass = (className || 'Wizard').toLowerCase();
   const prepMinutes = Math.max(1, spellLevel);
   const isWizard = normalizedClass.includes('wizard');
-  const isDivineOrArtificer =
-    normalizedClass.includes('cleric') ||
-    normalizedClass.includes('druid') ||
-    normalizedClass.includes('paladin') ||
-    normalizedClass.includes('artificer');
+  const isDivineOrArtificer = ['cleric', 'druid', 'paladin', 'artificer'].some((c) => normalizedClass.includes(c));
+  const title = makingPrepared ? `Prepare "${spellName}"` : `Unprepare "${spellName}"`;
 
   if (isWizard && level >= 5) {
     return {
-      title: makingPrepared ? `Prepare "${spellName}"` : `Unprepare "${spellName}"`,
+      title,
       ruleHeading: 'D&D 5e Rule: Preparing Spells & Wizard Memorize Spell (Level 5+)',
       durationBadge: `Long Rest (8 Hours) + ${prepMinutes} Min Study — OR 1 Minute / Short Rest (Memorize Spell)`,
       explanation: `Under standard D&D 5e rules ("Preparing and Casting Spells"), changing your list of prepared Wizard spells requires finishing a Long Rest (8 hours) and spending at least ${prepMinutes} minute${prepMinutes > 1 ? 's' : ''} (1 minute per spell level) studying your spellbook.`,
       levelFeatureNote: `Level ${level} Wizard Feature — Memorize Spell: Because you are at least Level 5, you can also replace one prepared Wizard spell with another spell from your Spellbook after a Short Rest (1 hour) or 1 minute of focused study.`,
     };
   }
-
   if (isDivineOrArtificer) {
     return {
-      title: makingPrepared ? `Prepare "${spellName}"` : `Unprepare "${spellName}"`,
+      title,
       ruleHeading: `D&D 5e Rule: Preparing ${className} Spells`,
       durationBadge: `Long Rest (8 Hours) + ${prepMinutes} Min Prayer / Study`,
       explanation: `Per D&D 5e rules ("Preparing and Casting Spells"), you can change your list of prepared spells when you finish a Long Rest (8 hours). Preparing a new spell list requires at least ${prepMinutes} minute${prepMinutes > 1 ? 's' : ''} (1 minute per spell level for each spell on your list) of prayer, meditation, or tinkering.`,
       levelFeatureNote: `At higher levels, your maximum number of prepared spells increases automatically (Level ${level} + Spellcasting Ability Modifier).`,
     };
   }
-
   return {
-    title: makingPrepared ? `Prepare "${spellName}"` : `Unprepare "${spellName}"`,
+    title,
     ruleHeading: 'D&D 5e Rule: Preparing & Swapping Spells',
     durationBadge: `Long Rest (8 Hours) + ${prepMinutes} Min Arcane Study`,
     explanation: `Per D&D 5e rules ("Preparing and Casting Spells"), changing your list of prepared spells requires finishing a Long Rest (8 hours) and spending ${prepMinutes} minute${prepMinutes > 1 ? 's' : ''} (1 minute per spell level) studying your spellbook or arcane focus.`,
