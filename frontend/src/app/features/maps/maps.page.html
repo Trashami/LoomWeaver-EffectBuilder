@@ -58,6 +58,7 @@
         <lw-map-tool-dock
           [activeToolId]="activeDockToolId()"
           (toolSelected)="onDockToolSelected($event)"
+          (collapseRequested)="leftDockCollapsed.set(true)"
         />
       }
 
@@ -97,6 +98,7 @@
               (mousemove)="on2dCanvasMove($event)"
               (mouseup)="onSurfaceReleaseAt(0, 0)"
               (click)="on2dCanvasClick($event)"
+              (wheel)="on2dCanvasWheel($event)"
             ></canvas>
             <div class="lw-maps-studio__pane-tag">
               <span>2D Bump/Height Map Renderer · Normal + Height Relief</span>
@@ -225,12 +227,20 @@
             (positionXChange)="onInspectorPositionChange('x', $event)"
             (positionZChange)="onInspectorPositionChange('z', $event)"
             (elevationChange)="onInspectorElevationChange($event)"
+            (placementModeChange)="onInspectorPlacementModeChange($event)"
+            (gridSizePresetChange)="onInspectorGridSizePreset($event)"
             (rotationChange)="onInspectorRotationChange($event)"
             (tiltChange)="onInspectorTiltChange($event)"
             (scaleChange)="onInspectorScaleChange($event)"
             (scaleXChange)="onInspectorAxisScaleChange('x', $event)"
             (scaleYChange)="onInspectorAxisScaleChange('y', $event)"
             (scaleZChange)="onInspectorAxisScaleChange('z', $event)"
+            (colorHexChange)="onInspectorColorHexChange($event)"
+            (surfaceFinishChange)="onInspectorSurfaceFinishChange($event)"
+            (opacityChange)="onInspectorOpacityChange($event)"
+            (blocksVisionToggle)="onInspectorBlocksVisionToggle()"
+            (blocksMovementToggle)="onInspectorBlocksMovementToggle()"
+            (duplicateNode)="onDuplicateSelectedPlacedNode()"
             (wallDrawModeChange)="wallDrawMode.set($event); syncSurfaceLock(); syncGhostCursorToStage()"
             (terrainSculptOpChange)="terrainSculptOp.set($event)"
             (terrainRadiusChange)="terrainBrushRadius.set($event); syncGhostCursorToStage()"

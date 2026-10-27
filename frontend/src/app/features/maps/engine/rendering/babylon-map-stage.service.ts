@@ -5,7 +5,6 @@ import {
   Color3,
   Color4,
   Engine,
-  Mesh,
   MeshBuilder,
   PointerEventTypes,
   Scene,
@@ -18,6 +17,8 @@ import {
   SceneLightingController,
 } from '../lighting/scene-lighting.controller';
 import {
+  MapObjectPlacementMode,
+  MapObjectSurfaceFinish,
   MapRenderMode,
   MapSceneGraphState,
   MapStampNode,
@@ -46,12 +47,18 @@ export interface GhostAssetConfig {
   readonly normalUrl?: string;
   readonly thumbnailUrl?: string;
   readonly scale: number;
+  readonly scaleX?: number;
+  readonly scaleY?: number;
+  readonly scaleZ?: number;
+  readonly placementMode?: MapObjectPlacementMode;
   readonly offsetY?: number;
   readonly rotationRad: number;
   readonly heightMeters: number;
   readonly thicknessMeters: number;
   readonly wallDrawMode: WallDrawMode;
   readonly freehandPoints?: readonly (readonly [number, number])[];
+  readonly colorHex?: string;
+  readonly surfaceFinish?: MapObjectSurfaceFinish;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -60,6 +67,7 @@ export class BabylonMapStageService {
   private scene: Scene | null = null;
   private camera: ArcRotateCamera | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private wheelAbortController: AbortController | null = null;
   private selectedPosition: Vector3 | null = null;
   private hideGmSecrets = false;
   private snapToGrid = true;
@@ -77,6 +85,11 @@ export class BabylonMapStageService {
     label: 'Stone Wall Segment',
     kind: 'wall',
     scale: 1,
+    scaleX: 1,
+    scaleY: 1,
+    scaleZ: 1,
+    placementMode: 'floor',
+    offsetY: 0,
     rotationRad: 0,
     heightMeters: 3.0,
     thicknessMeters: 0.45,
@@ -117,11 +130,28 @@ export class BabylonMapStageService {
         Vector3.Zero(),
         this.scene,
       );
-      this.camera.lowerRadiusLimit = 5;
-      this.camera.upperRadiusLimit = 64;
+      this.camera.lowerRadiusLimit = 4;
+      this.camera.upperRadiusLimit = 68;
       this.camera.wheelPrecision = 18;
       this.camera.attachControl(canvas, true);
       this.applyCameraPointerButtons();
+
+      // Intercept laptop trackpad pinch-to-zoom (ctrlKey + wheel) so the browser never zooms the page
+      this.wheelAbortController = new AbortController();
+      canvas.addEventListener(
+        'wheel',
+        (evt: WheelEvent) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          if (evt.ctrlKey && this.camera) {
+            const zoomDelta = evt.deltaY * 0.045;
+            const minR = this.camera.lowerRadiusLimit ?? 4;
+            const maxR = this.camera.upperRadiusLimit ?? 68;
+            this.camera.radius = Math.max(minR, Math.min(maxR, this.camera.radius + zoomDelta));
+          }
+        },
+        { passive: false, signal: this.wheelAbortController.signal },
+      );
 
       if (typeof ResizeObserver !== 'undefined') {
         this.resizeObserver = new ResizeObserver(() => {
@@ -231,21 +261,35 @@ export class BabylonMapStageService {
     }
   }
 
+  private resolveActiveSnapKind(): 'wall' | 'cell-center' | 'free' {
+    if (!this.ghostConfig.enabled) return 'free';
+    if (this.ghostConfig.kind === 'wall') return 'wall';
+    if (
+      this.ghostConfig.kind === 'prop' ||
+      this.ghostConfig.kind === 'decal' ||
+      this.ghostConfig.kind === 'light'
+    ) {
+      return 'cell-center';
+    }
+    return 'free';
+  }
+
   private pickGroundCoordinates(): { x: number; z: number } | null {
     if (!this.scene) return null;
-    // Always pick directly against the terrain ground mesh so walls/props never skew cursor X/Z
+    const snapKind = this.resolveActiveSnapKind();
     const pick = this.scene.pick(
       this.scene.pointerX,
       this.scene.pointerY,
       (m) => m.name === 'lw-terrain-ground',
     );
     if (pick?.hit && pick.pickedPoint) {
-      return {
-        x: Math.round(pick.pickedPoint.x * 100) / 100,
-        z: Math.round(pick.pickedPoint.z * 100) / 100,
-      };
+      return TerrainMeshBuilder.snapWorldCoordinates(
+        pick.pickedPoint.x,
+        pick.pickedPoint.z,
+        this.snapToGrid,
+        snapKind,
+      );
     }
-    // Fallback ray intersection with y=0 horizontal plane when pointer is near map edge
     const ray = this.scene.createPickingRay(
       this.scene.pointerX,
       this.scene.pointerY,
@@ -255,12 +299,9 @@ export class BabylonMapStageService {
     if (Math.abs(ray.direction.y) > 0.0001) {
       const t = -ray.origin.y / ray.direction.y;
       if (t > 0) {
-        const hitX = Math.max(-18, Math.min(18, ray.origin.x + ray.direction.x * t));
-        const hitZ = Math.max(-18, Math.min(18, ray.origin.z + ray.direction.z * t));
-        return {
-          x: Math.round(hitX * 100) / 100,
-          z: Math.round(hitZ * 100) / 100,
-        };
+        const hitX = ray.origin.x + ray.direction.x * t;
+        const hitZ = ray.origin.z + ray.direction.z * t;
+        return TerrainMeshBuilder.snapWorldCoordinates(hitX, hitZ, this.snapToGrid, snapKind);
       }
     }
     return null;
@@ -304,7 +345,6 @@ export class BabylonMapStageService {
       | ArcRotateCameraPointersInput
       | undefined;
     if (pointers) {
-      // When surface drawing is locked, only right-click (2) or middle-click (1) orbits camera
       pointers.buttons = this.surfaceLockEnabled ? [1, 2] : [0, 1, 2];
     }
   }
@@ -316,7 +356,7 @@ export class BabylonMapStageService {
   setGhostConfig(config: GhostAssetConfig, wallAnchor: { x: number; z: number } | null): void {
     this.ghostConfig = config;
     this.wallStartAnchor = wallAnchor;
-    if (this.scene && config.modelUrl) {
+    if (this.scene && config.modelUrl && config.kind !== 'wall') {
       GlbModelCache.getOrLoadTemplate(this.scene, config.modelUrl, () => {
         const h = this.hoverCoords();
         this.updateGhostMeshAt(h.x, h.z);
@@ -330,10 +370,10 @@ export class BabylonMapStageService {
     if (!this.scene) return;
     this.scene.transformNodes
       .filter((n) => n.name.startsWith('lw-ghost-'))
-      .forEach((n) => n.dispose());
+      .forEach((n) => n.dispose(false, false));
     this.scene.meshes
       .filter((m) => m.name.startsWith('lw-ghost-'))
-      .forEach((m) => m.dispose());
+      .forEach((m) => m.dispose(false, false));
   }
 
   private updateGhostMeshAt(gx: number, gz: number): void {
@@ -342,30 +382,45 @@ export class BabylonMapStageService {
 
     if (!this.ghostConfig.enabled) return;
 
-    if (
-      this.ghostConfig.kind === 'wall' &&
-      (this.wallStartAnchor ||
+    const groundY = TerrainMeshBuilder.sampleElevationAt(this.scene, gx, gz);
+
+    // Wall Line & Shapes Ghost: never spawns a 3D prop object; shows grid-snapped wall or corner post
+    if (this.ghostConfig.kind === 'wall') {
+      if (
+        this.wallStartAnchor ||
         (this.ghostConfig.wallDrawMode === 'freehand' &&
-          (this.ghostConfig.freehandPoints?.length ?? 0) >= 2))
-    ) {
-      const startX = this.wallStartAnchor?.x ?? gx;
-      const startZ = this.wallStartAnchor?.z ?? gz;
-      WallMeshBuilder.renderGhostWallPreview(
-        this.scene,
-        this.ghostConfig.wallDrawMode,
-        startX,
-        startZ,
-        gx,
-        gz,
-        this.ghostConfig.heightMeters,
-        this.ghostConfig.thicknessMeters,
-        this.ghostConfig.modelUrl,
-        this.ghostConfig.freehandPoints,
-      );
+          (this.ghostConfig.freehandPoints?.length ?? 0) >= 2)
+      ) {
+        const startX = this.wallStartAnchor?.x ?? gx;
+        const startZ = this.wallStartAnchor?.z ?? gz;
+        WallMeshBuilder.renderGhostWallPreview(
+          this.scene,
+          this.ghostConfig.wallDrawMode,
+          startX,
+          startZ,
+          gx,
+          gz,
+          this.ghostConfig.heightMeters,
+          this.ghostConfig.thicknessMeters,
+          this.ghostConfig.freehandPoints,
+          this.snapToGrid,
+        );
+      } else {
+        // Show a clean grid-snapped corner anchor ring on the floor before the first click
+        const step = TerrainMeshBuilder.getCellStepMeters() * 0.25;
+        const pts = [
+          new Vector3(gx - step, groundY + 0.08, gz - step),
+          new Vector3(gx + step, groundY + 0.08, gz - step),
+          new Vector3(gx + step, groundY + 0.08, gz + step),
+          new Vector3(gx - step, groundY + 0.08, gz + step),
+          new Vector3(gx - step, groundY + 0.08, gz - step),
+        ];
+        const anchorBox = MeshBuilder.CreateLines('lw-ghost-wall-anchor', { points: pts }, this.scene);
+        anchorBox.color = Color3.FromHexString('#49e892');
+        anchorBox.isPickable = false;
+      }
       return;
     }
-
-    const groundY = TerrainMeshBuilder.sampleElevationAt(this.scene, gx, gz);
 
     // Terrain, Water, or Scatter brush: outline circle conforming 1:1 to terrain
     if (
@@ -418,43 +473,44 @@ export class BabylonMapStageService {
       }
     }
 
-    // 2D Cutout Stamp Decal Ghost
+    const effectiveOffsetY =
+      this.ghostConfig.placementMode === 'custom' ? (this.ghostConfig.offsetY ?? 0) : 0;
+    const cellMeters = TerrainMeshBuilder.getCellStepMeters(); // 1.5m = 1 grid square (1x1x1)
+    const sx = (this.ghostConfig.scaleX ?? 1) * this.ghostConfig.scale;
+    const sy = (this.ghostConfig.scaleY ?? 1) * this.ghostConfig.scale;
+    const sz = (this.ghostConfig.scaleZ ?? 1) * this.ghostConfig.scale;
+
+    // 2D Cutout Stamp Decal Ghost (sized 1x1 grid square by default)
     if (this.ghostConfig.kind === 'decal' && this.ghostConfig.albedoUrl) {
-      const size = 2.6 * this.ghostConfig.scale;
       const decal = MeshBuilder.CreateGround(
         'lw-ghost-cursor-decal',
-        { width: size, height: size },
+        { width: cellMeters * sx, height: cellMeters * sz },
         this.scene,
       );
-      decal.position.set(gx, groundY + 0.05 + (this.ghostConfig.offsetY ?? 0), gz);
+      decal.position.set(gx, groundY + 0.05 + effectiveOffsetY, gz);
       decal.rotation.y = this.ghostConfig.rotationRad;
-      const dMat = new StandardMaterial('lw-ghost-decal-mat', this.scene);
-      const tex = new Texture(this.ghostConfig.albedoUrl, this.scene);
-      tex.hasAlpha = true;
-      dMat.diffuseTexture = tex;
-      dMat.useAlphaFromDiffuseTexture = true;
-      dMat.alpha = 0.72;
-      decal.material = dMat;
+      decal.material = GlbModelCache.getSharedGhostMaterial(this.scene);
       decal.isPickable = false;
       return;
     }
 
-    // 3D GLB Model Ghost
+    // 3D Object Ghost (sized 1x1x1 grid square = 1.5m x 1.5m x 1.5m by default, flush on floor)
     if (this.ghostConfig.modelUrl) {
       const tpl = GlbModelCache.getOrLoadTemplate(this.scene, this.ghostConfig.modelUrl);
       if (tpl) {
-        const isWall = this.ghostConfig.kind === 'wall';
+        const isUniform =
+          Math.abs(sx - sy) < 0.01 && Math.abs(sy - sz) < 0.01;
         const inst = GlbModelCache.instantiateClone(
           this.scene,
           tpl,
           'lw-ghost-cursor-glb',
-          isWall ? 2.2 : 2.2 * this.ghostConfig.scale,
-          isWall ? this.ghostConfig.heightMeters : 2.2 * this.ghostConfig.scale,
-          isWall ? this.ghostConfig.thicknessMeters : 2.2 * this.ghostConfig.scale,
-          !isWall,
+          cellMeters * sx,
+          cellMeters * sy,
+          cellMeters * sz,
+          isUniform,
           true,
         );
-        inst.position.set(gx, groundY + (this.ghostConfig.offsetY ?? 0), gz);
+        inst.position.set(gx, groundY + effectiveOffsetY, gz);
         inst.rotation.y = this.ghostConfig.rotationRad;
         return;
       }
@@ -507,7 +563,6 @@ export class BabylonMapStageService {
     if (!this.scene) return;
     TerrainMeshBuilder.sculptElevationAt(this.scene, worldX, worldZ, radius, deltaY, mode);
     if (this.lastState) {
-      // Refresh walls, stamps, water, and scatter so they sit on updated terrain height
       WallMeshBuilder.rebuildWallMeshes(this.scene, this.lastState.walls, this.hideGmSecrets);
       WaterSplineBuilder.rebuildWaterSplines(this.scene, this.lastState.waterSplines);
       this.rebuildStamps(this.scene, this.lastState.stamps);
@@ -616,24 +671,29 @@ export class BabylonMapStageService {
   private rebuildStamps(scene: Scene, stamps: readonly MapStampNode[]): void {
     scene.transformNodes
       .filter((n) => n.name.startsWith('lw-stamp-node-'))
-      .forEach((n) => n.dispose());
+      .forEach((n) => n.dispose(false, false));
     scene.meshes
       .filter((m) => m.name.startsWith('lw-stamp-'))
-      .forEach((m) => m.dispose());
+      .forEach((m) => m.dispose(false, false));
+
+    const cellMeters = TerrainMeshBuilder.getCellStepMeters(); // 1.5m = 1x1x1 grid square
 
     for (const st of stamps) {
       if (this.hideGmSecrets && (st.gmSecretOnly || st.label.toLowerCase().includes('secret'))) {
         continue;
       }
       const groundY = TerrainMeshBuilder.sampleElevationAt(scene, st.x, st.z);
-      const offsetY = st.offsetY ?? 0;
+      const offsetY = st.placementMode === 'custom' ? (st.offsetY ?? 0) : 0;
       const stampMeta: GlbCloneMetadata = {
         lwNodeName: `lw-stamp-${st.id}`,
         lwKind: 'object',
         lwEntityId: st.id,
       };
+      const sx = (st.scaleX ?? 1) * st.scale;
+      const sy = (st.scaleY ?? 1) * st.scale;
+      const sz = (st.scaleZ ?? 1) * st.scale;
 
-      // 1. Real 3D .glb Asset Model
+      // 1. Real 3D Asset Model (1x1x1 = 1.5m x 1.5m x 1.5m, flush on floor by default)
       if (st.modelUrl) {
         const tpl = GlbModelCache.getOrLoadTemplate(scene, st.modelUrl, () => {
           if (this.lastState) {
@@ -642,19 +702,23 @@ export class BabylonMapStageService {
           }
         });
         if (tpl) {
-          const sx = (st.scaleX ?? 1) * st.scale;
-          const sy = (st.scaleY ?? 1) * st.scale;
-          const sz = (st.scaleZ ?? 1) * st.scale;
+          const isUniform =
+            Math.abs(sx - sy) < 0.01 && Math.abs(sy - sz) < 0.01;
           const inst = GlbModelCache.instantiateClone(
             scene,
             tpl,
             `lw-stamp-node-${st.id}`,
-            2.2 * sx,
-            2.2 * sy,
-            2.2 * sz,
-            st.scaleX === undefined && st.scaleY === undefined && st.scaleZ === undefined,
+            cellMeters * sx,
+            cellMeters * sy,
+            cellMeters * sz,
+            isUniform,
             false,
             stampMeta,
+            {
+              colorHex: st.colorHex,
+              surfaceFinish: st.surfaceFinish,
+              opacity: st.opacity,
+            },
           );
           inst.position.set(st.x, groundY + offsetY, st.z);
           inst.rotation.y = st.rotationY;
@@ -663,13 +727,12 @@ export class BabylonMapStageService {
         }
       }
 
-      // 2. 2D Cutout Floor Stamp / Decal or Thumbnail Billboard while GLB downloads
+      // 2. 2D Cutout Floor Stamp / Decal
       const texUrl = st.albedoUrl || st.thumbnailUrl;
       if (texUrl) {
-        const size = 2.6 * st.scale;
         const decal = MeshBuilder.CreateGround(
           `lw-stamp-${st.id}`,
-          { width: size, height: size },
+          { width: cellMeters * sx, height: cellMeters * sz },
           scene,
         );
         decal.position.set(st.x, groundY + 0.04 + offsetY, st.z);
@@ -677,11 +740,21 @@ export class BabylonMapStageService {
         decal.receiveShadows = true;
         decal.metadata = stampMeta;
 
-        const dMat = new StandardMaterial(`lw-stamp-decal-mat-${st.id}`, scene);
+        const matName = `lw-stamp-decal-mat-${st.id}`;
+        const existingMat = scene.getMaterialByName(matName) as StandardMaterial | null;
+        if (existingMat) {
+          existingMat.dispose(false, false);
+        }
+        const dMat = new StandardMaterial(matName, scene);
         const diffTex = new Texture(texUrl, scene);
         diffTex.hasAlpha = true;
         dMat.diffuseTexture = diffTex;
         dMat.useAlphaFromDiffuseTexture = true;
+        dMat.diffuseColor =
+          st.colorHex && st.colorHex.toLowerCase() !== '#ffffff'
+            ? Color3.FromHexString(st.colorHex)
+            : Color3.White();
+        dMat.alpha = st.opacity ?? 1.0;
         dMat.specularColor = Color3.FromHexString('#18221c');
         if (st.normalUrl) {
           const bumpTex = new Texture(st.normalUrl, scene);
@@ -703,7 +776,7 @@ export class BabylonMapStageService {
 
     const pos = this.selectedPosition;
     const pts: Vector3[] = [];
-    const r = 1.45;
+    const r = 1.1;
     for (let i = 0; i <= 36; i++) {
       const a = (i / 36) * Math.PI * 2;
       pts.push(new Vector3(pos.x + Math.cos(a) * r, pos.y + 0.06, pos.z + Math.sin(a) * r));
@@ -719,6 +792,8 @@ export class BabylonMapStageService {
 
   dispose(): void {
     this.stopHoldTimer();
+    this.wheelAbortController?.abort();
+    this.wheelAbortController = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.scene?.dispose();

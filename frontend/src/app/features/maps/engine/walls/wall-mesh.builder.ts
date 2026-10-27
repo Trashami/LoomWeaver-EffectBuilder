@@ -21,6 +21,41 @@ export interface WallDoorAttachmentHit {
 }
 
 export class WallMeshBuilder {
+  private static texCache = new Map<string, Texture>();
+  private static activeScene: Scene | null = null;
+  private static ghostMat: StandardMaterial | null = null;
+
+  private static ensureSceneCache(scene: Scene): void {
+    if (this.activeScene !== scene) {
+      this.texCache.clear();
+      this.ghostMat = null;
+      this.activeScene = scene;
+    }
+  }
+
+  private static getCachedTexture(scene: Scene, url: string): Texture {
+    this.ensureSceneCache(scene);
+    const existing = this.texCache.get(url);
+    if (existing) {
+      return existing;
+    }
+    const tex = new Texture(url, scene);
+    this.texCache.set(url, tex);
+    return tex;
+  }
+
+  private static getSharedGhostWallMat(scene: Scene): StandardMaterial {
+    this.ensureSceneCache(scene);
+    if (!this.ghostMat || this.ghostMat.getScene() !== scene) {
+      const mat = new StandardMaterial('lw-ghost-wall-shared-mat', scene);
+      mat.diffuseColor = Color3.FromHexString('#49e892');
+      mat.emissiveColor = Color3.FromHexString('#2ee66b').scale(0.5);
+      mat.alpha = 0.5;
+      this.ghostMat = mat;
+    }
+    return this.ghostMat;
+  }
+
   static buildShapePoints(
     mode: WallDrawMode,
     startX: number,
@@ -28,23 +63,36 @@ export class WallMeshBuilder {
     endX: number,
     endZ: number,
     freehandPoints?: readonly (readonly [number, number])[],
+    snapToGrid = true,
   ): (readonly [number, number])[] {
+    const snapPt = (x: number, z: number): [number, number] => {
+      if (!snapToGrid) {
+        return [Math.round(x * 100) / 100, Math.round(z * 100) / 100];
+      }
+      const s = TerrainMeshBuilder.snapWorldCoordinates(x, z, true, 'wall');
+      return [s.x, s.z];
+    };
+
     if (mode === 'freehand' && freehandPoints && freehandPoints.length >= 2) {
-      return [...freehandPoints];
+      return freehandPoints.map(([px, pz]) => snapPt(px, pz));
     }
+
+    const [sx, sz] = snapPt(startX, startZ);
+    const [ex, ez] = snapPt(endX, endZ);
+
     if (mode === 'line') {
       return [
-        [startX, startZ],
-        [endX, endZ],
+        [sx, sz],
+        [ex, ez],
       ];
     }
 
-    const minX = Math.min(startX, endX);
-    const maxX = Math.max(startX, endX);
-    const minZ = Math.min(startZ, endZ);
-    const maxZ = Math.max(startZ, endZ);
-    const w = Math.max(0.25, maxX - minX);
-    const d = Math.max(0.25, maxZ - minZ);
+    const minX = Math.min(sx, ex);
+    const maxX = Math.max(sx, ex);
+    const minZ = Math.min(sz, ez);
+    const maxZ = Math.max(sz, ez);
+    const w = Math.max(1.5, maxX - minX);
+    const d = Math.max(1.5, maxZ - minZ);
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
     const rx = w / 2;
@@ -59,15 +107,10 @@ export class WallMeshBuilder {
       ];
     }
     if (mode === 'triangle') {
-      return [
-        [cx, maxZ],
-        [maxX, minZ],
-        [minX, minZ],
-      ];
+      return [snapPt(cx, maxZ), [maxX, minZ], [minX, minZ]];
     }
     if (mode === 'l_shape') {
-      const midX = minX + w * 0.52;
-      const midZ = minZ + d * 0.52;
+      const [midX, midZ] = snapPt(minX + w * 0.5, minZ + d * 0.5);
       return [
         [minX, minZ],
         [maxX, minZ],
@@ -78,9 +121,8 @@ export class WallMeshBuilder {
       ];
     }
     if (mode === 't_shape') {
-      const x1 = minX + w * 0.32;
-      const x2 = minX + w * 0.68;
-      const zBar = minZ + d * 0.62;
+      const [x1, zBar] = snapPt(minX + w * 0.33, minZ + d * 0.6);
+      const [x2] = snapPt(minX + w * 0.67, minZ);
       return [
         [x1, minZ],
         [x2, minZ],
@@ -93,10 +135,8 @@ export class WallMeshBuilder {
       ];
     }
     if (mode === 'cross') {
-      const x1 = minX + w * 0.33;
-      const x2 = minX + w * 0.67;
-      const z1 = minZ + d * 0.33;
-      const z2 = minZ + d * 0.67;
+      const [x1, z1] = snapPt(minX + w * 0.33, minZ + d * 0.33);
+      const [x2, z2] = snapPt(minX + w * 0.67, minZ + d * 0.67);
       return [
         [x1, minZ],
         [x2, minZ],
@@ -193,39 +233,58 @@ export class WallMeshBuilder {
     matName: string,
     wall: MapWallSegmentNode,
   ): StandardMaterial {
+    const existing = scene.getMaterialByName(matName) as StandardMaterial | null;
+    if (existing) {
+      existing.dispose(false, false);
+    }
     const mat = new StandardMaterial(matName, scene);
-    const colorHex = CutawayWallEngine.materialHex(wall.material);
-    const texUrl = wall.albedoUrl || wall.thumbnailUrl;
+    const baseColorHex = wall.colorHex || CutawayWallEngine.materialHex(wall.material);
+    const texUrl =
+      wall.albedoUrl ||
+      wall.thumbnailUrl ||
+      '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone.png';
+
     if (texUrl) {
-      const diffTex = new Texture(texUrl, scene);
-      diffTex.uScale = 2.0;
-      diffTex.vScale = 1.5;
+      const diffTex = this.getCachedTexture(scene, texUrl);
+      diffTex.uScale = 3.0;
+      diffTex.vScale = 1.6;
       mat.diffuseTexture = diffTex;
-      mat.diffuseColor = Color3.White();
-      if (wall.normalUrl) {
-        const bumpTex = new Texture(wall.normalUrl, scene);
-        bumpTex.uScale = 2.0;
-        bumpTex.vScale = 1.5;
-        bumpTex.level = 1.15;
+      mat.diffuseColor = wall.colorHex
+        ? Color3.FromHexString(wall.colorHex)
+        : Color3.White();
+      const normUrl =
+        wall.normalUrl ||
+        '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone_normal.png';
+      if (normUrl) {
+        const bumpTex = this.getCachedTexture(scene, normUrl);
+        bumpTex.uScale = 3.0;
+        bumpTex.vScale = 1.6;
+        bumpTex.level = 1.2;
         mat.bumpTexture = bumpTex;
       }
     } else {
-      mat.diffuseColor = Color3.FromHexString(colorHex);
-      mat.emissiveColor = Color3.FromHexString(colorHex).scale(0.12);
+      mat.diffuseColor = Color3.FromHexString(baseColorHex);
+      mat.emissiveColor = Color3.FromHexString(baseColorHex).scale(0.12);
     }
     mat.specularColor = Color3.FromHexString('#1d2822');
     return mat;
   }
 
+  /**
+   * High-performance procedural 3D wall geometry builder:
+   * Draws clean extruded box geometry per straight wall span first, then applies
+   * the selected 2D wall bump/albedo texture & tint (zero heavy 3D GLB cloning along walls).
+   */
   static rebuildWallMeshes(
     scene: Scene,
     walls: readonly MapWallSegmentNode[] | undefined,
     hideSecrets = false,
     onGlbLoaded?: () => void,
   ): number {
+    this.ensureSceneCache(scene);
     scene.transformNodes
       .filter((n) => n.name.startsWith('lw-wall-node-') || n.name.startsWith('lw-door-node-'))
-      .forEach((n) => n.dispose());
+      .forEach((n) => n.dispose(false, false));
     scene.meshes
       .filter(
         (m) =>
@@ -233,7 +292,7 @@ export class WallMeshBuilder {
           m.name.startsWith('lw-portal-') ||
           m.name.startsWith('lw-door-'),
       )
-      .forEach((m) => m.dispose());
+      .forEach((m) => m.dispose(false, false));
 
     if (!walls || walls.length === 0) return 0;
     let meshCount = 0;
@@ -248,9 +307,6 @@ export class WallMeshBuilder {
         wall.perspective,
         false,
       );
-      const glbTemplate = wall.modelUrl
-        ? GlbModelCache.getOrLoadTemplate(scene, wall.modelUrl, onGlbLoaded)
-        : null;
       const mat = this.createTexturedWallMaterial(scene, `lw-wall-mat-${wall.id}`, wall);
 
       const segCount = closed ? pts.length : pts.length - 1;
@@ -277,7 +333,7 @@ export class WallMeshBuilder {
         const segGlobalEndT = totalPerimeter > 0 ? (accumBefore + totalLen) / totalPerimeter : 1;
         accumBefore += totalLen;
 
-        // Collect door openings that fall on this segment so we cut the wall around them
+        // Collect door openings on this segment
         const localCutouts: { startLocal: number; endLocal: number; opening: WallOpeningNode }[] = [];
         for (const op of wall.openings) {
           if (op.t >= segGlobalStartT - 0.001 && op.t <= segGlobalEndT + 0.001) {
@@ -295,7 +351,6 @@ export class WallMeshBuilder {
         }
         localCutouts.sort((x, y) => x.startLocal - y.startLocal);
 
-        // Build solid wall spans excluding door cutouts
         const solidSpans: [number, number][] = [];
         let cursor = 0;
         for (const cut of localCutouts) {
@@ -313,74 +368,49 @@ export class WallMeshBuilder {
         for (let sIdx = 0; sIdx < solidSpans.length; sIdx++) {
           const [s0, s1] = solidSpans[sIdx];
           const spanLen = (s1 - s0) * totalLen;
-          const blockCount = Math.max(1, Math.ceil(spanLen / 1.6));
-          const blockLen = spanLen / blockCount;
+          const tMid = (s0 + s1) * 0.5;
+          const bx = a[0] + dx * tMid;
+          const bz = a[1] + dz * tMid;
 
-          for (let bIdx = 0; bIdx < blockCount; bIdx++) {
-            const t0 = s0 + ((s1 - s0) * bIdx) / blockCount;
-            const t1 = s0 + ((s1 - s0) * (bIdx + 1)) / blockCount;
-            const tMid = (t0 + t1) * 0.5;
-            const bx = a[0] + dx * tMid;
-            const bz = a[1] + dz * tMid;
+          const yStart = TerrainMeshBuilder.sampleElevationAt(
+            scene,
+            a[0] + dx * s0,
+            a[1] + dz * s0,
+          );
+          const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
+          const yEnd = TerrainMeshBuilder.sampleElevationAt(
+            scene,
+            a[0] + dx * s1,
+            a[1] + dz * s1,
+          );
+          const minGroundY = Math.min(yStart, yMid, yEnd) - 0.55;
+          const maxGroundY = Math.max(yStart, yMid, yEnd);
+          const effectiveHeight = maxGroundY + height - minGroundY;
 
-            // Sample terrain along block so wall automatically fills gaps on raised/lowered slopes
-            const yStart = TerrainMeshBuilder.sampleElevationAt(
-              scene,
-              a[0] + dx * t0,
-              a[1] + dz * t0,
-            );
-            const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
-            const yEnd = TerrainMeshBuilder.sampleElevationAt(
-              scene,
-              a[0] + dx * t1,
-              a[1] + dz * t1,
-            );
-            const minGroundY = Math.min(yStart, yMid, yEnd) - 0.55;
-            const maxGroundY = Math.max(yStart, yMid, yEnd);
-            const effectiveHeight = maxGroundY + height - minGroundY;
+          const wallMeta = {
+            lwNodeName: `lw-wall-${wall.id}`,
+            lwKind: 'wall' as const,
+            lwEntityId: wall.id,
+          };
 
-            const wallMeta = {
-              lwNodeName: `lw-wall-${wall.id}`,
-              lwKind: 'wall' as const,
-              lwEntityId: wall.id,
-            };
-
-            if (glbTemplate) {
-              const inst = GlbModelCache.instantiateClone(
-                scene,
-                glbTemplate,
-                `lw-wall-node-${wall.id}-${i}-${sIdx}-${bIdx}`,
-                blockLen + 0.14,
-                effectiveHeight,
-                wall.thicknessMeters,
-                false,
-                false,
-                wallMeta,
-              );
-              inst.position.set(bx, minGroundY, bz);
-              inst.rotation.y = angleY;
-              meshCount++;
-            } else {
-              const segMesh = MeshBuilder.CreateBox(
-                `lw-wall-${wall.id}-seg-${i}-${sIdx}-${bIdx}`,
-                {
-                  width: blockLen + 0.14,
-                  height: effectiveHeight,
-                  depth: wall.thicknessMeters,
-                },
-                scene,
-              );
-              segMesh.position.set(bx, minGroundY + effectiveHeight / 2, bz);
-              segMesh.rotation.y = angleY;
-              segMesh.material = mat;
-              segMesh.receiveShadows = true;
-              segMesh.metadata = wallMeta;
-              meshCount++;
-            }
-          }
+          const segMesh = MeshBuilder.CreateBox(
+            `lw-wall-${wall.id}-seg-${i}-${sIdx}`,
+            {
+              width: spanLen + wall.thicknessMeters * 0.4,
+              height: effectiveHeight,
+              depth: wall.thicknessMeters,
+            },
+            scene,
+          );
+          segMesh.position.set(bx, minGroundY + effectiveHeight / 2, bz);
+          segMesh.rotation.y = angleY;
+          segMesh.material = mat;
+          segMesh.receiveShadows = true;
+          segMesh.metadata = wallMeta;
+          meshCount++;
         }
 
-        // Render lintel above each door cutout and place the independently selectable 3D Door GLB
+        // Render lintel above each door cutout and place the independently selectable 3D Door asset
         for (const cut of localCutouts) {
           const op = cut.opening;
           if (hideSecrets && op.isSecret && !op.isRevealedToPlayers) continue;
@@ -391,7 +421,6 @@ export class WallMeshBuilder {
           const groundY = TerrainMeshBuilder.sampleElevationAt(scene, doorX, doorZ);
           const doorH = op.heightMeters ?? Math.min(height * 0.85, 2.6);
 
-          // Top lintel wall header if wall is taller than door
           if (height - doorH > 0.25) {
             const lintelH = height - doorH;
             const lintel = MeshBuilder.CreateBox(
@@ -438,8 +467,6 @@ export class WallMeshBuilder {
             doorInst.rotation.y = angleY + (op.isOpen ? Math.PI * 0.42 : 0);
             meshCount++;
           } else {
-            const doorMat = new StandardMaterial(`lw-door-mat-${op.id}`, scene);
-            doorMat.diffuseColor = Color3.FromHexString('#7d5634');
             const doorMesh = MeshBuilder.CreateBox(
               `lw-door-${op.id}`,
               {
@@ -451,7 +478,7 @@ export class WallMeshBuilder {
             );
             doorMesh.position.set(doorX, groundY + doorH / 2, doorZ);
             doorMesh.rotation.y = angleY + (op.isOpen ? Math.PI * 0.42 : 0);
-            doorMesh.material = doorMat;
+            doorMesh.material = mat;
             doorMesh.metadata = doorMeta;
             meshCount++;
           }
@@ -471,25 +498,26 @@ export class WallMeshBuilder {
     endZ: number,
     heightMeters: number,
     thicknessMeters: number,
-    modelUrl?: string,
     freehandPoints?: readonly (readonly [number, number])[],
+    snapToGrid = true,
   ): void {
-    scene.transformNodes
-      .filter((n) => n.name.startsWith('lw-ghost-wall-'))
-      .forEach((n) => n.dispose());
     scene.meshes
       .filter((m) => m.name.startsWith('lw-ghost-wall-'))
-      .forEach((m) => m.dispose());
+      .forEach((m) => m.dispose(false, false));
 
-    const pts = this.buildShapePoints(drawMode, startX, startZ, endX, endZ, freehandPoints);
+    const pts = this.buildShapePoints(
+      drawMode,
+      startX,
+      startZ,
+      endX,
+      endZ,
+      freehandPoints,
+      snapToGrid,
+    );
     if (pts.length < 2) return;
 
     const closed = drawMode !== 'line' && drawMode !== 'freehand';
-    const glbTemplate = modelUrl ? GlbModelCache.getOrLoadTemplate(scene, modelUrl) : null;
-    const mat = new StandardMaterial('lw-ghost-wall-mat', scene);
-    mat.diffuseColor = Color3.FromHexString('#49e892');
-    mat.emissiveColor = Color3.FromHexString('#2ee66b').scale(0.55);
-    mat.alpha = 0.48;
+    const mat = this.getSharedGhostWallMat(scene);
 
     const segCount = closed ? pts.length : pts.length - 1;
     for (let i = 0; i < segCount; i++) {
@@ -500,48 +528,25 @@ export class WallMeshBuilder {
       const totalLen = Math.hypot(dx, dz);
       if (totalLen < 0.05) continue;
 
-      const blockCount = Math.max(1, Math.ceil(totalLen / 1.8));
-      const blockLen = totalLen / blockCount;
       const angleY = -Math.atan2(dz, dx);
+      const bx = (a[0] + b[0]) * 0.5;
+      const bz = (a[1] + b[1]) * 0.5;
+      const y0 = TerrainMeshBuilder.sampleElevationAt(scene, a[0], a[1]);
+      const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
+      const y1 = TerrainMeshBuilder.sampleElevationAt(scene, b[0], b[1]);
+      const minGroundY = Math.min(y0, yMid, y1) - 0.35;
+      const maxGroundY = Math.max(y0, yMid, y1);
+      const effectiveH = maxGroundY + heightMeters - minGroundY;
 
-      for (let bIdx = 0; bIdx < blockCount; bIdx++) {
-        const t0 = bIdx / blockCount;
-        const t1 = (bIdx + 1) / blockCount;
-        const tMid = (t0 + t1) * 0.5;
-        const bx = a[0] + dx * tMid;
-        const bz = a[1] + dz * tMid;
-        const y0 = TerrainMeshBuilder.sampleElevationAt(scene, a[0] + dx * t0, a[1] + dz * t0);
-        const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
-        const y1 = TerrainMeshBuilder.sampleElevationAt(scene, a[0] + dx * t1, a[1] + dz * t1);
-        const minGroundY = Math.min(y0, yMid, y1) - 0.45;
-        const maxGroundY = Math.max(y0, yMid, y1);
-        const effectiveH = maxGroundY + heightMeters - minGroundY;
-
-        if (glbTemplate) {
-          const inst = GlbModelCache.instantiateClone(
-            scene,
-            glbTemplate,
-            `lw-ghost-wall-${i}-${bIdx}`,
-            blockLen + 0.12,
-            effectiveH,
-            thicknessMeters,
-            false,
-            true,
-          );
-          inst.position.set(bx, minGroundY, bz);
-          inst.rotation.y = angleY;
-        } else {
-          const mesh = MeshBuilder.CreateBox(
-            `lw-ghost-wall-seg-${i}-${bIdx}`,
-            { width: blockLen + 0.12, height: effectiveH, depth: thicknessMeters },
-            scene,
-          );
-          mesh.position.set(bx, minGroundY + effectiveH / 2, bz);
-          mesh.rotation.y = angleY;
-          mesh.material = mat;
-          mesh.isPickable = false;
-        }
-      }
+      const mesh = MeshBuilder.CreateBox(
+        `lw-ghost-wall-seg-${i}`,
+        { width: totalLen + thicknessMeters * 0.35, height: effectiveH, depth: thicknessMeters },
+        scene,
+      );
+      mesh.position.set(bx, minGroundY + effectiveH / 2, bz);
+      mesh.rotation.y = angleY;
+      mesh.material = mat;
+      mesh.isPickable = false;
     }
   }
 }

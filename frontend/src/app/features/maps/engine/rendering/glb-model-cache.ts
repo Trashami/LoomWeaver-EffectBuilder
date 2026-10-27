@@ -16,6 +16,7 @@ export interface CachedGlbTemplate {
   readonly rawWidth: number;
   readonly rawHeight: number;
   readonly rawDepth: number;
+  readonly baseOffsetY: number;
 }
 
 export interface GlbCloneMetadata {
@@ -25,11 +26,19 @@ export interface GlbCloneMetadata {
   readonly lwWallId?: string;
 }
 
+export interface GlbPaintOptions {
+  readonly colorHex?: string;
+  readonly surfaceFinish?: 'standard' | 'matte' | 'metallic' | 'runic-glow';
+  readonly opacity?: number;
+}
+
 export class GlbModelCache {
   private static cache = new Map<string, CachedGlbTemplate>();
   private static pending = new Map<string, Promise<CachedGlbTemplate | null>>();
   private static failedUrls = new Set<string>();
   private static activeScene: Scene | null = null;
+  private static sharedGhostMat: StandardMaterial | null = null;
+  private static tintedMatCache = new Map<string, StandardMaterial>();
   private static decoderConfigured = false;
 
   static ensureScene(scene: Scene): void {
@@ -46,8 +55,58 @@ export class GlbModelCache {
     if (this.activeScene !== scene) {
       this.cache.clear();
       this.pending.clear();
+      this.tintedMatCache.clear();
+      this.sharedGhostMat = null;
       this.activeScene = scene;
     }
+  }
+
+  static getSharedGhostMaterial(scene: Scene): StandardMaterial {
+    this.ensureScene(scene);
+    if (!this.sharedGhostMat || this.sharedGhostMat.getScene() !== scene) {
+      const mat = new StandardMaterial('lw-shared-ghost-mat', scene);
+      mat.diffuseColor = Color3.FromHexString('#49e892');
+      mat.emissiveColor = Color3.FromHexString('#2ee66b').scale(0.5);
+      mat.alpha = 0.48;
+      this.sharedGhostMat = mat;
+    }
+    return this.sharedGhostMat;
+  }
+
+  private static getOrCreatePaintMaterial(
+    scene: Scene,
+    paint: GlbPaintOptions,
+  ): StandardMaterial | null {
+    const hex = (paint.colorHex || '#ffffff').toLowerCase();
+    const finish = paint.surfaceFinish || 'standard';
+    const alpha = paint.opacity ?? 1.0;
+    if (hex === '#ffffff' && finish === 'standard' && alpha >= 0.99) {
+      return null;
+    }
+    const key = `${hex}|${finish}|${alpha.toFixed(2)}`;
+    const existing = this.tintedMatCache.get(key);
+    if (existing && existing.getScene() === scene) {
+      return existing;
+    }
+    const mat = new StandardMaterial(`lw-paint-mat-${key}`, scene);
+    const col = Color3.FromHexString(hex);
+    mat.diffuseColor = col;
+    mat.alpha = alpha;
+    if (finish === 'matte') {
+      mat.specularColor = Color3.FromHexString('#0d120f');
+      mat.roughness = 0.95;
+    } else if (finish === 'metallic') {
+      mat.specularColor = Color3.FromHexString('#e5f4ec');
+      mat.specularPower = 64;
+      mat.emissiveColor = col.scale(0.14);
+    } else if (finish === 'runic-glow') {
+      mat.specularColor = col;
+      mat.emissiveColor = col.scale(0.55);
+    } else {
+      mat.specularColor = Color3.FromHexString('#25332b');
+    }
+    this.tintedMatCache.set(key, mat);
+    return mat;
   }
 
   static getOrLoadTemplate(
@@ -122,7 +181,11 @@ export class GlbModelCache {
 
       if (rootMesh) {
         rootMesh.position.set(-center.x, -bounds.min.y, -center.z);
+        rootMesh.computeWorldMatrix(true);
       }
+
+      const postBounds = templatePivot.getHierarchyBoundingVectors(true);
+      const baseOffsetY = Number.isFinite(postBounds.min.y) ? -postBounds.min.y : 0;
 
       templatePivot.setEnabled(false);
 
@@ -132,6 +195,7 @@ export class GlbModelCache {
         rawWidth,
         rawHeight,
         rawDepth,
+        baseOffsetY,
       };
       this.cache.set(modelUrl, entry);
       return entry;
@@ -150,6 +214,7 @@ export class GlbModelCache {
     uniformScale: boolean,
     isGhost = false,
     meta?: GlbCloneMetadata,
+    paint?: GlbPaintOptions,
   ): TransformNode {
     const wrapper = new TransformNode(instanceName, scene);
     const cloned = template.templatePivot.clone(`${instanceName}-pivot`, wrapper);
@@ -159,26 +224,32 @@ export class GlbModelCache {
         const maxSpan = Math.max(template.rawWidth, template.rawHeight, template.rawDepth);
         const s = targetHeight / maxSpan;
         cloned.scaling.setAll(s);
+        cloned.position.y = template.baseOffsetY * s;
       } else {
         const useZAsLength = template.rawDepth > template.rawWidth * 1.35;
+        const sy = targetHeight / template.rawHeight;
         if (useZAsLength) {
           cloned.rotation.y = Math.PI / 2;
           cloned.scaling.set(
             targetDepth / template.rawWidth,
-            targetHeight / template.rawHeight,
+            sy,
             targetWidth / template.rawDepth,
           );
         } else {
           cloned.scaling.set(
             targetWidth / template.rawWidth,
-            targetHeight / template.rawHeight,
+            sy,
             targetDepth / template.rawDepth,
           );
         }
+        cloned.position.y = template.baseOffsetY * sy;
       }
 
       const resolvedMeta: GlbCloneMetadata = meta ?? { lwNodeName: instanceName };
       wrapper.metadata = resolvedMeta;
+
+      const ghostMat = isGhost ? this.getSharedGhostMaterial(scene) : null;
+      const paintMat = !isGhost && paint ? this.getOrCreatePaintMaterial(scene, paint) : null;
 
       const childMeshes: AbstractMesh[] = cloned.getChildMeshes(false);
       for (const m of childMeshes) {
@@ -186,12 +257,10 @@ export class GlbModelCache {
         m.isPickable = !isGhost && m.getTotalVertices() > 0;
         m.receiveShadows = !isGhost;
         m.metadata = resolvedMeta;
-        if (isGhost) {
-          const ghostMat = new StandardMaterial(`${instanceName}-ghost-mat`, scene);
-          ghostMat.diffuseColor = Color3.FromHexString('#49e892');
-          ghostMat.emissiveColor = Color3.FromHexString('#2ee66b').scale(0.5);
-          ghostMat.alpha = 0.48;
+        if (ghostMat) {
           m.material = ghostMat;
+        } else if (paintMat) {
+          m.material = paintMat;
         }
       }
     }

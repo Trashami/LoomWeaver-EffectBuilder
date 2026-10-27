@@ -8,6 +8,17 @@
     </div>
     @if (hasPlacedSelection()) {
       <div class="lw-map-inspector__header-actions">
+        @if (selectedPlacedKind() === 'object') {
+          <button
+            type="button"
+            ngpButton
+            class="lw-map-inspector__copy-btn"
+            title="Duplicate selected object"
+            (click)="duplicateNode.emit()"
+          >
+            <lw-icon name="content_copy" [size]="14" />
+          </button>
+        }
         <button
           type="button"
           ngpButton
@@ -15,7 +26,7 @@
           title="Delete selected item"
           (click)="deleteNode.emit()"
         >
-          <lw-icon name="delete" />
+          <lw-icon name="delete" [size]="15" />
         </button>
       </div>
     }
@@ -169,7 +180,7 @@
         <div class="lw-map-inspector__section">
           <div class="lw-map-inspector__row">
             <label class="lw-map-inspector__label" for="lw-wall-shape-select">
-              3D Wall / Chamber Shape
+              Wall / Chamber Shape
             </label>
             <select
               id="lw-wall-shape-select"
@@ -177,8 +188,8 @@
               [value]="wallDrawMode()"
               (change)="onWallModeSelect($event)"
             >
-              <option value="line">Custom Straight Line (Start -> End)</option>
-              <option value="freehand">Freehand Draw on Map (Click &amp; Drag)</option>
+              <option value="line">Custom Straight Line (Grid-Snapped)</option>
+              <option value="freehand">Freehand Draw on Map (Grid-Snapped)</option>
               <option value="room">Rectangle / Square Chamber</option>
               <option value="circle">Circular Tower / Rotunda</option>
               <option value="octagon">Octagonal Ritual Chamber</option>
@@ -222,6 +233,33 @@
             />
           </div>
 
+          <!-- Wall Custom Paint / Tint -->
+          <div class="lw-map-inspector__group-box">
+            <div class="lw-map-inspector__slider-head">
+              <span>Wall Stone Tint / Paint Color</span>
+              <input
+                type="color"
+                class="lw-map-inspector__color-picker"
+                [value]="node.colorHex || '#ffffff'"
+                (input)="onStrInput($event, colorHexChange)"
+              />
+            </div>
+            <div class="lw-map-inspector__swatch-grid">
+              @for (sw of paintSwatches; track sw.hex) {
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__swatch-btn"
+                  [class.lw-map-inspector__swatch-btn--active]="(node.colorHex || '#ffffff').toLowerCase() === sw.hex"
+                  (click)="colorHexChange.emit(sw.hex)"
+                >
+                  <span class="lw-map-inspector__swatch-dot" [style.background]="sw.hex"></span>
+                  <span>{{ sw.label }}</span>
+                </button>
+              }
+            </div>
+          </div>
+
           @if (hasPlacedSelection()) {
             <button
               type="button"
@@ -242,7 +280,7 @@
             </button>
           } @else {
             <p class="lw-map-inspector__hint">
-              Walls automatically extend into raised/lowered terrain with zero gaps. For Freehand mode, left-click and drag across the map.
+              Draws lightweight grid-snapped 3D wall geometry first and applies your selected wall texture in real time.
             </p>
           }
         </div>
@@ -329,7 +367,7 @@
         </div>
       }
 
-      <!-- 5. 3D OBJECTS / FLOOR STAMPS / EMPTY SELECT -->
+      <!-- 5. 3D OBJECTS / FLOOR STAMPS / SELECT INSPECTOR -->
       @if (
         effectiveMode() === 'objects' ||
         effectiveMode() === 'annotate' ||
@@ -338,116 +376,319 @@
         <div class="lw-map-inspector__section">
           @if (effectiveMode() === 'select' && !hasPlacedSelection()) {
             <p class="lw-map-inspector__hint">
-              Click any placed Wall, Door, 3D Object, or Light in the scene to select it and automatically open its properties here.
+              Click any placed Wall, Door, 3D Object, or Light in the scene to select it and edit its placement, dimensions, and paint color here.
             </p>
           }
 
-          <div class="lw-map-inspector__slider-block">
+          <!-- A. PLACEMENT MODE TOGGLE: ON THE FLOOR vs CUSTOM POSITION -->
+          <div class="lw-map-inspector__group-box">
             <div class="lw-map-inspector__slider-head">
-              <span>Vertical Height / Base Offset (Y)</span>
-              <strong>{{ node.elevationY >= 0 ? '+' : '' }}{{ node.elevationY.toFixed(2) }}m</strong>
+              <span>Vertical Placement Mode</span>
+              <strong>
+                {{ (node.placementMode ?? 'floor') === 'floor' ? 'Auto On Floor' : 'Custom Offset' }}
+              </strong>
             </div>
-            <input
-              type="range"
-              min="-3.0"
-              max="5.0"
-              step="0.05"
-              class="lw-map-inspector__range"
-              [value]="node.elevationY"
-              (input)="onNumInput($event, elevationChange)"
-            />
+
+            <div class="lw-map-inspector__mode-toggle">
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__mode-btn"
+                [class.lw-map-inspector__mode-btn--active]="(node.placementMode ?? 'floor') === 'floor'"
+                (click)="placementModeChange.emit('floor')"
+              >
+                <lw-icon name="layers" [size]="14" />
+                <span>On the Floor (Default)</span>
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__mode-btn"
+                [class.lw-map-inspector__mode-btn--active]="node.placementMode === 'custom'"
+                (click)="placementModeChange.emit('custom')"
+              >
+                <lw-icon name="tune" [size]="14" />
+                <span>Custom Position</span>
+              </button>
+            </div>
+
+            @if (node.placementMode === 'custom') {
+              <div class="lw-map-inspector__slider-block">
+                <div class="lw-map-inspector__slider-head">
+                  <span>Height Above / Below Floor</span>
+                  <strong>{{ node.elevationY >= 0 ? '+' : '' }}{{ node.elevationY.toFixed(2) }}m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-2.5"
+                  max="5.0"
+                  step="0.05"
+                  class="lw-map-inspector__range"
+                  [value]="node.elevationY"
+                  (input)="onNumInput($event, elevationChange)"
+                />
+                <div class="lw-map-inspector__pill-group">
+                  <button
+                    type="button"
+                    ngpButton
+                    class="lw-map-inspector__pill"
+                    (click)="elevationChange.emit(-0.25)"
+                  >
+                    Hide Base (-0.25m)
+                  </button>
+                  <button
+                    type="button"
+                    ngpButton
+                    class="lw-map-inspector__pill"
+                    (click)="elevationChange.emit(0)"
+                  >
+                    Flush (0m)
+                  </button>
+                  <button
+                    type="button"
+                    ngpButton
+                    class="lw-map-inspector__pill"
+                    (click)="elevationChange.emit(0.85)"
+                  >
+                    Tabletop (+0.85m)
+                  </button>
+                </div>
+              </div>
+
+              <div class="lw-map-inspector__slider-block">
+                <div class="lw-map-inspector__slider-head">
+                  <span>Left / Right Map Position (East–West)</span>
+                  <strong>{{ node.gridX }}m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-17.25"
+                  max="17.25"
+                  step="0.25"
+                  class="lw-map-inspector__range"
+                  [value]="node.gridX"
+                  (input)="onNumInput($event, positionXChange)"
+                />
+              </div>
+
+              <div class="lw-map-inspector__slider-block">
+                <div class="lw-map-inspector__slider-head">
+                  <span>Front / Back Map Position (North–South)</span>
+                  <strong>{{ node.gridZ }}m</strong>
+                </div>
+                <input
+                  type="range"
+                  min="-12.75"
+                  max="12.75"
+                  step="0.25"
+                  class="lw-map-inspector__range"
+                  [value]="node.gridZ"
+                  (input)="onNumInput($event, positionZChange)"
+                />
+              </div>
+            }
+          </div>
+
+          <!-- B. CLEAR GRID DIMENSIONS (DEFAULT 1x1x1) -->
+          <div class="lw-map-inspector__group-box">
+            <div class="lw-map-inspector__slider-head">
+              <span>Grid Footprint &amp; Dimensions</span>
+              <strong>
+                {{ (node.scaleX ?? 1).toFixed(1) }}×{{ (node.scaleZ ?? 1).toFixed(1) }}×{{ (node.scaleY ?? 1).toFixed(1) }} sq
+              </strong>
+            </div>
+
             <div class="lw-map-inspector__pill-group">
               <button
                 type="button"
                 ngpButton
                 class="lw-map-inspector__pill"
-                (click)="elevationChange.emit(-0.35)"
+                [class.lw-map-inspector__pill--active]="
+                  node.scale === 1 && (node.scaleX ?? 1) === 1 && (node.scaleY ?? 1) === 1 && (node.scaleZ ?? 1) === 1
+                "
+                (click)="gridSizePresetChange.emit(1)"
               >
-                Hide Base (-0.35m)
+                1×1×1 (5ft Default)
               </button>
               <button
                 type="button"
                 ngpButton
                 class="lw-map-inspector__pill"
-                (click)="elevationChange.emit(-0.15)"
+                [class.lw-map-inspector__pill--active]="node.scale === 2"
+                (click)="gridSizePresetChange.emit(2)"
               >
-                Sink (-0.15m)
+                2×2×2 (10ft)
               </button>
               <button
                 type="button"
                 ngpButton
                 class="lw-map-inspector__pill"
-                (click)="elevationChange.emit(0)"
+                [class.lw-map-inspector__pill--active]="node.scale === 3"
+                (click)="gridSizePresetChange.emit(3)"
               >
-                Floor (0m)
+                3×3×3 (15ft)
               </button>
             </div>
-          </div>
 
-          <div class="lw-map-inspector__slider-block">
-            <div class="lw-map-inspector__slider-head">
-              <span>Uniform Asset Scale</span>
-              <strong>{{ node.scale.toFixed(2) }}x</strong>
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Overall Scale (All Axes)</span>
+                <strong>{{ node.scale.toFixed(2) }}x</strong>
+              </div>
+              <input
+                type="range"
+                min="0.25"
+                max="4.0"
+                step="0.05"
+                class="lw-map-inspector__range"
+                [value]="node.scale"
+                (input)="onNumInput($event, scaleChange)"
+              />
             </div>
-            <input
-              type="range"
-              min="0.2"
-              max="4.0"
-              step="0.05"
-              class="lw-map-inspector__range"
-              [value]="node.scale"
-              (input)="onNumInput($event, scaleChange)"
-            />
-          </div>
 
-          <div class="lw-map-inspector__slider-block">
-            <div class="lw-map-inspector__slider-head">
-              <span>Width / Height / Depth Multiplier</span>
-              <strong>
-                {{ (node.scaleX ?? 1).toFixed(1) }}x · {{ (node.scaleY ?? 1).toFixed(1) }}x ·
-                {{ (node.scaleZ ?? 1).toFixed(1) }}x
-              </strong>
-            </div>
-            <div class="lw-map-inspector__dual-range">
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Width (Left to Right)</span>
+                <strong>{{ (node.scaleX ?? 1).toFixed(1) }} sq ({{ ((node.scaleX ?? 1) * 5).toFixed(0) }} ft)</strong>
+              </div>
               <input
                 type="range"
                 min="0.4"
-                max="2.5"
+                max="4.0"
                 step="0.1"
                 class="lw-map-inspector__range"
-                title="Width Scale (X)"
                 [value]="node.scaleX ?? 1"
                 (input)="onNumInput($event, scaleXChange)"
               />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Length / Depth (Front to Back)</span>
+                <strong>{{ (node.scaleZ ?? 1).toFixed(1) }} sq ({{ ((node.scaleZ ?? 1) * 5).toFixed(0) }} ft)</strong>
+              </div>
               <input
                 type="range"
                 min="0.4"
-                max="2.5"
+                max="4.0"
                 step="0.1"
                 class="lw-map-inspector__range"
-                title="Height Scale (Y)"
-                [value]="node.scaleY ?? 1"
-                (input)="onNumInput($event, scaleYChange)"
-              />
-              <input
-                type="range"
-                min="0.4"
-                max="2.5"
-                step="0.1"
-                class="lw-map-inspector__range"
-                title="Depth Scale (Z)"
                 [value]="node.scaleZ ?? 1"
                 (input)="onNumInput($event, scaleZChange)"
               />
             </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Height (Bottom to Top)</span>
+                <strong>{{ (node.scaleY ?? 1).toFixed(1) }} sq ({{ ((node.scaleY ?? 1) * 5).toFixed(0) }} ft)</strong>
+              </div>
+              <input
+                type="range"
+                min="0.4"
+                max="4.0"
+                step="0.1"
+                class="lw-map-inspector__range"
+                [value]="node.scaleY ?? 1"
+                (input)="onNumInput($event, scaleYChange)"
+              />
+            </div>
           </div>
 
-          <div class="lw-map-inspector__slider-block">
+          <!-- C. CUSTOM PAINT COLOR, SURFACE FINISH & OPACITY -->
+          <div class="lw-map-inspector__group-box">
             <div class="lw-map-inspector__slider-head">
-              <span>Rotation (Y) &amp; Tilt Pitch</span>
-              <strong>{{ node.rotationDeg }}° / {{ node.tiltDeg ?? 0 }}°</strong>
+              <span>Custom Paint &amp; Scene Color Tint</span>
+              <input
+                type="color"
+                class="lw-map-inspector__color-picker"
+                [value]="node.colorHex || '#ffffff'"
+                (input)="onStrInput($event, colorHexChange)"
+                title="Pick custom paint color for this object"
+              />
             </div>
-            <div class="lw-map-inspector__dual-range">
+
+            <div class="lw-map-inspector__swatch-grid">
+              @for (sw of paintSwatches; track sw.hex) {
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__swatch-btn"
+                  [class.lw-map-inspector__swatch-btn--active]="(node.colorHex || '#ffffff').toLowerCase() === sw.hex"
+                  (click)="colorHexChange.emit(sw.hex)"
+                >
+                  <span class="lw-map-inspector__swatch-dot" [style.background]="sw.hex"></span>
+                  <span>{{ sw.label }}</span>
+                </button>
+              }
+            </div>
+
+            <div class="lw-map-inspector__row">
+              <span class="lw-map-inspector__label">Surface Finish</span>
+              <div class="lw-map-inspector__pill-group">
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="(node.surfaceFinish ?? 'standard') === 'standard'"
+                  (click)="surfaceFinishChange.emit('standard')"
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="node.surfaceFinish === 'matte'"
+                  (click)="surfaceFinishChange.emit('matte')"
+                >
+                  Matte
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="node.surfaceFinish === 'metallic'"
+                  (click)="surfaceFinishChange.emit('metallic')"
+                >
+                  Metallic
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="node.surfaceFinish === 'runic-glow'"
+                  (click)="surfaceFinishChange.emit('runic-glow')"
+                >
+                  Glow
+                </button>
+              </div>
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Object Opacity / Spectral Alpha</span>
+                <strong>{{ formatPercent(node.opacity) }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="0.2"
+                max="1.0"
+                step="0.05"
+                class="lw-map-inspector__range"
+                [value]="node.opacity ?? 1"
+                (input)="onNumInput($event, opacityChange)"
+              />
+            </div>
+          </div>
+
+          <!-- D. ORIENTATION & COMPASS ROTATION -->
+          <div class="lw-map-inspector__group-box">
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Compass Rotation (Facing)</span>
+                <strong>{{ node.rotationDeg }}°</strong>
+              </div>
               <input
                 type="range"
                 min="0"
@@ -457,6 +698,27 @@
                 [value]="node.rotationDeg"
                 (input)="onNumInput($event, rotationChange)"
               />
+              <div class="lw-map-inspector__pill-group">
+                <button type="button" ngpButton class="lw-map-inspector__pill" (click)="rotationChange.emit(0)">
+                  0° N
+                </button>
+                <button type="button" ngpButton class="lw-map-inspector__pill" (click)="rotationChange.emit(90)">
+                  90° E
+                </button>
+                <button type="button" ngpButton class="lw-map-inspector__pill" (click)="rotationChange.emit(180)">
+                  180° S
+                </button>
+                <button type="button" ngpButton class="lw-map-inspector__pill" (click)="rotationChange.emit(270)">
+                  270° W
+                </button>
+              </div>
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Lean / Tilt Pitch</span>
+                <strong>{{ node.tiltDeg ?? 0 }}°</strong>
+              </div>
               <input
                 type="range"
                 min="-45"
@@ -469,55 +731,67 @@
             </div>
           </div>
 
-          <div class="lw-map-inspector__slider-block">
-            <div class="lw-map-inspector__slider-head">
-              <span>Position X / Z</span>
-              <strong>({{ node.gridX }}m, {{ node.gridZ }}m)</strong>
+          <!-- E. GAMEPLAY & VTT RULES -->
+          <div class="lw-map-inspector__group-box">
+            <div class="lw-map-inspector__toggle-row">
+              <span>Blocks Player Line-of-Sight (Cover)</span>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__switch"
+                [class.lw-map-inspector__switch--on]="node.blocksVision"
+                (click)="blocksVisionToggle.emit()"
+              >
+                {{ node.blocksVision ? 'Blocks Sight' : 'Clear Sight' }}
+              </button>
             </div>
-            <div class="lw-map-inspector__dual-range">
-              <input
-                type="range"
-                min="-16"
-                max="16"
-                step="0.25"
-                class="lw-map-inspector__range"
-                [value]="node.gridX"
-                (input)="onNumInput($event, positionXChange)"
-              />
-              <input
-                type="range"
-                min="-12"
-                max="12"
-                step="0.25"
-                class="lw-map-inspector__range"
-                [value]="node.gridZ"
-                (input)="onNumInput($event, positionZChange)"
-              />
-            </div>
-          </div>
 
-          <div class="lw-map-inspector__toggle-row">
-            <span>GM Secret Only (Hidden on Player VTT)</span>
-            <button
-              type="button"
-              ngpButton
-              class="lw-map-inspector__switch"
-              [class.lw-map-inspector__switch--on]="node.gmSecretOnly"
-              (click)="secretToggle.emit()"
-            >
-              {{ node.gmSecretOnly ? 'Secret' : 'Public' }}
-            </button>
+            <div class="lw-map-inspector__toggle-row">
+              <span>Blocks Token Movement</span>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__switch"
+                [class.lw-map-inspector__switch--on]="node.blocksMovement"
+                (click)="blocksMovementToggle.emit()"
+              >
+                {{ node.blocksMovement ? 'Solid Obstacle' : 'Passable' }}
+              </button>
+            </div>
+
+            <div class="lw-map-inspector__toggle-row">
+              <span>GM Secret Only (Hidden on Player VTT)</span>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__switch"
+                [class.lw-map-inspector__switch--on]="node.gmSecretOnly"
+                (click)="secretToggle.emit()"
+              >
+                {{ node.gmSecretOnly ? 'Secret' : 'Public' }}
+              </button>
+            </div>
           </div>
 
           @if (hasPlacedSelection()) {
-            <button
-              type="button"
-              ngpButton
-              class="lw-map-inspector__cancel-btn"
-              (click)="deleteNode.emit()"
-            >
-              Delete Selected Object
-            </button>
+            <div class="lw-map-inspector__dual-range">
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__apply-btn"
+                (click)="duplicateNode.emit()"
+              >
+                Duplicate Object
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__cancel-btn"
+                (click)="deleteNode.emit()"
+              >
+                Delete Object
+              </button>
+            </div>
           }
         </div>
       }
@@ -788,7 +1062,7 @@
               max="95"
               step="1"
               class="lw-map-inspector__range"
-              [value]="shadowDarkness()"
+              [value]="celestialAltitudeDeg() > 0 ? shadowDarkness() : 0"
               (input)="onNumInput($event, shadowDarknessChange)"
             />
           </div>
@@ -799,12 +1073,12 @@
         </div>
       }
 
-      <!-- 8. WATER TOOL -->
+      <!-- 8. WATER SPLINE TOOL -->
       @if (effectiveMode() === 'water') {
         <div class="lw-map-inspector__section">
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Water River / Pool Width</span>
+              <span>River / Stream Width</span>
               <strong>{{ waterWidthMeters().toFixed(1) }}m</strong>
             </div>
             <input
@@ -820,14 +1094,14 @@
 
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Water Flow Speed</span>
+              <span>Flow Speed</span>
               <strong>{{ waterFlowSpeed().toFixed(1) }}x</strong>
             </div>
             <input
               type="range"
-              min="0.2"
+              min="0.0"
               max="4.0"
-              step="0.1"
+              step="0.2"
               class="lw-map-inspector__range"
               [value]="waterFlowSpeed()"
               (input)="onNumInput($event, waterFlowChange)"
@@ -835,7 +1109,7 @@
           </div>
 
           <p class="lw-map-inspector__hint">
-            Left-click and drag across the terrain to paint a flowing water river or click once for a still pool. Right-drag orbits the camera.
+            Left-click and drag across the terrain to paint rivers, streams, or pools. Right-drag orbits the camera.
           </p>
 
           <button
@@ -849,7 +1123,7 @@
         </div>
       }
 
-      <!-- 9. SCATTER TOOL -->
+      <!-- 9. SURFACE SCATTER BRUSH TOOL -->
       @if (effectiveMode() === 'scatter') {
         <div class="lw-map-inspector__section">
           <div class="lw-map-inspector__slider-block">
@@ -859,8 +1133,8 @@
             </div>
             <input
               type="range"
-              min="1.0"
-              max="10.0"
+              min="1.5"
+              max="12.0"
               step="0.5"
               class="lw-map-inspector__range"
               [value]="terrainBrushRadius()"
@@ -870,7 +1144,7 @@
 
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Scatter Cluster Density</span>
+              <span>Cluster Density</span>
               <strong>{{ scatterDensity() }}%</strong>
             </div>
             <input
@@ -885,7 +1159,7 @@
           </div>
 
           <p class="lw-map-inspector__hint">
-            Left-click and drag on the terrain to paint 3D rocks, foliage, and selected scatter assets. Right-drag orbits the camera.
+            Left-click and drag across the map to scatter the selected 3D foliage/rock asset across the terrain.
           </p>
 
           <button
@@ -894,7 +1168,7 @@
             class="lw-map-inspector__cancel-btn"
             (click)="clearScatter.emit()"
           >
-            Clear All Scatter Clusters
+            Clear All Scattered Clusters
           </button>
         </div>
       }

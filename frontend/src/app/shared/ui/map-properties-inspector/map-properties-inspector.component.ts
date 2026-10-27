@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { NgpButton } from 'ng-primitives/button';
 import {
   MapLightFixtureKind,
+  MapObjectPlacementMode,
+  MapObjectSurfaceFinish,
   WallDrawMode,
 } from '../../../features/maps/engine/map-scene-contract';
 import { LwIconComponent } from '../icon/icon.component';
@@ -10,6 +12,24 @@ import { LwMapMaterialPreset } from '../map-png-asset-browser/map-png-asset-brow
 export type LwTerrainSculptOp = 'raise' | 'lower' | 'flatten';
 export type LwCelestialBodyMode = 'sun' | 'moon';
 export type LwCustomLightKind = MapLightFixtureKind;
+export type LwObjectPlacementMode = MapObjectPlacementMode;
+export type LwObjectSurfaceFinish = MapObjectSurfaceFinish;
+
+export interface LwPaintSwatch {
+  readonly label: string;
+  readonly hex: string;
+}
+
+export const DEFAULT_OBJECT_PAINT_SWATCHES: readonly LwPaintSwatch[] = [
+  { label: 'Original', hex: '#ffffff' },
+  { label: 'Stone', hex: '#8b9590' },
+  { label: 'Moss', hex: '#4e8c57' },
+  { label: 'Aged Gold', hex: '#d9b77a' },
+  { label: 'Crimson', hex: '#b93838' },
+  { label: 'Fey Glow', hex: '#49e892' },
+  { label: 'Frost', hex: '#67e8f9' },
+  { label: 'Obsidian', hex: '#3a3842' },
+];
 
 export interface LwSelectedSceneNode {
   readonly id: string;
@@ -36,6 +56,7 @@ export interface LwSelectedSceneNode {
   readonly thickness: number;
   readonly gridX: number;
   readonly gridZ: number;
+  readonly placementMode?: MapObjectPlacementMode;
   readonly elevationY: number;
   readonly rotationDeg: number;
   readonly tiltDeg?: number;
@@ -43,6 +64,9 @@ export interface LwSelectedSceneNode {
   readonly scaleX?: number;
   readonly scaleY?: number;
   readonly scaleZ?: number;
+  readonly colorHex?: string;
+  readonly surfaceFinish?: MapObjectSurfaceFinish;
+  readonly opacity?: number;
   readonly gmSecretOnly: boolean;
   readonly blocksMovement: boolean;
   readonly blocksVision: boolean;
@@ -92,6 +116,8 @@ export class LwMapPropertiesInspectorComponent {
   readonly waterWidthMeters = input<number>(3.0);
   readonly waterFlowSpeed = input<number>(1.4);
 
+  readonly paintSwatches = DEFAULT_OBJECT_PAINT_SWATCHES;
+
   readonly openAssetModal = output<void>();
   readonly cancelPlacement = output<void>();
   readonly resetTerrain = output<void>();
@@ -99,6 +125,7 @@ export class LwMapPropertiesInspectorComponent {
   readonly materialChange = output<string>();
   readonly heightSquaresChange = output<number>();
   readonly thicknessChange = output<number>();
+  readonly placementModeChange = output<MapObjectPlacementMode>();
   readonly positionXChange = output<number>();
   readonly positionZChange = output<number>();
   readonly rotationChange = output<number>();
@@ -107,6 +134,10 @@ export class LwMapPropertiesInspectorComponent {
   readonly scaleXChange = output<number>();
   readonly scaleYChange = output<number>();
   readonly scaleZChange = output<number>();
+  readonly gridSizePresetChange = output<number>();
+  readonly colorHexChange = output<string>();
+  readonly surfaceFinishChange = output<MapObjectSurfaceFinish>();
+  readonly opacityChange = output<number>();
   readonly elevationChange = output<number>();
   readonly wallDrawModeChange = output<WallDrawMode>();
   readonly terrainSculptOpChange = output<LwTerrainSculptOp>();
@@ -134,6 +165,9 @@ export class LwMapPropertiesInspectorComponent {
   readonly spawnCustomLight = output<void>();
 
   readonly secretToggle = output<void>();
+  readonly blocksVisionToggle = output<void>();
+  readonly blocksMovementToggle = output<void>();
+  readonly duplicateNode = output<void>();
   readonly deleteNode = output<void>();
   readonly scatterDensityChange = output<number>();
   readonly clearScatter = output<void>();
@@ -163,7 +197,7 @@ export class LwMapPropertiesInspectorComponent {
       wall: isSelected ? 'Selected 3D Wall Properties' : '3D Wall Line Placement',
       room: '3D Wall Shape Placement',
       door: isSelected ? 'Selected Wall Door Properties' : 'Wall-Cutout Door Placement',
-      objects: isSelected ? 'Selected 3D Object Properties' : '3D Object & Stamp Placement',
+      objects: isSelected ? 'Selected Object Properties' : 'Object Stamp Setup (1×1×1)',
       lighting: isSelected ? 'Selected Scene Light Properties' : 'Scene Light Fixture Setup',
       'sun-moon': 'Sun / Moon & Shadow Position',
       water: 'Water River & Pool Brush',
@@ -206,5 +240,9 @@ export class LwMapPropertiesInspectorComponent {
     if (el?.value) {
       this.wallDrawModeChange.emit(el.value as WallDrawMode);
     }
+  }
+
+  formatPercent(val?: number): number {
+    return Math.round((val ?? 1) * 100);
   }
 }

@@ -1,6 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { LwMapPngAssetItem } from '../../../shared/ui/map-png-asset-browser/map-png-asset-browser.component';
+import {
+  LwAssetToolRole,
+  LwMapPngAssetItem,
+} from '../../../shared/ui/map-png-asset-browser/map-png-asset-browser.component';
 import {
   FALLBACK_BUMP_HEIGHT_ITEMS,
   FALLBACK_PNG_ASSET_ITEMS,
@@ -18,6 +21,14 @@ interface RawManifestAsset {
   readonly normalUrl?: string;
   readonly heightUrl?: string;
   readonly isFloor?: boolean;
+  readonly isWall?: boolean;
+  readonly isDoor?: boolean;
+  readonly isObject?: boolean;
+  readonly toolRole?: LwAssetToolRole;
+  readonly defaultScaleGrid?: readonly [number, number, number];
+  readonly defaultPlacement?: 'floor' | 'custom';
+  readonly snapToGrid?: boolean;
+  readonly defaultColorTint?: string;
   readonly sourceHash?: string;
   readonly triangles?: number;
 }
@@ -39,30 +50,58 @@ export class MapPngAssetApiService {
   readonly batchBusy = signal<boolean>(false);
   readonly pngPipelineBanner = signal<string>('');
 
+  private readonly catalogOverrides = new Map<string, Partial<LwMapPngAssetItem>>();
+
   private normalizeAsset(raw: RawManifestAsset): LwMapPngAssetItem {
     const rawGlb = raw.glbUrl || raw.modelUrl || '';
     const resolvedModelUrl =
       raw.id?.startsWith('obj-') && (!rawGlb || rawGlb.startsWith('/assets/models-3d/'))
         ? `/assets/object-library/models/${raw.id}.glb`
         : rawGlb;
+    const override = this.catalogOverrides.get(raw.id);
     return {
       id: raw.id,
-      name: raw.name,
-      category: raw.category || 'Props',
+      name: override?.name ?? raw.name,
+      category: override?.category ?? (raw.category || 'Props'),
       thumbnailUrl:
         raw.pngPreviewUrl || raw.thumbnailUrl || raw.albedoUrl || `/assets/previews-png/${raw.id}.png`,
       modelUrl: resolvedModelUrl,
       albedoUrl: raw.albedoUrl,
       normalUrl: raw.normalUrl,
       heightUrl: raw.heightUrl,
-      isFloor: raw.isFloor,
+      isFloor: override?.isFloor ?? raw.isFloor,
+      isWall: override?.isWall ?? raw.isWall,
+      isDoor: override?.isDoor ?? raw.isDoor,
+      isObject: override?.isObject ?? raw.isObject,
+      toolRole: override?.toolRole ?? raw.toolRole,
+      defaultScaleGrid: override?.defaultScaleGrid ?? raw.defaultScaleGrid ?? [1, 1, 1],
+      defaultPlacement: override?.defaultPlacement ?? raw.defaultPlacement ?? 'floor',
+      snapToGrid: override?.snapToGrid ?? raw.snapToGrid ?? true,
+      defaultColorTint: override?.defaultColorTint ?? raw.defaultColorTint ?? '#ffffff',
       contentHash: raw.sourceHash,
       faceCount: raw.triangles,
       tags: [raw.category?.toLowerCase() || 'props'],
     };
   }
 
+  private applyOverridesToCurrentLists(): void {
+    if (this.catalogOverrides.size === 0) return;
+    this.pngAssets3d.update((cur) =>
+      cur.map((item) => {
+        const ov = this.catalogOverrides.get(item.id);
+        return ov ? { ...item, ...ov } : item;
+      }),
+    );
+    this.bumpHeightAssets2d.update((cur) =>
+      cur.map((item) => {
+        const ov = this.catalogOverrides.get(item.id);
+        return ov ? { ...item, ...ov } : item;
+      }),
+    );
+  }
+
   loadPngAssetManifest(): void {
+    this.loadEditableAssetPropertiesCatalog();
     this.loadBumpHeightManifest();
     this.http.get<PngManifestResponse>('/api/v2/maps/assets/thumbnails').subscribe({
       next: (res) => {
@@ -77,12 +116,46 @@ export class MapPngAssetApiService {
     });
   }
 
+  private loadEditableAssetPropertiesCatalog(): void {
+    this.http.get<PngManifestResponse>('/asset-properties-catalog.json').subscribe({
+      next: (res) => {
+        const list = res?.assets ?? res?.items ?? [];
+        for (const item of list) {
+          if (!item.id) continue;
+          this.catalogOverrides.set(item.id, {
+            name: item.name,
+            category: item.category,
+            isFloor: item.isFloor,
+            isWall: item.isWall,
+            isDoor: item.isDoor,
+            isObject: item.isObject,
+            toolRole: item.toolRole,
+            defaultScaleGrid: item.defaultScaleGrid ?? [1, 1, 1],
+            defaultPlacement: item.defaultPlacement ?? 'floor',
+            snapToGrid: item.snapToGrid ?? true,
+            defaultColorTint: item.defaultColorTint ?? '#ffffff',
+          });
+        }
+        this.applyOverridesToCurrentLists();
+      },
+      error: () => {
+        // Optional override catalog
+      },
+    });
+  }
+
   private loadBumpHeightManifest(): void {
     this.http.get<PngManifestResponse>('/assets/previews-png/bump-height-manifest.json').subscribe({
       next: (res) => {
         const list = res?.items ?? res?.assets ?? [];
         if (list.length > 0) {
-          this.bumpHeightAssets2d.set(list.map((a) => this.normalizeAsset(a)));
+          const wallPresets = FALLBACK_BUMP_HEIGHT_ITEMS.filter((w) => w.isWall);
+          const loaded = list.map((a) => this.normalizeAsset(a));
+          const loadedIds = new Set(loaded.map((x) => x.id));
+          this.bumpHeightAssets2d.set([
+            ...wallPresets.filter((w) => !loadedIds.has(w.id)),
+            ...loaded,
+          ]);
         }
       },
       error: () => {

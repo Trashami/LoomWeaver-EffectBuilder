@@ -13,7 +13,7 @@ export type LwFloorGridMode = '5 ft' | '10 ft' | 'Hex' | 'Off';
 
 export class TerrainMeshBuilder {
   private static readonly GROUND_W = 36;
-  private static readonly GROUND_H = 28;
+  private static readonly GROUND_H = 27;
   private static readonly SUBDIV = 48;
 
   private static customElevations: Float32Array | null = null;
@@ -23,6 +23,48 @@ export class TerrainMeshBuilder {
     '/assets/sewer-dungeon-wall-library-v1/512/worn-castle-flagstone_normal.png';
   private static floorTilingScale = 10;
   private static activeGridMode: LwFloorGridMode = '5 ft';
+
+  static getCellStepMeters(): number {
+    return this.activeGridMode === '10 ft' ? 3.0 : 1.5;
+  }
+
+  static snapWorldCoordinates(
+    rawX: number,
+    rawZ: number,
+    snapEnabled: boolean,
+    snapKind: 'wall' | 'cell-center' | 'free',
+  ): { x: number; z: number } {
+    const halfW = this.GROUND_W / 2;
+    const halfH = this.GROUND_H / 2;
+    const clampedX = Math.max(-halfW, Math.min(halfW, rawX));
+    const clampedZ = Math.max(-halfH, Math.min(halfH, rawZ));
+
+    if (!snapEnabled || this.activeGridMode === 'Off' || snapKind === 'free') {
+      return {
+        x: Math.round(clampedX * 100) / 100,
+        z: Math.round(clampedZ * 100) / 100,
+      };
+    }
+
+    const step = this.getCellStepMeters();
+    if (snapKind === 'wall') {
+      // Snap to exact grid line intersections so walls and shapes align 1:1 with the map grid
+      const sx = Math.round((clampedX + halfW) / step) * step - halfW;
+      const sz = Math.round((clampedZ + halfH) / step) * step - halfH;
+      return {
+        x: Math.round(sx * 100) / 100,
+        z: Math.round(sz * 100) / 100,
+      };
+    }
+
+    // 'cell-center': Snap 1x1x1 objects/stamps to the center of the hovered grid square
+    const cx = (Math.floor((clampedX + halfW) / step) + 0.5) * step - halfW;
+    const cz = (Math.floor((clampedZ + halfH) / step) + 0.5) * step - halfH;
+    return {
+      x: Math.round(Math.max(-halfW + step * 0.5, Math.min(halfW - step * 0.5, cx)) * 100) / 100,
+      z: Math.round(Math.max(-halfH + step * 0.5, Math.min(halfH - step * 0.5, cz)) * 100) / 100,
+    };
+  }
 
   static resetElevations(): void {
     this.customElevations = null;

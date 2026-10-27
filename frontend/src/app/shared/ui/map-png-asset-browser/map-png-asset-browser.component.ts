@@ -4,6 +4,13 @@ import { LwIconComponent } from '../icon/icon.component';
 
 export type LwRightBrowserTab = 'assets' | 'materials' | 'themes' | 'layers';
 
+export type LwAssetToolRole =
+  | 'wall-texture'
+  | 'floor-texture'
+  | 'door-3d'
+  | 'object-3d'
+  | 'floor-stamp-2d';
+
 export interface LwMapPngAssetItem {
   readonly id: string;
   readonly name: string;
@@ -14,6 +21,14 @@ export interface LwMapPngAssetItem {
   readonly normalUrl?: string;
   readonly heightUrl?: string;
   readonly isFloor?: boolean;
+  readonly isWall?: boolean;
+  readonly isDoor?: boolean;
+  readonly isObject?: boolean;
+  readonly toolRole?: LwAssetToolRole;
+  readonly defaultScaleGrid?: readonly [number, number, number];
+  readonly defaultPlacement?: 'floor' | 'custom';
+  readonly snapToGrid?: boolean;
+  readonly defaultColorTint?: string;
   readonly contentHash?: string;
   readonly vertexCount?: number;
   readonly faceCount?: number;
