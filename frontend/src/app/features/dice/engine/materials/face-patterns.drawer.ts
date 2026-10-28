@@ -281,3 +281,70 @@ function drawResinSwirl(
   ctx.stroke();
   ctx.restore();
 }
+
+export function drawSurfaceBumpHeight(
+  hCtx: CanvasRenderingContext2D,
+  size: number,
+  surfaceStyle: DiceSkinSurfaceStyle,
+  bumpIntensity = 1.0
+): void {
+  const amp = Math.max(0, Math.min(2.5, bumpIntensity));
+  if (amp <= 0.02) {
+    return;
+  }
+  hCtx.save();
+  if (surfaceStyle === 'stone' || surfaceStyle === 'obsidian') {
+    for (let i = 0; i < 360; i++) {
+      const x = ((i * 79) % size);
+      const y = ((i * 139) % size);
+      const r = 1 + (i % 4);
+      const delta = (i % 2 === 0 ? -1 : 1) * Math.round(28 * amp);
+      const val = Math.max(20, Math.min(235, 128 + delta));
+      hCtx.fillStyle = `rgb(${val},${val},${val})`;
+      hCtx.fillRect(x, y, r, r);
+    }
+    if (surfaceStyle === 'obsidian') {
+      hCtx.strokeStyle = `rgb(${Math.max(15, Math.round(128 - 48 * amp))},${Math.max(15, Math.round(128 - 48 * amp))},${Math.max(15, Math.round(128 - 48 * amp))})`;
+      hCtx.lineWidth = 2.5;
+      for (let c = 0; c < 5; c++) {
+        let x = ((c * 97 + 40) % (size - 80)) + 40;
+        let y = ((c * 53 + 30) % (size - 60)) + 30;
+        hCtx.beginPath();
+        hCtx.moveTo(x, y);
+        for (let seg = 0; seg < 5; seg++) {
+          const angle = (c * 1.3 + seg * 0.85) % (Math.PI * 2);
+          x += Math.cos(angle) * 26;
+          y += Math.sin(angle) * 26;
+          hCtx.lineTo(x, y);
+        }
+        hCtx.stroke();
+      }
+    }
+  } else if (surfaceStyle === 'wood') {
+    for (let i = 0; i < 36; i++) {
+      const val = Math.max(30, Math.min(225, Math.round(128 + (i % 2 === 0 ? -24 : 20) * amp)));
+      hCtx.strokeStyle = `rgb(${val},${val},${val})`;
+      hCtx.lineWidth = 2;
+      const yBase = (i / 36) * size;
+      hCtx.beginPath();
+      hCtx.moveTo(0, yBase);
+      for (let x = 0; x <= size; x += 24) {
+        hCtx.lineTo(x, yBase + Math.sin(x * 0.02 + i * 0.45) * 7);
+      }
+      hCtx.stroke();
+    }
+  } else if (surfaceStyle === 'metal') {
+    const hi = Math.min(220, Math.round(128 + 18 * amp));
+    const lo = Math.max(40, Math.round(128 - 18 * amp));
+    for (let i = 0; i < size; i += 4) {
+      hCtx.strokeStyle = i % 8 === 0 ? `rgb(${hi},${hi},${hi})` : `rgb(${lo},${lo},${lo})`;
+      hCtx.lineWidth = 1;
+      hCtx.beginPath();
+      hCtx.moveTo(0, i);
+      hCtx.lineTo(size, i + ((i % 8) - 4));
+      hCtx.stroke();
+    }
+  }
+  hCtx.restore();
+}
+

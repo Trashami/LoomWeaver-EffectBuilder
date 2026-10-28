@@ -2,7 +2,15 @@ import { inject, Injectable, Injector, NgZone, signal } from '@angular/core';
 import type { FullscreenDiceBabylonRunner } from './fullscreen-dice-babylon.runner';
 import type { DicePolyhedronType } from './models';
 
-export type FullscreenDiceOverlayPhase = 'hidden' | 'rolling' | 'settled' | 'fading';
+export type FullscreenDiceOverlayPhase =
+  | 'hidden'
+  | 'rolling'
+  | 'settled'
+  | 'bg-fading'
+  | 'dice-hold'
+  | 'dice-fading'
+  | 'alert-hold'
+  | 'alert-fading';
 
 export interface FullscreenDieEntry {
   dieType: DicePolyhedronType;
@@ -44,8 +52,7 @@ export class FullscreenDiceOverlayService {
   private canvas: HTMLCanvasElement | null = null;
   private runner: FullscreenDiceBabylonRunner | null = null;
   private runnerPromise: Promise<FullscreenDiceBabylonRunner> | null = null;
-  private holdTimer: number | null = null;
-  private fadeTimer: number | null = null;
+  private stageTimers: number[] = [];
 
   registerOverlayCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -74,7 +81,7 @@ export class FullscreenDiceOverlayService {
       isCritFail: Boolean(req.isCritFail)
     });
 
-    // Step 1: Opaque black overlay covers the screen immediately while dice roll
+    // Step 1: Semi-opaque background and 3D dice appear immediately
     this.overlayPhase.set('rolling');
 
     void this.ensureRunner().then(runner => {
@@ -82,22 +89,40 @@ export class FullscreenDiceOverlayService {
         runner.mountCanvas(this.canvas);
       }
       runner.runRoll(entries, req, () => {
-        // Step 2: Dice have completely stopped — show bottom-right results popup over opaque overlay
+        // Step 2: Dice have completely stopped — show bottom-right results popup
         this.ngZone.run(() => {
           this.overlayPhase.set('settled');
         });
 
-        // Step 3: Wait ~2 seconds (2000ms), then start a 2.5-second fade of the dice and opaque overlay
-        this.holdTimer = window.setTimeout(() => {
-          this.ngZone.run(() => {
-            this.overlayPhase.set('fading');
-          });
-          this.fadeTimer = window.setTimeout(() => {
-            this.ngZone.run(() => {
-              this.clearResultsNow();
-            });
-          }, 2500);
-        }, 2000);
+        // Step 3: Wait 2 seconds (2000ms), then fade away the opaque bg over 2.5 seconds (2500ms)
+        this.schedule(2000, () => {
+          this.overlayPhase.set('bg-fading');
+        });
+
+        // Step 4: Once the bg finishes its 2.5s fade (at 4500ms), leave the dice on screen for another 2 seconds (2000ms)
+        this.schedule(4500, () => {
+          this.overlayPhase.set('dice-hold');
+        });
+
+        // Step 5: After those 2 seconds on the clear screen (at 6500ms), fade out the dice over 1.5 seconds (1500ms)
+        this.schedule(6500, () => {
+          this.overlayPhase.set('dice-fading');
+        });
+
+        // Step 6: Once the dice finish fading out (at 8000ms), clear the 3D dice meshes and keep the bottom-right Alertify/result popup up for 5 more seconds (5000ms)
+        this.schedule(8000, () => {
+          this.runner?.clearAll();
+          this.overlayPhase.set('alert-hold');
+        });
+
+        // Step 7: After 5 seconds (at 13000ms), fade out the bottom-right popup (900ms) and reset to hidden
+        this.schedule(13000, () => {
+          this.overlayPhase.set('alert-fading');
+        });
+
+        this.schedule(13900, () => {
+          this.clearResultsNow();
+        });
       });
     });
   }
@@ -107,6 +132,13 @@ export class FullscreenDiceOverlayService {
     this.overlayPhase.set('hidden');
     this.activeRollSummary.set(null);
     this.runner?.clearAll();
+  }
+
+  private schedule(delayMs: number, fn: () => void): void {
+    const id = window.setTimeout(() => {
+      this.ngZone.run(fn);
+    }, delayMs);
+    this.stageTimers.push(id);
   }
 
   private async ensureRunner(): Promise<FullscreenDiceBabylonRunner> {
@@ -125,7 +157,10 @@ export class FullscreenDiceOverlayService {
           this.ngZone,
           soundService,
           stageService,
-          () => this.overlayPhase() !== 'hidden'
+          () => {
+            const p = this.overlayPhase();
+            return p === 'rolling' || p === 'settled' || p === 'bg-fading' || p === 'dice-hold' || p === 'dice-fading';
+          }
         );
         if (this.canvas) {
           instance.mountCanvas(this.canvas);
@@ -156,13 +191,9 @@ export class FullscreenDiceOverlayService {
   }
 
   private clearTimers(): void {
-    if (this.holdTimer !== null) {
-      clearTimeout(this.holdTimer);
-      this.holdTimer = null;
+    for (const id of this.stageTimers) {
+      clearTimeout(id);
     }
-    if (this.fadeTimer !== null) {
-      clearTimeout(this.fadeTimer);
-      this.fadeTimer = null;
-    }
+    this.stageTimers = [];
   }
 }

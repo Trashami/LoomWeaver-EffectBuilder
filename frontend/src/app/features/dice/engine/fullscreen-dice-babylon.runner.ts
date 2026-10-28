@@ -78,7 +78,7 @@ export class FullscreenDiceBabylonRunner {
       const camera = new ArcRotateCamera(
         'lw-fs-dice-cam',
         -Math.PI / 2,
-        0.18,
+        0.05,
         14.2,
         new Vector3(0, 0, 0),
         scene
@@ -249,10 +249,13 @@ export class FullscreenDiceBabylonRunner {
     const custom = this.stageService.getCurrentCustomConfig();
     this.soundService.playSettleChime(custom.soundProfileId);
 
+    const cameraPos = new Vector3(0, 14.2, -0.7);
     for (let i = 0; i < this.activeDice.length; i++) {
       const entry = entries[i];
       if (entry) {
-        this.activeDice[i].mesh.rotationQuaternion = getRotationForTopValue(entry.dieType, entry.value);
+        const dieMesh = this.activeDice[i].mesh;
+        const toCameraDir = cameraPos.subtract(dieMesh.position).normalize();
+        dieMesh.rotationQuaternion = getRotationForTopValue(entry.dieType, entry.value, 0, toCameraDir);
       }
     }
 

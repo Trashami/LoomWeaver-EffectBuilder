@@ -36,7 +36,7 @@ export class LwAlertifyService {
     readonly durationMs?: number;
   }): void {
     const id = `ajs-roll-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const durationMs = params.durationMs ?? 7000;
+    const durationMs = params.durationMs ?? 14000;
     const modSign = params.modifier >= 0 ? `+${params.modifier}` : `${params.modifier}`;
     const breakdown = params.modifiersBreakdown?.trim()
       ? `${modSign} (${params.modifiersBreakdown.trim()})`

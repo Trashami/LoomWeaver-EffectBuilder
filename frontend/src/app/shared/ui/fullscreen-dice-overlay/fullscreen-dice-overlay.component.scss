@@ -4,47 +4,78 @@
   width: 100vw;
   height: 100dvh;
   z-index: 99999;
-  background: rgba(11, 13, 16, 0.94);
-  opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.18s ease-out, visibility 0s linear 0.18s;
   overflow: hidden;
   user-select: none;
 
-  &--rolling,
-  &--settled {
-    opacity: 1;
+  &--active {
     visibility: visible;
-    pointer-events: auto;
-    transition: opacity 0.18s ease-out, visibility 0s linear 0s;
   }
 
-  &--fading {
+  &--interactive {
+    pointer-events: auto;
+  }
+}
+
+.lw-fs-dice-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 13, 16, 0.47);
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+
+  &.is-visible {
+    opacity: 1;
+    transition: opacity 0.18s ease-out;
+  }
+
+  &.is-fading {
     opacity: 0;
-    visibility: visible;
-    pointer-events: none;
-    transition: opacity 2.5s ease-in-out, visibility 0s linear 2.5s;
+    transition: opacity 2.5s ease-in-out;
   }
 }
 
 .lw-fs-dice-overlay__canvas {
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
   background: transparent;
   outline: none;
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+
+  &.is-visible {
+    opacity: 1;
+    transition: opacity 0.18s ease-out;
+  }
+
+  &.is-fading {
+    opacity: 0;
+    transition: opacity 1.5s ease-in-out;
+  }
 }
 
 .lw-fs-dice-overlay__Dock {
   position: absolute;
+  z-index: 2;
   right: 2rem;
   bottom: 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.65rem;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.9s ease-in-out;
   animation: lw-fs-result-pop 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+
+  &.is-fading {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 .lw-fs-dice-overlay__card {

@@ -42,13 +42,35 @@ public sealed record DiceForgeMilestoneRewardContract(
     int BonusLoommarks
 );
 
+public sealed record DiceForgeUserPresetContract(
+    string Id,
+    string Name,
+    string UpdatedAt,
+    bool IsPublished,
+    object Config
+);
+
+public sealed record DiceForgeMarketplacePresetContract(
+    string Id,
+    string Name,
+    string AuthorName,
+    string Description,
+    int Downloads,
+    double Rating,
+    IReadOnlyList<string> Tags,
+    string PublishedAt,
+    object Config
+);
+
 public sealed record DiceForgeUserStateContract(
     int CampaignId,
     int LoommarksBalance,
     IReadOnlyList<string> UnlockedSkinIds,
     IReadOnlyList<string> UnlockedModelIds,
     IReadOnlyList<DiceForgeMilestoneRewardContract> Milestones,
-    DiceForgeLoadoutContract ActiveLoadout
+    DiceForgeLoadoutContract ActiveLoadout,
+    IReadOnlyList<DiceForgeUserPresetContract>? SavedPresets = null,
+    IReadOnlyList<DiceForgeMarketplacePresetContract>? MarketplacePresets = null
 );
 
 public sealed record DiceForgeUnlockRequestContract(

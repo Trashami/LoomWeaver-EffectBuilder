@@ -1,0 +1,311 @@
+<!-- 5. DICE EFFECTS & AUDIO -->
+@if (activeToolId() === 'effects') {
+  <div class="lw-dice-inspector__body">
+    <section class="lw-dice-inspector__group">
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Luminary Bloom Intensity</span>
+          <strong>{{ (customConfig().glowIntensity * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" [value]="customConfig().glowIntensity" (input)="patchNum('glowIntensity', $event)" />
+      </label>
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Metallic Specular Reflection</span>
+          <strong>{{ (customConfig().reflectionMetallic * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" [value]="customConfig().reflectionMetallic" (input)="patchNum('reflectionMetallic', $event)" />
+      </label>
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Surface Micro-Roughness</span>
+          <strong>{{ (customConfig().surfaceRoughness * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0.04" max="0.95" step="0.03" [value]="customConfig().surfaceRoughness" (input)="patchNum('surfaceRoughness', $event)" />
+      </label>
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Clearcoat Polish Gloss</span>
+          <strong>{{ (customConfig().clearcoat * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" [value]="customConfig().clearcoat" (input)="patchNum('clearcoat', $event)" />
+      </label>
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Rim Fresnel Aura</span>
+          <strong>{{ (customConfig().fresnelIntensity * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" [value]="customConfig().fresnelIntensity" (input)="patchNum('fresnelIntensity', $event)" />
+      </label>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <span class="lw-dice-inspector__label">Acoustic Roll Sound Profile</span>
+      <select
+        class="lw-dice-inspector__select lw-dice-inspector__select--full"
+        [value]="customConfig().soundProfileId"
+        (change)="patch('soundProfileId', $any($event.target).value)"
+      >
+        @for (snd of soundProfiles(); track snd.id) {
+          <option [value]="snd.id">{{ snd.name }}</option>
+        }
+      </select>
+      <div class="lw-dice-inspector__row">
+        <button ngpButton type="button" class="lw-dice-inspector__action-btn" (click)="testSoundRequested.emit(customConfig().soundProfileId)">
+          Test Roll Audio
+        </button>
+        <button ngpButton type="button" class="lw-dice-inspector__switch" [class.is-on]="!soundMuted()" (click)="muteToggled.emit()">
+          {{ soundMuted() ? 'Muted' : 'Audio On' }}
+        </button>
+      </div>
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Roll SFX Volume</span>
+          <strong>{{ (soundVolume() * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" [value]="soundVolume()" (input)="volumeChanged.emit(+$any($event.target).value)" />
+      </label>
+    </section>
+  </div>
+}
+
+<!-- 6. DICE PHYSICS ENGINE, BOUNDARY BOX & CAMERA ANGLE -->
+@if (activeToolId() === 'physics') {
+  <div class="lw-dice-inspector__body">
+    <section class="lw-dice-inspector__group">
+      <div class="lw-dice-inspector__row">
+        <span class="lw-dice-inspector__label">World &amp; Throw Physics</span>
+        <button ngpButton type="button" class="lw-dice-inspector__reset-btn" (click)="resetPhysicsToDefaults()">Defaults</button>
+      </div>
+
+      <label class="lw-dice-inspector__phys-row">
+        <span>gravity</span>
+        <input type="range" min="0.2" max="4.0" step="0.1" [value]="customConfig().physics.gravity" (input)="patchPhysicsNum('gravity', $event)" />
+        <code>{{ customConfig().physics.gravity | number:'1.1-1' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>mass</span>
+        <input type="range" min="0.2" max="4.0" step="0.1" [value]="customConfig().physics.mass" (input)="patchPhysicsNum('mass', $event)" />
+        <code>{{ customConfig().physics.mass | number:'1.1-1' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="Floor resistance when dice hit the invisible floor">
+        <span>friction</span>
+        <input type="range" min="0.05" max="1.0" step="0.05" [value]="customConfig().physics.friction" (input)="patchPhysicsNum('friction', $event)" />
+        <code>{{ customConfig().physics.friction | number:'1.2-2' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="Bounce restitution on invisible floor">
+        <span>restitution</span>
+        <input type="range" min="0" max="0.95" step="0.05" [value]="customConfig().physics.restitution" (input)="patchPhysicsNum('restitution', $event)" />
+        <code>{{ customConfig().physics.restitution | number:'1.2-2' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="Air resistance during throw">
+        <span>linearDamping</span>
+        <input type="range" min="0" max="0.95" step="0.05" [value]="customConfig().physics.linearDamping" (input)="patchPhysicsNum('linearDamping', $event)" />
+        <code>{{ customConfig().physics.linearDamping | number:'1.2-2' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="Rotational spin resistance">
+        <span>angularDamping</span>
+        <input type="range" min="0" max="0.95" step="0.05" [value]="customConfig().physics.angularDamping" (input)="patchPhysicsNum('angularDamping', $event)" />
+        <code>{{ customConfig().physics.angularDamping | number:'1.2-2' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>spinForce</span>
+        <input type="range" min="0" max="15" step="0.5" [value]="customConfig().physics.spinForce" (input)="patchPhysicsNum('spinForce', $event)" />
+        <code>{{ customConfig().physics.spinForce }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="How hard the dice are thrown">
+        <span>throwForce</span>
+        <input type="range" min="1" max="15" step="0.5" [value]="customConfig().physics.throwForce" (input)="patchPhysicsNum('throwForce', $event)" />
+        <code>{{ customConfig().physics.throwForce }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row" title="From how high or low the dice are thrown">
+        <span>startingHeight</span>
+        <input type="range" min="2" max="20" step="0.5" [value]="customConfig().physics.startingHeight" (input)="patchPhysicsNum('startingHeight', $event)" />
+        <code>{{ customConfig().physics.startingHeight }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>settleTimeout</span>
+        <input type="range" min="1000" max="10000" step="500" [value]="customConfig().physics.settleTimeout" (input)="patchPhysicsNum('settleTimeout', $event)" />
+        <code>{{ customConfig().physics.settleTimeout }}</code>
+      </label>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <div class="lw-dice-inspector__row">
+        <span class="lw-dice-inspector__label">Imaginary Bounce Boundary</span>
+        <button
+          ngpButton
+          type="button"
+          class="lw-dice-inspector__switch"
+          [class.is-on]="customConfig().physics.showBoundaryBox"
+          (click)="patchPhysics('showBoundaryBox', !customConfig().physics.showBoundaryBox)"
+        >
+          {{ customConfig().physics.showBoundaryBox ? 'Show Box' : 'Hidden' }}
+        </button>
+      </div>
+      <label class="lw-dice-inspector__phys-row">
+        <span>boxWidth</span>
+        <input type="range" min="6" max="24" step="1" [value]="customConfig().physics.boundaryWidth" (input)="patchPhysicsNum('boundaryWidth', $event)" />
+        <code>{{ customConfig().physics.boundaryWidth }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>boxDepth</span>
+        <input type="range" min="6" max="20" step="1" [value]="customConfig().physics.boundaryDepth" (input)="patchPhysicsNum('boundaryDepth', $event)" />
+        <code>{{ customConfig().physics.boundaryDepth }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>wallBounce</span>
+        <input type="range" min="0.1" max="1.0" step="0.05" [value]="customConfig().physics.wallRestitution" (input)="patchPhysicsNum('wallRestitution', $event)" />
+        <code>{{ customConfig().physics.wallRestitution | number:'1.2-2' }}</code>
+      </label>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <div class="lw-dice-inspector__row">
+        <span class="lw-dice-inspector__label">Roll Camera &amp; Rendering</span>
+        <button ngpButton type="button" class="lw-dice-inspector__reset-btn" (click)="previewRollCameraRequested.emit()">
+          Preview Angle
+        </button>
+      </div>
+      <label class="lw-dice-inspector__phys-row" title="Camera Pitch Angle (85° = Top-Down Game View)">
+        <span>camPitch°</span>
+        <input type="range" min="15" max="89" step="1" [value]="customConfig().physics.rollCameraPitchDeg" (input)="patchPhysicsNum('rollCameraPitchDeg', $event); previewRollCameraRequested.emit()" />
+        <code>{{ customConfig().physics.rollCameraPitchDeg }}°</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>camDistance</span>
+        <input type="range" min="7" max="26" step="0.5" [value]="customConfig().physics.rollCameraDistance" (input)="patchPhysicsNum('rollCameraDistance', $event); previewRollCameraRequested.emit()" />
+        <code>{{ customConfig().physics.rollCameraDistance }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>delay (ms)</span>
+        <input type="range" min="0" max="120" step="5" [value]="customConfig().physics.delay" (input)="patchPhysicsNum('delay', $event)" />
+        <code>{{ customConfig().physics.delay }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>scale</span>
+        <input type="range" min="2" max="10" step="0.5" [value]="customConfig().physics.scale" (input)="patchPhysicsNum('scale', $event)" />
+        <code>{{ customConfig().physics.scale }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>shadowAlpha</span>
+        <input type="range" min="0" max="1" step="0.05" [value]="customConfig().physics.shadowTransparency" (input)="patchPhysicsNum('shadowTransparency', $event)" />
+        <code>{{ customConfig().physics.shadowTransparency | number:'1.2-2' }}</code>
+      </label>
+      <label class="lw-dice-inspector__phys-row">
+        <span>lightIntensity</span>
+        <input type="range" min="0.2" max="2.5" step="0.1" [value]="customConfig().physics.lightIntensity" (input)="patchPhysicsNum('lightIntensity', $event)" />
+        <code>{{ customConfig().physics.lightIntensity | number:'1.1-1' }}</code>
+      </label>
+      <div class="lw-dice-inspector__row">
+        <span class="lw-dice-inspector__label">Floor Contact Shadows</span>
+        <button ngpButton type="button" class="lw-dice-inspector__switch" [class.is-on]="customConfig().physics.enableShadows" (click)="patchPhysics('enableShadows', !customConfig().physics.enableShadows)">
+          {{ customConfig().physics.enableShadows ? 'On' : 'Off' }}
+        </button>
+      </div>
+    </section>
+  </div>
+}
+
+<!-- 7. CRIT EFFECTS -->
+@if (activeToolId() === 'crit') {
+  <div class="lw-dice-inspector__body">
+    <section class="lw-dice-inspector__group">
+      <span class="lw-dice-inspector__label">Natural 20 Burst Shader</span>
+      <select
+        class="lw-dice-inspector__select lw-dice-inspector__select--full"
+        [value]="customConfig().nat20EffectId"
+        (change)="patch('nat20EffectId', $any($event.target).value)"
+      >
+        @for (fx of nat20Effects(); track fx.id) {
+          <option [value]="fx.id">{{ fx.name }}</option>
+        }
+      </select>
+      <button ngpButton type="button" class="lw-dice-inspector__action-btn" (click)="previewCritRequested.emit('nat20')">
+        Preview Natural 20 Effect
+      </button>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <span class="lw-dice-inspector__label">Critical Fail (Nat 1) Fracture</span>
+      <select
+        class="lw-dice-inspector__select lw-dice-inspector__select--full"
+        [value]="customConfig().critFailEffectId"
+        (change)="patch('critFailEffectId', $any($event.target).value)"
+      >
+        @for (fx of critFailEffects(); track fx.id) {
+          <option [value]="fx.id">{{ fx.name }}</option>
+        }
+      </select>
+      <button ngpButton type="button" class="lw-dice-inspector__action-btn lw-dice-inspector__action-btn--crimson" (click)="previewCritRequested.emit('critfail')">
+        Preview Critical Fail Effect
+      </button>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <label class="lw-dice-inspector__slider">
+        <div class="lw-dice-inspector__slider-head">
+          <span>Crit Shader Burst Intensity</span>
+          <strong>{{ (customConfig().critBurstIntensity * 100) | number:'1.0-0' }}%</strong>
+        </div>
+        <input type="range" min="0.3" max="2.0" step="0.1" [value]="customConfig().critBurstIntensity" (input)="patchNum('critBurstIntensity', $event)" />
+      </label>
+    </section>
+  </div>
+}
+
+<!-- 8. SAVED USER PRESETS & MARKETPLACE PUBLISH / IMPORT -->
+@if (activeToolId() === 'market') {
+  <div class="lw-dice-inspector__body">
+    <section class="lw-dice-inspector__group">
+      <div class="lw-dice-inspector__row">
+        <span class="lw-dice-inspector__label">My Saved Custom Dice ({{ savedPresets().length }})</span>
+        <button ngpButton type="button" class="lw-dice-inspector__reset-btn" (click)="savePresetRequested.emit()">+ Save Current</button>
+      </div>
+      <div class="lw-dice-inspector__cards">
+        @for (preset of savedPresets(); track preset.id) {
+          <div class="lw-dice-inspector__preset-item">
+            <div class="lw-dice-inspector__preset-info" (click)="loadPresetRequested.emit(preset)">
+              <strong>{{ preset.name }}</strong>
+              <small>{{ preset.config.surfaceStyleOverride || 'obsidian' }} · {{ preset.updatedAt }}</small>
+            </div>
+            <button ngpButton type="button" class="lw-dice-inspector__del-btn" (click)="deletePresetRequested.emit(preset.id)" title="Delete Preset">
+              Delete
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <span class="lw-dice-inspector__label">Publish to Creator Marketplace</span>
+      <input
+        type="text"
+        class="lw-dice-inspector__text-input"
+        [ngModel]="publishTagline()"
+        (ngModelChange)="publishTagline.set($event)"
+        placeholder="Short description for Marketplace..."
+      />
+      <button ngpButton type="button" class="lw-dice-inspector__action-btn lw-dice-inspector__action-btn--gold" (click)="publishMarketRequested.emit(publishTagline())">
+        Publish "{{ customConfig().customName }}" to Market
+      </button>
+    </section>
+
+    <section class="lw-dice-inspector__group">
+      <span class="lw-dice-inspector__label">Import Community Dice from Market</span>
+      <div class="lw-dice-inspector__cards">
+        @for (mp of marketPresets(); track mp.id) {
+          <div class="lw-dice-inspector__preset-item">
+            <div class="lw-dice-inspector__preset-info">
+              <strong>{{ mp.name }}</strong>
+              <small>{{ mp.creatorHandle }} · {{ mp.downloadsCount }} imports · {{ mp.tagline }}</small>
+            </div>
+            <button ngpButton type="button" class="lw-dice-inspector__reset-btn" (click)="importMarketPresetRequested.emit(mp)">
+              Import
+            </button>
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+}

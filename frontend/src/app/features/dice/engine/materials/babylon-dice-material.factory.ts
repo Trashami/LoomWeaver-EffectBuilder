@@ -9,6 +9,7 @@ import {
   SubMesh
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
+import { DicePulseWaveform } from '../dice-physics.types';
 import {
   buildBabylonDieVertexData,
   BuiltBabylonDieGeometry,
@@ -43,6 +44,32 @@ export function hexToColor3(hex: string): Color3 {
   return new Color3(r / 255, g / 255, b / 255);
 }
 
+function evaluateWaveform(waveform: DicePulseWaveform, tSec: number, speedHz: number, minVal: number, maxVal: number): number {
+  const phase = tSec * Math.max(0.1, speedHz);
+  let norm = 0.5;
+  switch (waveform) {
+    case 'heartbeat': {
+      const p1 = Math.max(0, Math.sin(phase * Math.PI * 2));
+      const p2 = Math.max(0, Math.sin(phase * Math.PI * 2 - 0.65)) * 0.55;
+      norm = Math.min(1, p1 + p2);
+      break;
+    }
+    case 'sawtooth':
+      norm = phase - Math.floor(phase);
+      break;
+    case 'flicker':
+      norm = 0.5 + 0.35 * Math.sin(phase * 9.7) + 0.15 * Math.cos(phase * 23.3);
+      break;
+    case 'sine':
+    default:
+      norm = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+      break;
+  }
+  const lo = Math.min(minVal, maxVal);
+  const hi = Math.max(minVal, maxVal);
+  return lo + Math.max(0, Math.min(1, norm)) * (hi - lo);
+}
+
 export function buildDieFaceMaterials(
   type: DicePolyhedronType,
   skin: DiceSkinConfig,
@@ -53,12 +80,14 @@ export function buildDieFaceMaterials(
   const metallic = Math.max(0, Math.min(1, custom.reflectionMetallic ?? skin.metalness));
   const roughness = Math.max(0.04, Math.min(1, custom.surfaceRoughness ?? skin.roughness));
   const glowColor3 = hexToColor3(custom.glowColorHex || skin.emissiveColor);
-  const borderColor3 = hexToColor3(skin.borderColor || custom.glowColorHex || skin.accentColor);
+  const borderColor3 = hexToColor3(custom.borderColorHex || skin.borderColor || custom.glowColorHex || skin.accentColor);
+  const coreAlpha = Math.max(0.12, Math.min(1, custom.coreOpacity ?? 1.0));
+  const bumpIntensity = Math.max(0, Math.min(3.0, custom.bumpMapIntensity ?? 1.0));
+  const numberDepth = Math.abs(custom.numberDepth ?? 0.75);
 
-  // Specular highlights driven by reflection/metallic & surface roughness
   const specIntensity = 0.18 + metallic * 0.82;
   const specularColor = Color3.Lerp(new Color3(specIntensity, specIntensity, specIntensity), borderColor3, metallic * 0.55);
-  const specularPower = Math.round(12 + (1 - roughness) * 116);
+  const specularPower = Math.round(12 + (1 - roughness) * 116 + (custom.clearcoat ?? 0) * 48);
 
   // Slot 0: Chamfer bevel / frame material
   const bevelMat = new StandardMaterial(`lw-die-bevel-${type}-${skin.id}`, scene);
@@ -70,17 +99,19 @@ export function buildDieFaceMaterials(
   );
   bevelMat.specularColor = specularColor;
   bevelMat.specularPower = specularPower;
-  if (custom.glowIntensity > 0.25) {
-    bevelMat.emissiveColor = glowColor3.scale(custom.glowIntensity * 0.14);
+  if (custom.glowIntensity > 0.2 || custom.coreOuterGlowEnabled) {
+    const cGlow = hexToColor3(custom.coreOuterGlowColor || custom.glowColorHex || skin.emissiveColor);
+    bevelMat.emissiveColor = cGlow.scale(Math.max(custom.glowIntensity, custom.coreOuterGlowOpacity ?? 0) * 0.18);
   }
-  if (skin.surfaceStyle === 'glass' && skin.refractionAlpha) {
-    bevelMat.alpha = Math.min(0.92, skin.refractionAlpha + 0.1);
+  if (coreAlpha < 0.99) {
+    bevelMat.alpha = Math.min(0.96, coreAlpha + 0.06);
   }
   materials.push(bevelMat);
 
   // Slots 1..N: Numbered polyhedral faces
   const faceVals = FACE_VALUES[type];
   const texSize = type === 'd20' || type === 'd12' ? 256 : 384;
+  const normalStrength = 1.4 + bumpIntensity * 1.1 + numberDepth * 1.8;
 
   for (let i = 0; i < faceVals.length; i++) {
     const val = faceVals[i];
@@ -101,17 +132,24 @@ export function buildDieFaceMaterials(
       `lw-face-norm-${type}-${i + 1}`,
       canvases.heightCanvas,
       scene,
-      custom.recessedNumbers ? 3.1 : 2.5
+      normalStrength
     );
-    faceMat.bumpTexture.level = Math.max(0.35, (skin.bumpScale || 0.025) * 28);
+    faceMat.bumpTexture.level = Math.max(0.05, bumpIntensity * 0.85 + numberDepth * 0.55);
 
-    if (custom.glowIntensity > 0.05) {
+    const hasEmissive =
+      custom.glowIntensity > 0.05 ||
+      custom.coreInnerGlowEnabled ||
+      custom.coreOuterGlowEnabled ||
+      custom.numberInnerGlowEnabled ||
+      custom.numberOuterGlowEnabled;
+
+    if (hasEmissive) {
       faceMat.emissiveTexture = createBabylonDynamicTextureFromCanvas(
         `lw-face-emis-${type}-${i + 1}`,
         canvases.emissiveCanvas,
         scene
       );
-      faceMat.emissiveColor = glowColor3.scale(0.55 + custom.glowIntensity * 0.65);
+      faceMat.emissiveColor = glowColor3.scale(0.5 + custom.glowIntensity * 0.7);
     } else {
       faceMat.emissiveColor = Color3.Black();
     }
@@ -119,14 +157,16 @@ export function buildDieFaceMaterials(
     faceMat.specularColor = specularColor;
     faceMat.specularPower = specularPower;
 
-    if (skin.surfaceStyle === 'glass') {
-      faceMat.alpha = skin.refractionAlpha ?? 0.76;
-      const fresnel = new FresnelParameters();
-      fresnel.bias = 0.15;
-      fresnel.power = 2.4;
-      fresnel.leftColor = glowColor3;
-      fresnel.rightColor = Color3.Black();
-      faceMat.emissiveFresnelParameters = fresnel;
+    if (coreAlpha < 0.99 || (custom.fresnelIntensity ?? 0) > 0.15) {
+      faceMat.alpha = coreAlpha;
+      if ((custom.fresnelIntensity ?? 0) > 0.15) {
+        const fresnel = new FresnelParameters();
+        fresnel.bias = 0.12;
+        fresnel.power = Math.max(1.2, 3.4 - (custom.fresnelIntensity ?? 0.35) * 1.6);
+        fresnel.leftColor = glowColor3.scale(custom.fresnelIntensity ?? 0.5);
+        fresnel.rightColor = Color3.Black();
+        faceMat.emissiveFresnelParameters = fresnel;
+      }
     }
 
     materials.push(faceMat);
@@ -143,11 +183,13 @@ export function buildBabylonPolyhedralDie(
   model: DiceModelDefinition,
   scene: Scene
 ): BuiltBabylonDieInstance {
-  const sizeMultiplier = (DICE_SIZE_SCALE_MAP[custom.sizePreset] ?? 1.0) * (model.scaleMultiplier ?? 1.0);
+  const physicsScale = (custom.physics?.scale ?? 5) / 5;
+  const sizeMultiplier = (DICE_SIZE_SCALE_MAP[custom.sizePreset] ?? 1.0) * (model.scaleMultiplier ?? 1.0) * physicsScale;
+  const chamfer = custom.chamferBevelFactor ?? model.chamferFactor ?? 0.955;
   const builtGeometry = buildBabylonDieVertexData(
     type,
     1.15 * sizeMultiplier,
-    model.chamferFactor
+    chamfer
   );
 
   const mesh = new Mesh(name, scene);
@@ -191,40 +233,49 @@ export function applySubMeshesToDieMesh(
   }
 }
 
-export function makeShiftedDieMaterials(
-  baseMaterials: StandardMaterial[],
-  type: DicePolyhedronType,
-  shift: number
-): StandardMaterial[] {
-  if (type === 'd4' || shift === 0) {
-    return baseMaterials.slice();
-  }
-  const N = FACE_VALUES[type].length;
-  const normalizedShift = ((shift % N) + N) % N;
-  const shifted: StandardMaterial[] = [baseMaterials[0]];
-  for (let s = 1; s <= N; s++) {
-    const srcIdx = ((s - 1 + normalizedShift) % N) + 1;
-    shifted.push(baseMaterials[srcIdx]);
-  }
-  return shifted;
-}
-
 export function applyVeinPulseToDieMaterials(
   materials: StandardMaterial[],
   skin: DiceSkinConfig,
   custom: DiceCustomRuntimeConfig,
   elapsedSeconds: number
 ): void {
-  if (!custom.veinPulse || custom.glowIntensity <= 0.05) {
+  const anyPulse = custom.veinPulse || custom.corePulseEnabled || custom.numberPulseEnabled;
+  if (!anyPulse) {
     return;
   }
-  const glowColor3 = hexToColor3(custom.glowColorHex || skin.emissiveColor);
-  const primary = Math.max(0, Math.sin(elapsedSeconds * 3.1));
-  const secondary = Math.max(0, Math.sin(elapsedSeconds * 3.1 - 0.55)) * 0.45;
-  const heartbeat = 0.42 + (primary + secondary) * 0.52 * custom.glowIntensity;
+
+  const coreGlow = hexToColor3(custom.coreOuterGlowColor || custom.glowColorHex || skin.emissiveColor);
+  const numGlow = hexToColor3(custom.numberOuterGlowColor || custom.glowColorHex || skin.emissiveColor);
+
+  const coreFactor = custom.corePulseEnabled
+    ? evaluateWaveform(
+        custom.corePulseWaveform ?? 'heartbeat',
+        elapsedSeconds,
+        custom.corePulseSpeed ?? 1.4,
+        custom.corePulseMin ?? 0.3,
+        custom.corePulseMax ?? 1.0
+      )
+    : 0.65;
+
+  const numFactor = custom.numberPulseEnabled
+    ? evaluateWaveform(
+        custom.numberPulseWaveform ?? 'sine',
+        elapsedSeconds,
+        custom.numberPulseSpeed ?? 1.6,
+        custom.numberPulseMin ?? 0.4,
+        custom.numberPulseMax ?? 1.0
+      )
+    : coreFactor;
+
+  if (materials[0] && custom.corePulseEnabled) {
+    materials[0].emissiveColor = coreGlow.scale(0.22 * coreFactor);
+  }
+
+  const blendedColor = Color3.Lerp(coreGlow, numGlow, 0.55);
+  const pulseLevel = Math.max(0.1, (coreFactor * 0.45 + numFactor * 0.55) * Math.max(0.35, custom.glowIntensity));
 
   for (let i = 1; i < materials.length; i++) {
-    materials[i].emissiveColor = glowColor3.scale(heartbeat);
+    materials[i].emissiveColor = blendedColor.scale(pulseLevel);
   }
 }
 
@@ -257,6 +308,6 @@ async function attachOptionalGlbChildMesh(
       }
     }
   } catch {
-    // Fallback gracefully to the procedural chamfered mesh when custom .glb is not yet uploaded
+    // Fallback gracefully to the procedural chamfered mesh
   }
 }

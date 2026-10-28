@@ -15,7 +15,6 @@ import { Router, RouterLink } from '@angular/router';
 import { NgpButton } from 'ng-primitives/button';
 import { LoomWeaverStoreService } from '../../core/services/loomweaver-store.service';
 import {
-  LwBadgeComponent,
   LwButtonComponent,
   LwIconComponent,
 } from '../../shared/ui/public-api';
@@ -40,7 +39,6 @@ import { VttCombatService } from './services/vtt-combat.service';
     FormsModule,
     RouterLink,
     NgpButton,
-    LwBadgeComponent,
     LwButtonComponent,
     LwIconComponent,
   ],
@@ -61,7 +59,7 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
 
   readonly gridEnabled = signal<boolean>(true);
-  readonly activeCanvasTool = signal<'select' | 'draw' | 'inspect' | '3d'>('select');
+  private dragMoved = false;
 
   readonly timerSeconds = signal<number>(872);
   readonly timerRunning = signal<boolean>(true);
@@ -69,7 +67,7 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
 
   readonly selectedDiceFormula = signal<string>('1d20');
   readonly dmToolReadout = signal<string>(
-    'Session Ready: Use Quick DCs, Roll Dice, or click any token with Shift / [T] to multi-target.',
+    'Session Ready: DM can drag any token; Players move on their Initiative turn. Click an ability below to aim & cast.',
   );
 
   // Quick-Add Monster & NPC Form State
@@ -106,6 +104,10 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       (this.store.viewerRole() === 'players' || this.battle.gmPreviewPlayerVision()),
   );
 
+  readonly isObserverActiveTurn = computed(
+    () => this.battle.activeInitiativeToken()?.key === this.battle.activeObserverToken()?.key,
+  );
+
   ngAfterViewInit(): void {
     const canvas = this.vttCanvasRef?.nativeElement;
     if (canvas) {
@@ -114,8 +116,14 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
         this.vtt.tokens(),
         this.vtt.selectedAttackerKey(),
         this.vtt.selectedTargetKey(),
-        (clickedKey) => this.vtt.selectedTargetKey.set(clickedKey),
+        (clickedKey) => {
+          const tok = this.vtt.tokens().find((t) => t.key === clickedKey);
+          if (tok) {
+            this.handleTokenSelectionOrCast(tok, false);
+          }
+        },
       );
+      this.sync3dStage();
     }
     this.timerHandle = setInterval(() => {
       if (this.timerRunning()) {
@@ -132,12 +140,22 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
     this.stage.dispose();
   }
 
+  sync3dStage(): void {
+    this.stage.syncTokens(
+      this.vtt.tokens(),
+      this.vtt.selectedAttackerKey(),
+      this.vtt.selectedTargetKey(),
+      this.battle.allReticleTargetKeys(),
+    );
+  }
+
   @HostListener('window:keydown', ['$event'])
   onWindowKeydown(event: KeyboardEvent): void {
     const tag = (event.target as HTMLElement | null)?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') {
       if (event.key === 'Escape') {
         this.battle.cancelAllInteractiveModes();
+        this.battle.settingsModalOpen.set(false);
       }
       return;
     }
@@ -146,15 +164,20 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       event.preventDefault();
       this.battle.cancelAllInteractiveModes();
       this.battle.openDmDrawer.set('none');
+      this.battle.settingsModalOpen.set(false);
+      this.sync3dStage();
       this.dmToolReadout.set('Exited targeting / measure mode (Esc).');
     } else if (event.key === 't' || event.key === 'T') {
       event.preventDefault();
       this.battle.targetSelectionMode.update((v) => !v);
       this.dmToolReadout.set(
         this.battle.targetSelectionMode()
-          ? 'Multi-Target Mode [T] Active: Click tokens to select multiple targets (Esc to exit).'
+          ? 'Multi-Target Mode [T] Active: Click tokens to lock targets (same or multiple). Press Esc to exit.'
           : 'Multi-Target Mode [T] Deactivated.',
       );
+    } else if (event.key === 'Enter' && this.battle.pendingAbility()) {
+      event.preventDefault();
+      this.executePendingAbilityCast();
     }
   }
 
@@ -165,45 +188,100 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
     if (rect.width <= 0 || rect.height <= 0) return;
     const svgX = ((event.clientX - rect.left) / rect.width) * 1200;
     const svgY = ((event.clientY - rect.top) / rect.height) * 800;
-    this.battle.cursorWorldPos.set(svgToWorldPoint(svgX, svgY));
+    const worldPt = svgToWorldPoint(svgX, svgY);
+
+    if (this.battle.draggingTokenKey()) {
+      this.dragMoved = true;
+      this.battle.updateDraggedTokenPosition(worldPt);
+      return;
+    }
+
+    this.battle.cursorWorldPos.set(worldPt);
+  }
+
+  onTokenMouseDown(event: MouseEvent, token: VttTokenVm): void {
+    if (event.button !== 0) return;
+    if (this.battle.pendingAbility() || event.shiftKey || this.battle.targetSelectionMode()) {
+      return;
+    }
+    event.stopPropagation();
+    this.dragMoved = false;
+    const perm = this.battle.beginTokenDrag(token);
+    if (!perm.allowed) {
+      this.dmToolReadout.set(perm.reason);
+    }
+  }
+
+  onBattleMapMouseUp(): void {
+    if (!this.battle.draggingTokenKey()) return;
+    const result = this.battle.endTokenDrag();
+    if (result.movedToken && result.distanceFeet > 0) {
+      this.sync3dStage();
+      this.dmToolReadout.set(
+        `${this.store.viewerRole() === 'gm' ? 'DM Moved' : 'Moved'} ${result.movedToken.name} (${result.distanceFeet} ft).`,
+      );
+    }
   }
 
   onBattleMapClick(event: MouseEvent): void {
+    if (this.dragMoved) {
+      this.dragMoved = false;
+      return;
+    }
     if (this.battle.measureEnabled() && this.battle.measureSubMode() === 'movement') {
       this.commitMovePreview();
       return;
     }
     if (this.battle.pendingAbility()) {
-      this.executePendingAbilityCast();
+      const step = this.battle.recordPendingAbilityTargetClick();
+      this.sync3dStage();
+      if (step.shouldExecuteNow) {
+        this.executePendingAbilityCast();
+      } else if (step.selectedCount > 0) {
+        this.dmToolReadout.set(
+          `Target ${step.selectedCount} of ${step.maxTargets} locked. Click another target (or same target again) to continue.`,
+        );
+      }
     }
   }
 
   onTokenClicked(event: MouseEvent, token: VttTokenVm): void {
     event.stopPropagation();
-    const hadPending = !!this.battle.pendingAbility();
-    this.battle.handleTokenClick(token, event.shiftKey);
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
-    if (hadPending && !event.shiftKey && !this.battle.targetSelectionMode()) {
-      this.executePendingAbilityCast();
+    if (this.dragMoved) {
+      this.dragMoved = false;
+      return;
     }
+    this.handleTokenSelectionOrCast(token, event.shiftKey);
+  }
+
+  private handleTokenSelectionOrCast(token: VttTokenVm, shiftKey: boolean): void {
+    if (this.battle.pendingAbility()) {
+      this.battle.cursorWorldPos.set({ x: token.x, z: token.z });
+      const step = this.battle.recordPendingAbilityTargetClick(token);
+      this.sync3dStage();
+      if (step.shouldExecuteNow) {
+        this.executePendingAbilityCast();
+      } else {
+        this.dmToolReadout.set(
+          `Target ${step.selectedCount} of ${step.maxTargets} locked on ${token.name}. Select remaining target(s) (same or different).`,
+        );
+      }
+      return;
+    }
+
+    this.battle.handleTokenClick(token, shiftKey);
+    this.sync3dStage();
   }
 
   commitMovePreview(): void {
-    const move = this.battle.activeMovementPreview();
-    if (!move || move.distanceFeet <= 0) return;
-    const dist = move.distanceFeet;
-    this.battle.commitStealthGridMove();
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
+    const res = this.battle.commitStealthGridMove();
+    if (!res.allowed) {
+      this.dmToolReadout.set(res.reason);
+      return;
+    }
+    this.sync3dStage();
     this.dmToolReadout.set(
-      `Moved ${this.battle.activeObserverToken().name} ${dist} ft along the 5-ft grid.`,
+      `Moved ${this.battle.activeObserverToken().name} ${res.distanceFeet} ft along the 5-ft grid.`,
     );
   }
 
@@ -217,8 +295,14 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       return;
     }
     this.battle.beginAbilityTargeting(ability);
+    const isSingleOrMulti = this.battle.isSingleOrMultiTargetAbility(ability);
+    const modeDesc = isSingleOrMulti
+      ? ability.maxTargets > 1
+        ? `Select up to ${ability.maxTargets} targets (can stack on same target)`
+        : 'Snap to single target & click to strike'
+      : `${ability.aoeRadiusFeet}ft AoE circle auto-targets tokens in red`;
     this.dmToolReadout.set(
-      `Targeting "${ability.name}" (${ability.rangeFeet}ft range, ${ability.aoeRadiusFeet}ft AoE): Move cursor on map & click to cast, or press Esc to cancel.`,
+      `Aiming "${ability.name}" (${ability.rangeFeet}ft range · ${modeDesc}). Press Esc to cancel.`,
     );
   }
 
@@ -234,26 +318,18 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       lastFx = this.vtt.executeActionOnTarget(ability);
     }
 
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
+    this.sync3dStage();
     if (lastFx) {
       this.stage.playTrajectoryEffect(lastFx.preset, lastFx.startPos, lastFx.endPos);
     }
     this.dmToolReadout.set(
-      `Executed ${ability.name} against ${targetList.map((t) => t.name).join(', ')}.`,
+      `Cast ${ability.name} against ${targetList.map((t) => t.name).join(', ')} (${targetList.length} hit roll${targetList.length > 1 ? 's' : ''}).`,
     );
   }
 
   switchLiveEncounter(encounterId: string): void {
     this.vtt.launchEncounterIntoVtt(encounterId);
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
+    this.sync3dStage();
   }
 
   nextTurn(): void {
@@ -262,10 +338,9 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
     if (active) {
       this.battle.resetTurnMovement(active.key);
     }
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
+    this.sync3dStage();
+    this.dmToolReadout.set(
+      `Round ${this.vtt.activeRound()} · Active Initiative Turn: ${this.battle.activeInitiativeToken().name}`,
     );
   }
 
@@ -275,11 +350,7 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       this.vtt.creatures()[0];
     if (!pick) return;
     this.vtt.spawnCreatureIntoVtt(pick);
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
+    this.sync3dStage();
     this.dmToolReadout.set(`Added ${pick.name} onto the battle map.`);
   }
 
@@ -292,11 +363,7 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       true,
     );
     this.quickAddNpcName.set('');
-    this.stage.syncTokens(
-      this.vtt.tokens(),
-      this.vtt.selectedAttackerKey(),
-      this.vtt.selectedTargetKey(),
-    );
+    this.sync3dStage();
     this.dmToolReadout.set('Added NPC to Encounter & Battle Map.');
   }
 
@@ -352,6 +419,17 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
   openEditCurrentEncounter(): void {
     void this.router.navigate(['/encounters'], {
       queryParams: { edit: this.vtt.activeEncounterId() },
+    });
+  }
+
+  resetActionBarSettings(): void {
+    this.battle.actionBarSettings.set({
+      opacity: 95,
+      compactMode: false,
+      snapSensitivityFeet: 10,
+      showHotbarKeybinds: true,
+      showMapRangeLabels: true,
+      autoCenterActiveTurn: true,
     });
   }
 }

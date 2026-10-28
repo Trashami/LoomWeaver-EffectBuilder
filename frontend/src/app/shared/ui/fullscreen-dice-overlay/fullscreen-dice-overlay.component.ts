@@ -28,7 +28,7 @@ export class LwFullscreenDiceOverlayComponent implements AfterViewInit {
 
   onBackdropClick(): void {
     const phase = this.overlay.overlayPhase();
-    if (phase === 'settled' || phase === 'fading') {
+    if (phase !== 'hidden' && phase !== 'rolling') {
       this.overlay.clearResultsNow();
     }
   }

@@ -1,219 +1,247 @@
-<section class="dice-forge-page">
-  <header class="dice-header">
-    <div>
-      <span class="eyebrow">STAGE 4 · BABYLON.JS 3D POLYHEDRAL DICE FORGE &amp; VAULT</span>
-      <h1>3D Dice Forge &amp; Customizer</h1>
-      <p>
-        Server-authoritative cryptographic rolls paired with modular 3D polyhedral models, procedural &amp; PBR skins,
-        custom core/number/glow pigments, Nat 20 &amp; Crit Fail shaders, and reward/store unlocks.
-      </p>
-    </div>
+<section class="lw-dice-studio" aria-label="3D Dice Forge Studio">
+  <lw-dice-forge-subbar
+    [customConfig]="customConfig()"
+    [activeSkin]="activeSkin()"
+    [savedPresets]="savedUserPresets()"
+    [activePresetId]="activePresetId()"
+    [focusDie]="focusDie()"
+    [rightCollapsed]="!inspectorOpen()"
+    (customNameChanged)="onCustomNameChange($event)"
+    (presetSelected)="loadSavedPreset($event)"
+    (focusDieSelected)="setFocusDie($event)"
+    (resetCameraRequested)="returnToStationaryShowcase()"
+    (savePresetRequested)="saveCurrentPreset(false)"
+    (saveAsNewRequested)="saveCurrentPreset(true)"
+    (publishToMarketRequested)="publishCurrentToMarketplace()"
+    (openMarketModalRequested)="marketModalOpen.set(true)"
+    (toggleRightDock)="inspectorOpen.set(!inspectorOpen())"
+  />
 
-    <div class="header-metrics">
-      <div class="metric-pill gold">
-        <span>Loommarks Vault</span>
-        <strong>{{ loommarksBalance() | number }} Marks</strong>
-        <small>+15 per roll · +35 on Nat 20</small>
+  <div class="lw-dice-studio__workbench">
+    <lw-dice-tool-dock
+      [activeToolId]="activeTool()"
+      (toolSelected)="onToolSelected($event)"
+      (collapseRequested)="inspectorOpen.set(!inspectorOpen())"
+    />
+
+    <div class="lw-dice-studio__stage-area">
+      <!-- Top-Left Viewport HUD -->
+      <div class="lw-dice-studio__hud-top">
+        <span class="lw-dice-studio__hud-pill lw-dice-studio__hud-pill--gold">
+          <strong>{{ customConfig().customName }}</strong>
+        </span>
+        <span class="lw-dice-studio__hud-pill">
+          Skin: <strong>{{ activeSkin().name }}</strong>
+        </span>
+        <span class="lw-dice-studio__hud-pill">
+          Mesh: <strong>{{ activeModel().name }}</strong>
+        </span>
+        <span class="lw-dice-studio__hud-pill">
+          Arena Box:
+          <strong>{{ customConfig().physics.boundaryWidth }}x{{ customConfig().physics.boundaryDepth }}</strong>
+        </span>
+        @if (stageService.stageMode() === 'rolled') {
+          <button
+            type="button"
+            class="lw-dice-studio__hud-action"
+            (click)="returnToStationaryShowcase()"
+          >
+            Return to Stationary Showcase
+          </button>
+        }
       </div>
-      <div class="metric-pill emerald">
-        <span>Equipped 3D Model</span>
-        <strong>{{ activeModel().name }}</strong>
-        <small>{{ customConfig().sizePreset | uppercase }} Scale · {{ activeSkin().name }}</small>
-      </div>
-    </div>
-  </header>
 
-  @if (statusBanner(); as banner) {
-    <div class="status-banner" role="status">
-      <span>{{ banner }}</span>
-      <button type="button" class="dismiss-btn" (click)="statusBanner.set(null)">Dismiss</button>
-    </div>
-  }
+      <!-- 3D Babylon.js Polyhedral Viewport (No floor plane; stationary 360 orbit by default, top-down physics throw on roll) -->
+      <canvas #diceStageCanvas class="lw-dice-studio__canvas"></canvas>
 
-  <div class="dice-forge-layout">
-    <!-- Left Column: Interactive Babylon.js 3D Stage + Tray + Campaign Milestones -->
-    <div class="stage-column">
-      <lw-panel
-        title="Interactive 3D Polyhedral Arena"
-        subtitle="Orbit camera with mouse/touch · Click any quick-die or roll formula to launch 3D physics trajectory"
-        [elevated]="true"
-      >
-        <div class="stage-toolbar">
-          <div class="focus-die-pills">
-            @for (dieOpt of dieFocusOptions; track dieOpt) {
-              <button
-                type="button"
-                class="focus-pill"
-                [class.active]="focusDie() === dieOpt"
-                (click)="setFocusDie(dieOpt)"
-              >
-                {{ dieOpt === 'all' ? 'Full Set (6)' : (dieOpt | uppercase) }}
-              </button>
-            }
-          </div>
-
-          <div class="stage-quick-fx">
-            <lw-button label="Preview Nat 20 FX" variant="secondary" size="sm" (pressed)="previewCritEffect('nat20')" />
-            <lw-button label="Preview Crit Fail FX" variant="secondary" size="sm" (pressed)="previewCritEffect('critfail')" />
-          </div>
-        </div>
-
-        <div class="canvas-stage-wrapper">
-          <canvas #diceStageCanvas class="babylon-dice-canvas"></canvas>
-
-          @if (lastRoll(); as latest) {
-            <div
-              class="stage-roll-overlay"
-              [class.crit-success]="latest.isCriticalSuccess"
-              [class.crit-fail]="latest.isCriticalFailure"
-            >
-              <div class="overlay-top">
-                <span class="overlay-label">{{ latest.label }}</span>
-                <lw-badge
-                  [label]="latest.isCriticalSuccess ? 'NATURAL 20' : latest.isCriticalFailure ? 'CRITICAL FAIL' : latest.expression"
-                  [tone]="latest.isCriticalSuccess ? 'gold' : latest.isCriticalFailure ? 'crimson' : 'emerald'"
-                />
-              </div>
-              <div class="overlay-Main">
-                <strong class="overlay-total">{{ latest.total }}</strong>
-                <span class="overlay-breakdown">
-                  Rolls: [{{ latest.diceResults.join(', ') }}]
-                  @if (latest.modifier !== 0) {
-                    · Mod {{ latest.modifier > 0 ? '+' + latest.modifier : latest.modifier }}
-                  }
-                </span>
-              </div>
-              <code class="overlay-hash">{{ latest.sha256Hash }}</code>
-            </div>
-          }
-        </div>
-      </lw-panel>
-
-      <lw-dice-roller-tray
-        [activeSkinName]="activeSkin().name + ' · ' + (customConfig().sizePreset | uppercase)"
-        (rollRequested)="executeAuthoritativeRoll($event)"
+      <!-- Floating Bottom-Left Circular Dice Roller Menu (Image 3 style) -->
+      <lw-dice-roller-menu
+        (rollPoolRequested)="executePoolRoll($event)"
+        (clearRequested)="returnToStationaryShowcase()"
       />
 
-      <!-- Campaign Milestone Rewards Strip -->
-      <lw-panel
-        title="Campaign Milestone Dice Rewards"
-        subtitle="Earn exclusive dice skins and 3D forge models by completing campaign achievements"
-      >
-        <div class="milestones-grid">
-          @for (ms of milestones(); track ms.id) {
-            <div class="milestone-card" [class.claimed]="ms.isClaimed">
-              <div class="milestone-top">
-                <strong>{{ ms.title }}</strong>
-                <lw-badge
-                  [label]="ms.isClaimed ? 'Claimed' : '+' + ms.bonusLoommarks + ' Marks'"
-                  [tone]="ms.isClaimed ? 'emerald' : 'gold'"
-                />
-              </div>
-              <p>{{ ms.description }}</p>
-              <div class="milestone-footer">
-                <span class="reward-target">Reward: {{ ms.targetItemName }}</span>
-                @if (!ms.isClaimed) {
-                  <lw-button label="Claim Reward" variant="primary" size="sm" (pressed)="claimMilestoneReward(ms)" />
-                }
-              </div>
-            </div>
-          }
+      <!-- Bottom-Right Camera, Boundary & Quick Random Roll Bar -->
+      <footer class="lw-dice-studio__viewport-bar" aria-label="3D Camera & Physics Stage Controls">
+        <div class="lw-dice-studio__cam-group">
+          <button
+            type="button"
+            class="lw-dice-studio__bar-btn"
+            title="Zoom Out"
+            (click)="zoomStageCamera(1.4)"
+          >
+            -
+          </button>
+          <span class="lw-dice-studio__zoom-readout">{{ cameraZoomPercent() }}%</span>
+          <button
+            type="button"
+            class="lw-dice-studio__bar-btn"
+            title="Zoom In"
+            (click)="zoomStageCamera(-1.4)"
+          >
+            +
+          </button>
         </div>
-      </lw-panel>
+
+        <span class="lw-dice-studio__bar-sep"></span>
+
+        <button
+          type="button"
+          class="lw-dice-studio__bar-pill"
+          [class.is-active]="stageService.stageMode() === 'showcase'"
+          (click)="returnToStationaryShowcase()"
+        >
+          Stationary Orbit
+        </button>
+
+        <button
+          type="button"
+          class="lw-dice-studio__bar-pill"
+          [class.is-active]="stageService.stageMode() === 'rolled'"
+          (click)="previewRollCameraView()"
+        >
+          Top-Down Throw Cam ({{ customConfig().physics.rollCameraPitchDeg }}°)
+        </button>
+
+        <button
+          type="button"
+          class="lw-dice-studio__bar-pill"
+          [class.is-active]="customConfig().physics.showBoundaryBox"
+          (click)="toggleBoundaryWireframe()"
+        >
+          Boundary Box: {{ customConfig().physics.showBoundaryBox ? 'Visible' : 'Hidden' }}
+        </button>
+
+        <button
+          type="button"
+          class="lw-dice-studio__bar-pill"
+          (click)="resetStageCamera()"
+        >
+          Reset Camera
+        </button>
+
+        <span class="lw-dice-studio__bar-sep"></span>
+
+        <button
+          type="button"
+          class="lw-dice-studio__bar-pill lw-dice-studio__bar-pill--gold"
+          (click)="triggerQuickRandomRollUpTo5()"
+          title="Instantly throw between 1 and 5 random polyhedral dice"
+        >
+          Quick Random Roll (1-5 Dice)
+        </button>
+      </footer>
+
+      @if (!inspectorOpen()) {
+        <button
+          type="button"
+          class="lw-dice-studio__reopen-inspector"
+          (click)="inspectorOpen.set(true)"
+          title="Open Dice Tool Inspector"
+        >
+          <lw-icon name="chevron_left" [size]="16" />
+          <span>Inspector</span>
+        </button>
+      }
     </div>
 
-    <!-- Right Column: Skin Vault & Purchase/Reward Store + Full 3D Customizer -->
-    <div class="controls-column">
-      <lw-panel
-        title="Skin Vault &amp; Reward Store"
-        subtitle="Equip owned skins, claim milestone rewards, or unlock sets with Loommarks"
-        [elevated]="true"
-      >
-        <div class="vault-filter-tabs">
-          <button
-            type="button"
-            class="vault-tab"
-            [class.active]="vaultFilter() === 'all'"
-            (click)="vaultFilter.set('all')"
-          >
-            All ({{ skinCatalog().length }})
-          </button>
-          <button
-            type="button"
-            class="vault-tab"
-            [class.active]="vaultFilter() === 'owned'"
-            (click)="vaultFilter.set('owned')"
-          >
-            Owned ({{ unlockedSkinIds().length }})
-          </button>
-          <button
-            type="button"
-            class="vault-tab"
-            [class.active]="vaultFilter() === 'rewards'"
-            (click)="vaultFilter.set('rewards')"
-          >
-            Rewards &amp; Marks
-          </button>
-          <button
-            type="button"
-            class="vault-tab"
-            [class.active]="vaultFilter() === 'store'"
-            (click)="vaultFilter.set('store')"
-          >
-            Vault Store
-          </button>
-        </div>
-
-        <div class="skin-vault-grid">
-          @for (skin of filteredSkins(); track skin.id) {
-            <div
-              class="skin-card"
-              [class.active]="activeSkin().id === skin.id"
-              [class.locked]="!isSkinUnlocked(skin.id)"
-              (click)="selectOrUnlockSkin(skin)"
-            >
-              <div class="skin-swatch-orb" [style.background]="skin.baseColor" [style.borderColor]="skin.accentColor">
-                <span class="orb-num" [style.color]="skin.textColor">20</span>
-              </div>
-
-              <div class="skin-meta">
-                <div class="skin-title-row">
-                  <strong>{{ skin.name }}</strong>
-                  @if (isSkinUnlocked(skin.id)) {
-                    <lw-badge
-                      [label]="activeSkin().id === skin.id ? 'Equipped' : 'Unlocked'"
-                      [tone]="activeSkin().id === skin.id ? 'emerald' : 'neutral'"
-                    />
-                  } @else {
-                    <lw-badge [label]="skin.priceLabel" tone="gold" />
-                  }
-                </div>
-                <span class="skin-family">{{ skin.materialFamily }} · {{ skin.rarity }}</span>
-                <p class="skin-tagline">{{ skin.tagline }}</p>
-              </div>
-            </div>
-          }
-        </div>
-      </lw-panel>
-
-      <lw-dice-customizer-panel
+    @if (inspectorOpen()) {
+      <lw-dice-forge-inspector
+        [activeToolId]="activeTool()"
         [customConfig]="customConfig()"
+        [skins]="skinCatalog()"
         [models]="modelCatalog()"
-        [unlockedModelIds]="unlockedModelIds()"
         [nat20Effects]="nat20Effects()"
         [critFailEffects]="critFailEffects()"
         [soundProfiles]="soundProfiles()"
         [soundVolume]="soundService.volume()"
         [soundMuted]="soundService.muted()"
-        (configChange)="applyCustomChange($event)"
-        (unlockModelRequest)="unlockModelFromPanel($event)"
-        (previewCritEffect)="previewCritEffect($event)"
-        (testSoundRequest)="testRollSound($event)"
-        (volumeChange)="soundService.setVolume($event)"
-        (muteToggle)="soundService.setMuted(!soundService.muted())"
-        (resetToSkinDefault)="resetCustomToSkinDefaults()"
-        (saveLoadoutRequest)="saveActiveLoadout()"
+        [savedPresets]="savedUserPresets()"
+        [marketPresets]="marketplacePresets()"
+        (skinSelected)="selectSkin($event)"
+        (configPatched)="applyCustomChange($event)"
+        (physicsPatched)="applyPhysicsChange($event)"
+        (previewCritRequested)="previewCritEffect($event)"
+        (testSoundRequested)="testRollSound($event)"
+        (volumeChanged)="soundService.setVolume($event)"
+        (muteToggled)="soundService.setMuted(!soundService.muted())"
+        (resetDefaultsRequested)="resetCustomToSkinDefaults()"
+        (savePresetRequested)="saveCurrentPreset(false)"
+        (loadPresetRequested)="loadSavedPreset($event)"
+        (deletePresetRequested)="deleteSavedPreset($event)"
+        (publishMarketRequested)="publishCurrentToMarketplace($event)"
+        (importMarketPresetRequested)="importFromMarketplace($event)"
+        (previewRollCameraRequested)="previewRollCameraView()"
       />
-    </div>
+    }
   </div>
+
+  <!-- Marketplace Import Modal -->
+  @if (marketModalOpen()) {
+    <div class="lw-dice-market-backdrop" (click)="marketModalOpen.set(false)">
+      <div
+        class="lw-dice-market-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Dice Forge Community Marketplace"
+        (click)="$event.stopPropagation()"
+      >
+        <header class="lw-dice-market-modal__head">
+          <div>
+            <span class="lw-dice-market-modal__eyebrow">CREATOR MARKETPLACE · CUSTOM DICE SETS</span>
+            <h3>Import or Publish Custom 3D Dice</h3>
+          </div>
+          <div class="lw-dice-market-modal__head-actions">
+            <lw-button
+              variant="secondary"
+              size="sm"
+              (pressed)="publishCurrentToMarketplace()"
+            >
+              Publish Active Dice
+            </lw-button>
+            <button
+              type="button"
+              class="lw-dice-market-modal__close"
+              (click)="marketModalOpen.set(false)"
+            >
+              <lw-icon name="close" [size]="16" />
+            </button>
+          </div>
+        </header>
+
+        <div class="lw-dice-market-modal__grid">
+          @for (item of marketplacePresets(); track item.id) {
+            <article class="lw-dice-market-card">
+              <div class="lw-dice-market-card__top">
+                <div
+                  class="lw-dice-market-card__swatch"
+                  [style.background]="item.config.coreColorHex"
+                  [style.borderColor]="item.config.glowColorHex"
+                  [style.color]="item.config.numberColorHex"
+                >
+                  20
+                </div>
+                <div class="lw-dice-market-card__meta">
+                  <strong>{{ item.name }}</strong>
+                  <span>by {{ item.creatorHandle }} · {{ item.publishedAt }}</span>
+                </div>
+              </div>
+              <p class="lw-dice-market-card__desc">{{ item.tagline }}</p>
+              <div class="lw-dice-market-card__foot">
+                <span class="lw-dice-market-card__stats">
+                  {{ item.downloadsCount }} imports · Rating {{ item.rating }}/5
+                </span>
+                <button
+                  type="button"
+                  class="lw-dice-market-card__import-btn"
+                  (click)="importFromMarketplace(item)"
+                >
+                  Import &amp; Equip
+                </button>
+              </div>
+            </article>
+          }
+        </div>
+      </div>
+    </div>
+  }
 </section>

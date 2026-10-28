@@ -54,6 +54,9 @@ public static class DiceForgeEndpoints
         new("milestone-celtic-warden", "Highland Oathkeeper", "Complete 3 sessions as a party without a fallen companion.", "skin", "skin-celtic-knot", "Highland Relic Bronze", true, false, 150)
     };
 
+    private static readonly List<DiceForgeUserPresetContract> SavedUserPresets = new();
+    private static readonly List<DiceForgeMarketplacePresetContract> MarketplaceDicePresets = new();
+
     private static readonly ConcurrentQueue<DiceRollResponseContract> RecentCampaignRolls = new(new[]
     {
         new DiceRollResponseContract(
@@ -110,6 +113,49 @@ public static class DiceForgeEndpoints
             {
                 ActiveLoadout = loadout;
                 return Results.Ok(BuildStateSnapshot(campaignId));
+            }
+        });
+
+        api.MapPost("/campaigns/{campaignId:int}/dice-forge/presets", (int campaignId, DiceForgeUserPresetContract preset) =>
+        {
+            lock (StateLock)
+            {
+                var idx = SavedUserPresets.FindIndex(p => string.Equals(p.Id, preset.Id, StringComparison.OrdinalIgnoreCase));
+                if (idx >= 0)
+                {
+                    SavedUserPresets[idx] = preset;
+                }
+                else
+                {
+                    SavedUserPresets.Insert(0, preset);
+                }
+                return Results.Ok(SavedUserPresets.ToList());
+            }
+        });
+
+        api.MapDelete("/campaigns/{campaignId:int}/dice-forge/presets/{presetId}", (int campaignId, string presetId) =>
+        {
+            lock (StateLock)
+            {
+                SavedUserPresets.RemoveAll(p => string.Equals(p.Id, presetId, StringComparison.OrdinalIgnoreCase));
+                return Results.Ok(SavedUserPresets.ToList());
+            }
+        });
+
+        api.MapGet("/marketplace/dice-presets", () =>
+        {
+            lock (StateLock)
+            {
+                return Results.Ok(MarketplaceDicePresets.ToList());
+            }
+        });
+
+        api.MapPost("/marketplace/dice-presets", (DiceForgeMarketplacePresetContract preset) =>
+        {
+            lock (StateLock)
+            {
+                MarketplaceDicePresets.Insert(0, preset);
+                return Results.Ok(MarketplaceDicePresets.ToList());
             }
         });
 
@@ -256,7 +302,9 @@ public static class DiceForgeEndpoints
             UnlockedSkins.ToList(),
             UnlockedModels.ToList(),
             Milestones.ToList(),
-            ActiveLoadout
+            ActiveLoadout,
+            SavedUserPresets.ToList(),
+            MarketplaceDicePresets.ToList()
         );
 
     private static string NormalizeRollMode(string? mode) =>

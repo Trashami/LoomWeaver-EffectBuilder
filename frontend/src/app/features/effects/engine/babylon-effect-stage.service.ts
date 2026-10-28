@@ -80,7 +80,16 @@ export class BabylonEffectStageService {
       const grid = MeshBuilder.CreateLineSystem('lw-vtt-grid', { lines }, this.scene);
       grid.color = Color3.FromHexString('#264035');
 
-      this.syncTokens(tokens, attackerKey, targetKey);
+      this.syncTokens(tokens, attackerKey, targetKey, targetKey ? [targetKey] : []);
+
+      this.scene.registerBeforeRender(() => {
+        if (!this.scene || this.reducedMotion()) return;
+        for (const m of this.scene.meshes) {
+          if (m.name.startsWith('lw-target-reticle-root-')) {
+            m.rotation.y += 0.026;
+          }
+        }
+      });
 
       this.scene.onPointerDown = (_evt, pickInfo) => {
         if (pickInfo?.hit && pickInfo.pickedMesh?.metadata?.tokenKey && onTokenClicked) {
@@ -100,14 +109,25 @@ export class BabylonEffectStageService {
     tokens: readonly VttTokenVm[],
     attackerKey?: string,
     targetKey?: string,
+    targetedKeys: readonly string[] = [],
   ): void {
     if (!this.scene) return;
     this.scene.meshes
-      .filter((m) => m.name.startsWith('lw-token-') || m.name === 'lw-tether-line')
+      .filter(
+        (m) =>
+          m.name.startsWith('lw-token-') ||
+          m.name.startsWith('lw-target-reticle-') ||
+          m.name === 'lw-tether-line',
+      )
       .forEach((m) => m.dispose());
+
+    const activeTargetSet = new Set<string>(
+      targetedKeys.length > 0 ? targetedKeys : targetKey ? [targetKey] : [],
+    );
 
     for (const t of tokens) {
       const isDead = t.currentHp <= 0;
+      const isTargeted = activeTargetSet.has(t.key);
       const cyl = MeshBuilder.CreateCylinder(
         `lw-token-${t.key}`,
         { height: isDead ? 0.2 : 0.9, diameter: 1.5, tessellation: 24 },
@@ -117,11 +137,19 @@ export class BabylonEffectStageService {
       cyl.metadata = { tokenKey: t.key };
 
       const mat = new StandardMaterial(`lw-tmat-${t.key}`, this.scene);
-      mat.diffuseColor = Color3.FromHexString(t.colorHex);
-      if (t.key === attackerKey || t.key === targetKey) {
-        mat.emissiveColor = Color3.FromHexString(t.colorHex).scale(0.55);
+      mat.diffuseColor = isTargeted
+        ? Color3.FromHexString('#ff2438')
+        : Color3.FromHexString(t.colorHex);
+      if (isTargeted) {
+        mat.emissiveColor = Color3.FromHexString('#ff2438').scale(0.65);
+      } else if (t.key === attackerKey) {
+        mat.emissiveColor = Color3.FromHexString('#49e892').scale(0.5);
       }
       cyl.material = mat;
+
+      if (isTargeted) {
+        this.createSpinningBaseTargetReticle(t.key, t.x, t.z);
+      }
     }
 
     const src = tokens.find((t) => t.key === attackerKey);
@@ -138,8 +166,52 @@ export class BabylonEffectStageService {
         },
         this.scene,
       );
-      tether.color = Color3.FromHexString('#d4a853');
+      tether.color = Color3.FromHexString('#49e892');
     }
+  }
+
+  private createSpinningBaseTargetReticle(tokenKey: string, x: number, z: number): void {
+    if (!this.scene) return;
+    const root = new Mesh(`lw-target-reticle-root-${tokenKey}`, this.scene);
+    root.position.set(x, 0.06, z);
+
+    const reticleMat = new StandardMaterial(`lw-target-reticle-mat-${tokenKey}`, this.scene);
+    reticleMat.diffuseColor = Color3.FromHexString('#ff2438');
+    reticleMat.emissiveColor = Color3.FromHexString('#ff2438');
+    reticleMat.specularColor = Color3.FromHexString('#ff7a85');
+    reticleMat.alpha = 0.92;
+
+    const outerRing = MeshBuilder.CreateTorus(
+      `lw-target-reticle-outer-${tokenKey}`,
+      { diameter: 2.35, thickness: 0.11, tessellation: 36 },
+      this.scene,
+    );
+    outerRing.parent = root;
+    outerRing.material = reticleMat;
+
+    const innerRing = MeshBuilder.CreateTorus(
+      `lw-target-reticle-inner-${tokenKey}`,
+      { diameter: 0.95, thickness: 0.1, tessellation: 28 },
+      this.scene,
+    );
+    innerRing.parent = root;
+    innerRing.material = reticleMat;
+
+    const crossH = MeshBuilder.CreateBox(
+      `lw-target-reticle-ch-${tokenKey}`,
+      { width: 3.1, height: 0.04, depth: 0.1 },
+      this.scene,
+    );
+    crossH.parent = root;
+    crossH.material = reticleMat;
+
+    const crossV = MeshBuilder.CreateBox(
+      `lw-target-reticle-cv-${tokenKey}`,
+      { width: 0.1, height: 0.04, depth: 3.1 },
+      this.scene,
+    );
+    crossV.parent = root;
+    crossV.material = reticleMat;
   }
 
   playTrajectoryEffect(

@@ -51,12 +51,25 @@ export interface VttEncounterVisionConfigVm {
   readonly defaultPlayerSightFeet: number;
 }
 
+export type VttAbilityTargetMode = 'single' | 'multi-target' | 'aoe';
+
 export interface VttTacticalAbilityVm extends ActionRuleVm {
   readonly turnCategory: Exclude<VttTurnActionCategory, 'all'>;
+  readonly targetMode: VttAbilityTargetMode;
+  readonly maxTargets: number;
   readonly aoeShape: 'none' | 'circle' | 'cone' | 'line';
   readonly aoeRadiusFeet: number;
   readonly requiresLineOfSight: boolean;
   readonly ownerKey?: string;
+}
+
+export interface VttActionBarSettingsVm {
+  readonly opacity: number;
+  readonly compactMode: boolean;
+  readonly snapSensitivityFeet: number;
+  readonly showHotbarKeybinds: boolean;
+  readonly showMapRangeLabels: boolean;
+  readonly autoCenterActiveTurn: boolean;
 }
 
 export interface VttChatMessageVm {

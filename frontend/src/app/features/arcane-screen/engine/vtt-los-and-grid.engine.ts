@@ -28,8 +28,10 @@ export function svgToWorldPoint(svgX: number, svgY: number): VttPoint2D {
 }
 
 export function feetToSvgPx(feet: number): number {
-  const worldUnits = feet / FEET_PER_WORLD_UNIT;
-  return Math.round((worldUnits / 24) * SVG_VIEWBOX_WIDTH * 10) / 10;
+  if (feet <= 5) {
+    return 28;
+  }
+  return Math.round(feet * 6.8 * 10) / 10;
 }
 
 export function distanceInFeet(a: VttPoint2D, b: VttPoint2D): number {
@@ -37,10 +39,10 @@ export function distanceInFeet(a: VttPoint2D, b: VttPoint2D): number {
 }
 
 export function snapToFiveFootGrid(pt: VttPoint2D): VttPoint2D {
-  const step = WORLD_UNITS_PER_GRID_CELL;
+  const step = 1.0; // 1 world unit step = 5ft dungeon tile alignment
   return {
-    x: Math.max(-10, Math.min(10, Math.round(pt.x / step) * step)),
-    z: Math.max(-6, Math.min(6, Math.round(pt.z / step) * step)),
+    x: Math.max(-10.5, Math.min(10.5, Math.round(pt.x / step) * step)),
+    z: Math.max(-6.5, Math.min(6.5, Math.round(pt.z / step) * step)),
   };
 }
 
@@ -252,14 +254,56 @@ export function computeClampedGridMovePath(
 }
 
 /**
- * Returns all tokens whose center lies within `aoeRadiusFeet` of `aoeCenter`
- * (or within 5ft of `aoeCenter` for single-target abilities with radius 0).
+ * Finds the nearest token within `snapRadiusFeet` of `cursorPos` that is within
+ * `maxRangeFeet` of `attackerPos` and has unobstructed Line of Sight.
+ */
+export function findClosestSnapToken(
+  attackerPos: VttPoint2D,
+  cursorPos: VttPoint2D,
+  maxRangeFeet: number,
+  snapRadiusFeet: number,
+  candidates: readonly VttTokenVm[],
+  walls: readonly VttWallSegmentVm[],
+): VttTokenVm | null {
+  let bestToken: VttTokenVm | null = null;
+  let bestCursorDist = snapRadiusFeet;
+
+  for (const token of candidates) {
+    const tokenPos: VttPoint2D = { x: token.x, z: token.z };
+    const distFromAttacker = distanceInFeet(attackerPos, tokenPos);
+    if (distFromAttacker > maxRangeFeet) {
+      continue;
+    }
+    if (!hasLineOfSight(attackerPos, tokenPos, maxRangeFeet, walls)) {
+      continue;
+    }
+    const distFromCursor = distanceInFeet(cursorPos, tokenPos);
+    if (distFromCursor <= bestCursorDist) {
+      bestCursorDist = distFromCursor;
+      bestToken = token;
+    }
+  }
+
+  return bestToken;
+}
+
+/**
+ * Returns all visible tokens whose body intersects or lies inside the SVG AoE circle
+ * centered at `aoeCenter` with radius `aoeRadiusFeet`.
  */
 export function findTokensInAoe(
   aoeCenter: VttPoint2D,
   aoeRadiusFeet: number,
   tokens: readonly VttTokenVm[],
 ): readonly VttTokenVm[] {
-  const effectiveRadiusFeet = Math.max(4, aoeRadiusFeet);
-  return tokens.filter((t) => distanceInFeet(aoeCenter, { x: t.x, z: t.z }) <= effectiveRadiusFeet);
+  const centerSvgX = worldToSvgX(aoeCenter.x);
+  const centerSvgY = worldToSvgY(aoeCenter.z);
+  const circleRadiusPx = feetToSvgPx(aoeRadiusFeet);
+  const tokenBodyAllowancePx = aoeRadiusFeet <= 5 ? 8 : 16;
+
+  return tokens.filter((t) => {
+    const dx = worldToSvgX(t.x) - centerSvgX;
+    const dy = worldToSvgY(t.z) - centerSvgY;
+    return Math.hypot(dx, dy) <= circleRadiusPx + tokenBodyAllowancePx;
+  });
 }

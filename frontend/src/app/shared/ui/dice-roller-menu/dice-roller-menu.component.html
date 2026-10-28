@@ -1,0 +1,77 @@
+<div class="lw-dice-menu" role="region" aria-label="Interactive 3D Polyhedral Dice Roller Menu">
+  <!-- Left Column: d100, d20, d12, d10, d8, d6, d4, X -->
+  <div class="lw-dice-menu__col">
+    @for (opt of dieOptions; track opt.dieType) {
+      <button
+        ngpButton
+        type="button"
+        class="lw-dice-orb"
+        [class.lw-dice-orb--queued]="counts()[opt.dieType] > 0"
+        [title]="'Click to add ' + opt.label + ' · Right-click to remove'"
+        (click)="incrementDie(opt.dieType)"
+        (contextmenu)="decrementDie($event, opt.dieType)"
+      >
+        <span>{{ opt.label }}</span>
+        @if (counts()[opt.dieType] > 0) {
+          <span class="lw-dice-orb__badge">{{ counts()[opt.dieType] }}</span>
+        }
+      </button>
+    }
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-orb lw-dice-orb--clear"
+      title="Clear Dice Pool & Return to Stationary 3D Showcase"
+      (click)="clearAll()"
+    >
+      <span>X</span>
+    </button>
+  </div>
+
+  <!-- Right Column (Bottom-aligned next to d8, d6, d4, X): Rand (1-5), Adv., Dis., Roll -->
+  <div class="lw-dice-menu__col lw-dice-menu__col--actions">
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-orb lw-dice-orb--random"
+      title="Quick Random Roll (Rolls 1 to 5 random polyhedral dice — never exceeds 5)"
+      (click)="triggerRandomRollUpToFive()"
+    >
+      <span>Rand</span>
+      <small>1-5</small>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-orb"
+      [class.lw-dice-orb--active-mode]="rollMode() === 'advantage'"
+      title="Toggle Advantage"
+      (click)="toggleRollMode('advantage')"
+    >
+      <span>Adv.</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-orb"
+      [class.lw-dice-orb--active-dis]="rollMode() === 'disadvantage'"
+      title="Toggle Disadvantage"
+      (click)="toggleRollMode('disadvantage')"
+    >
+      <span>Dis.</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-orb lw-dice-orb--roll"
+      [title]="totalQueued() > 0 ? 'Throw ' + totalQueued() + ' Queued Dice' : 'Throw 1d20'"
+      (click)="triggerRoll()"
+    >
+      <span>Roll</span>
+    </button>
+  </div>
+</div>

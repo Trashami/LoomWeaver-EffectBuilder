@@ -6,12 +6,15 @@ import {
   computeClampedGridMovePath,
   computeVisibilityPolygonSvgPoints,
   distanceInFeet,
+  findClosestSnapToken,
   findTokensInAoe,
   hasLineOfSight,
+  snapToFiveFootGrid,
   worldToSvgX,
   worldToSvgY,
 } from '../engine/vtt-los-and-grid.engine';
 import {
+  VttActionBarSettingsVm,
   VttChatMessageVm,
   VttFogMode,
   VttMeasureSubMode,
@@ -44,8 +47,19 @@ export class VttBattleStateService {
   readonly rightPanelCollapsed = signal<boolean>(false);
   readonly activeRightTab = signal<VttRightTabId>('initiative');
 
-  // Floating Battle Map Drawers
+  // Floating Battle Map Drawers & Action Bar Settings Modal
   readonly openDmDrawer = signal<VttOpenDmDrawer>('none');
+  readonly settingsModalOpen = signal<boolean>(false);
+  readonly mapMode3D = signal<boolean>(false);
+
+  readonly actionBarSettings = signal<VttActionBarSettingsVm>({
+    opacity: 95,
+    compactMode: false,
+    snapSensitivityFeet: 10,
+    showHotbarKeybinds: true,
+    showMapRangeLabels: true,
+    autoCenterActiveTurn: true,
+  });
 
   // Per-Encounter GM Fog of War & Vision Settings
   readonly fogMode = signal<VttFogMode>('explored-los');
@@ -67,6 +81,10 @@ export class VttBattleStateService {
   // Cursor position on the battlemap in world coordinates
   readonly cursorWorldPos = signal<VttPoint2D>({ x: 4, z: 1 });
 
+  // Direct Token Drag-and-Drop Movement State
+  readonly draggingTokenKey = signal<string | null>(null);
+  readonly dragStartWorldPos = signal<VttPoint2D | null>(null);
+
   // Measure Tool State (Spell Measure vs Stealth Movement Measure)
   readonly measureEnabled = signal<boolean>(false);
   readonly measureSubMode = signal<VttMeasureSubMode>('spell');
@@ -79,12 +97,19 @@ export class VttBattleStateService {
   readonly pendingAbility = signal<VttTacticalAbilityVm | null>(null);
   readonly targetSelectionMode = signal<boolean>(false);
   readonly multiTargetKeys = signal<readonly string[]>(['1:Encounter:vamp-1']);
+  // Ordered target sequence for multi-target attacks (1..3 targets, allows same target multiple times)
+  readonly queuedTargetSequence = signal<readonly string[]>([]);
 
   // Role-Scoped Right Panel Data
   readonly chatMessages = signal<readonly VttChatMessageVm[]>(SEED_VTT_CHAT_MESSAGES);
   readonly scopedQuests = signal<readonly VttScopedQuestVm[]>(SEED_VTT_SCOPED_QUESTS);
   readonly scopedNpcs = signal<readonly VttScopedNpcVm[]>(SEED_VTT_SCOPED_NPCS);
   readonly revealedLore = signal<readonly VttRevealedLoreVm[]>(SEED_VTT_REVEALED_LORE);
+
+  // Token whose turn it currently is in the Initiative Order & Current Round
+  readonly activeInitiativeToken = computed<VttTokenVm>(
+    () => this.vtt.tokens()[this.vtt.activeTurnIndex()] ?? this.vtt.tokens()[0],
+  );
 
   // Active observer token (the selected player token whose Line of Sight is evaluated)
   readonly activeObserverToken = computed<VttTokenVm>(() => {
@@ -101,6 +126,45 @@ export class VttBattleStateService {
     const spent = this.usedMovementFeetByToken()[observer.key] ?? 0;
     return Math.max(0, observer.movementFeet - spent);
   });
+
+  /**
+   * Enforces token movement rules:
+   * - DM ('gm') can move ANY token at ANY time.
+   * - Players ('players') can ONLY move their own token when it is their turn
+   *   in the initiative order and in the current round.
+   */
+  canMoveToken(token: VttTokenVm): { allowed: boolean; reason: string } {
+    if (this.store.viewerRole() === 'gm') {
+      return { allowed: true, reason: 'DM can move any token at any time.' };
+    }
+    if (token.faction !== 'party') {
+      return { allowed: false, reason: 'Players can only move their own party token.' };
+    }
+    const currentTurnToken = this.activeInitiativeToken();
+    if (!currentTurnToken || currentTurnToken.key !== token.key) {
+      return {
+        allowed: false,
+        reason: `Locked: Players can only move on their turn in Initiative (Current turn: ${currentTurnToken?.name ?? 'Unknown'}, Round ${this.vtt.activeRound()}).`,
+      };
+    }
+    const spent = this.usedMovementFeetByToken()[token.key] ?? 0;
+    if (spent >= token.movementFeet) {
+      return {
+        allowed: false,
+        reason: `${token.name} has used all ${token.movementFeet}ft of movement for Round ${this.vtt.activeRound()}.`,
+      };
+    }
+    return { allowed: true, reason: 'Active turn movement permitted.' };
+  }
+
+  isSingleOrMultiTargetAbility(ability: VttTacticalAbilityVm): boolean {
+    return (
+      ability.aoeRadiusFeet <= 5 ||
+      ability.aoeShape === 'none' ||
+      ability.targetMode === 'single' ||
+      ability.targetMode === 'multi-target'
+    );
+  }
 
   readonly observerSightPolygonSvg = computed<string>(() => {
     const obs = this.activeObserverToken();
@@ -122,20 +186,9 @@ export class VttBattleStateService {
     })),
   );
 
-  // Determines whether a token has Line of Sight from the active player token
   isTokenInPlayerLoS(token: VttTokenVm): boolean {
-    if (token.faction === 'party') {
-      const obs = this.activeObserverToken();
-      if (!obs || token.key === obs.key) return true;
-      return hasLineOfSight(
-        { x: obs.x, z: obs.z },
-        { x: token.x, z: token.z },
-        this.playerSightDistanceFeet(),
-        this.walls(),
-      );
-    }
     const obs = this.activeObserverToken();
-    if (!obs) return true;
+    if (!obs || token.key === obs.key) return true;
     return hasLineOfSight(
       { x: obs.x, z: obs.z },
       { x: token.x, z: token.z },
@@ -144,7 +197,6 @@ export class VttBattleStateService {
     );
   }
 
-  // Visible tokens on the map based on Role + GM Encounter Settings
   readonly visibleMapTokens = computed<readonly VttTokenVm[]>(() => {
     const all = this.vtt.tokens();
     const isPlayerView =
@@ -158,7 +210,6 @@ export class VttBattleStateService {
     });
   });
 
-  // Filtered abilities for the Bottom Character Action Bar
   readonly filteredTurnAbilities = computed<readonly VttTacticalAbilityVm[]>(() => {
     const cat = this.activeTurnCategory();
     const list = this.tacticalAbilities();
@@ -175,15 +226,14 @@ export class VttBattleStateService {
     return true;
   }
 
-  // Selected spell for Spell Measure tool
   readonly measuredAbility = computed<VttTacticalAbilityVm>(
     () =>
       this.tacticalAbilities().find((a) => a.id === this.measuredAbilityId()) ??
-      this.tacticalAbilities()[4] ??
+      this.tacticalAbilities()[5] ??
       this.tacticalAbilities()[0],
   );
 
-  // Live Spell Measure OR Attack/Spell Targeting Preview (Clamped to Range + Walls)
+  // Live Spell Measure OR Attack/Spell Targeting Preview
   readonly activeRangeAndAoePreview = computed(() => {
     const obs = this.activeObserverToken();
     if (!obs) return null;
@@ -196,6 +246,48 @@ export class VttBattleStateService {
 
     if (!ability) return null;
 
+    const candidates = this.visibleMapTokens().filter((t) => t.key !== obs.key);
+    const isSingleOrMulti = this.isSingleOrMultiTargetAbility(ability);
+    const maxTargets = Math.max(1, ability.maxTargets || 1);
+
+    if (isSingleOrMulti) {
+      const snappedToken = findClosestSnapToken(
+        { x: obs.x, z: obs.z },
+        this.cursorWorldPos(),
+        ability.rangeFeet,
+        this.actionBarSettings().snapSensitivityFeet,
+        candidates,
+        this.walls(),
+      );
+
+      const desiredEnd: VttPoint2D = snappedToken
+        ? { x: snappedToken.x, z: snappedToken.z }
+        : this.cursorWorldPos();
+
+      const clamped = clampLineToRangeAndWalls(
+        { x: obs.x, z: obs.z },
+        desiredEnd,
+        ability.rangeFeet,
+        this.walls(),
+        false,
+      );
+
+      const highlightedTokens =
+        snappedToken && !clamped.blockedByWall ? [snappedToken] : [];
+
+      return {
+        ability,
+        clamped,
+        isSingleOrMulti: true,
+        maxTargets,
+        snappedToken: !clamped.blockedByWall ? snappedToken : null,
+        aoeRadiusFeet: 5,
+        highlightedTokens,
+        highlightedKeys: new Set(highlightedTokens.map((t) => t.key)),
+      };
+    }
+
+    // True AoE (> 5ft radius circle/cone)
     const clamped = clampLineToRangeAndWalls(
       { x: obs.x, z: obs.z },
       this.cursorWorldPos(),
@@ -204,62 +296,108 @@ export class VttBattleStateService {
       false,
     );
 
-    const aoeRadius = Math.max(5, ability.aoeRadiusFeet || 5);
-    const highlightedTokens = findTokensInAoe(
-      clamped.end,
-      aoeRadius,
-      this.visibleMapTokens().filter((t) => t.key !== obs.key),
-    );
+    const aoeRadius = Math.max(10, ability.aoeRadiusFeet);
+    const highlightedTokens = findTokensInAoe(clamped.end, aoeRadius, candidates);
 
     return {
       ability,
       clamped,
+      isSingleOrMulti: false,
+      maxTargets: 0,
+      snappedToken: null,
       aoeRadiusFeet: aoeRadius,
       highlightedTokens,
       highlightedKeys: new Set(highlightedTokens.map((t) => t.key)),
     };
   });
 
-  // Live Stealth Grid Movement Measure Preview (Clamped to Max Movement + Walls + 5ft Grid)
+  // Determines whether a token should show the spinning red target reticle & red highlight
+  isTokenTargetedWithReticle(tokenKey: string): boolean {
+    if (this.activeRangeAndAoePreview()?.highlightedKeys?.has(tokenKey)) {
+      return true;
+    }
+    if (this.queuedTargetSequence().includes(tokenKey)) {
+      return true;
+    }
+    return this.multiTargetKeys().includes(tokenKey);
+  }
+
+  getTargetStackCount(tokenKey: string): number {
+    const seq = this.queuedTargetSequence();
+    if (seq.length > 0) {
+      return seq.filter((k) => k === tokenKey).length;
+    }
+    return this.multiTargetKeys().filter((k) => k === tokenKey).length;
+  }
+
+  readonly allReticleTargetKeys = computed<readonly string[]>(() => {
+    const set = new Set<string>(this.multiTargetKeys());
+    this.queuedTargetSequence().forEach((k) => set.add(k));
+    this.activeRangeAndAoePreview()?.highlightedTokens.forEach((t) => set.add(t.key));
+    return Array.from(set);
+  });
+
+  // Live Stealth Grid Movement Measure Preview (or Active Token Drag Preview)
   readonly activeMovementPreview = computed(() => {
+    const dragKey = this.draggingTokenKey();
+    const dragStart = this.dragStartWorldPos();
+    if (dragKey && dragStart) {
+      const token = this.vtt.tokens().find((t) => t.key === dragKey);
+      if (!token) return null;
+      const isGm = this.store.viewerRole() === 'gm';
+      const maxFeet = isGm ? 120 : Math.max(0, token.movementFeet - (this.usedMovementFeetByToken()[token.key] ?? 0));
+      return computeClampedGridMovePath(
+        dragStart,
+        this.cursorWorldPos(),
+        maxFeet,
+        isGm ? [] : this.walls(),
+      );
+    }
+
     if (!this.measureEnabled() || this.measureSubMode() !== 'movement') {
       return null;
     }
     const obs = this.activeObserverToken();
     if (!obs) return null;
-    const maxFeet = this.remainingMovementFeet();
     return computeClampedGridMovePath(
       { x: obs.x, z: obs.z },
       this.cursorWorldPos(),
-      maxFeet,
-      this.walls(),
+      this.store.viewerRole() === 'gm' ? 120 : this.remainingMovementFeet(),
+      this.store.viewerRole() === 'gm' ? [] : this.walls(),
     );
   });
 
   // Role-Scoped Right Panel Computed Lists
-  readonly visibleChatMessages = computed(() => {
-    if (this.store.viewerRole() === 'gm') return this.chatMessages();
-    return this.chatMessages().filter((m) => m.revealedToPlayers);
-  });
+  readonly visibleChatMessages = computed(() =>
+    this.store.viewerRole() === 'gm'
+      ? this.chatMessages()
+      : this.chatMessages().filter((m) => m.revealedToPlayers),
+  );
 
-  readonly visibleQuests = computed(() => {
-    if (this.store.viewerRole() === 'gm') return this.scopedQuests();
-    return this.scopedQuests().filter((q) => q.revealedToPlayers);
-  });
+  readonly visibleQuests = computed(() =>
+    this.store.viewerRole() === 'gm'
+      ? this.scopedQuests()
+      : this.scopedQuests().filter((q) => q.revealedToPlayers),
+  );
 
-  readonly visibleNpcs = computed(() => {
-    if (this.store.viewerRole() === 'gm') return this.scopedNpcs();
-    return this.scopedNpcs().filter((n) => n.revealedToPlayers);
-  });
+  readonly visibleNpcs = computed(() =>
+    this.store.viewerRole() === 'gm'
+      ? this.scopedNpcs()
+      : this.scopedNpcs().filter((n) => n.revealedToPlayers),
+  );
 
-  readonly visibleLore = computed(() => {
-    if (this.store.viewerRole() === 'gm') return this.revealedLore();
-    return this.revealedLore().filter((l) => l.revealedToPlayers);
-  });
+  readonly visibleLore = computed(() =>
+    this.store.viewerRole() === 'gm'
+      ? this.revealedLore()
+      : this.revealedLore().filter((l) => l.revealedToPlayers),
+  );
 
-  // Actions & Mutators
   toggleDmDrawer(drawer: VttOpenDmDrawer): void {
     this.openDmDrawer.update((curr) => (curr === drawer ? 'none' : drawer));
+  }
+
+  updateActionBarSettings(patch: Partial<VttActionBarSettingsVm>): void {
+    this.actionBarSettings.update((curr) => ({ ...curr, ...patch }));
   }
 
   toggleMeasureTool(subMode?: VttMeasureSubMode): void {
@@ -268,6 +406,7 @@ export class VttBattleStateService {
         this.measureEnabled.set(false);
       } else {
         this.pendingAbility.set(null);
+        this.queuedTargetSequence.set([]);
         this.measureSubMode.set(subMode);
         this.measureEnabled.set(true);
       }
@@ -276,26 +415,103 @@ export class VttBattleStateService {
     this.measureEnabled.update((v) => !v);
     if (this.measureEnabled()) {
       this.pendingAbility.set(null);
+      this.queuedTargetSequence.set([]);
     }
   }
 
-  commitStealthGridMove(): void {
+  beginTokenDrag(token: VttTokenVm): { allowed: boolean; reason: string } {
+    const check = this.canMoveToken(token);
+    if (!check.allowed) {
+      return check;
+    }
+    this.draggingTokenKey.set(token.key);
+    this.dragStartWorldPos.set({ x: token.x, z: token.z });
+    return check;
+  }
+
+  updateDraggedTokenPosition(worldPt: VttPoint2D): void {
+    this.cursorWorldPos.set(worldPt);
+    const dragKey = this.draggingTokenKey();
+    const dragStart = this.dragStartWorldPos();
+    if (!dragKey || !dragStart) return;
+
+    if (this.store.viewerRole() === 'gm') {
+      const snapped = snapToFiveFootGrid(worldPt);
+      this.vtt.tokens.update((list) =>
+        list.map((t) => (t.key === dragKey ? { ...t, x: snapped.x, z: snapped.z } : t)),
+      );
+      return;
+    }
+
     const preview = this.activeMovementPreview();
+    if (!preview) return;
+    this.vtt.tokens.update((list) =>
+      list.map((t) =>
+        t.key === dragKey ? { ...t, x: preview.destination.x, z: preview.destination.z } : t,
+      ),
+    );
+  }
+
+  endTokenDrag(): { movedToken: VttTokenVm | null; distanceFeet: number } {
+    const dragKey = this.draggingTokenKey();
+    const dragStart = this.dragStartWorldPos();
+    if (!dragKey || !dragStart) {
+      this.draggingTokenKey.set(null);
+      this.dragStartWorldPos.set(null);
+      return { movedToken: null, distanceFeet: 0 };
+    }
+
+    const token = this.vtt.tokens().find((t) => t.key === dragKey) ?? null;
+    const dist = token
+      ? Math.round(distanceInFeet(dragStart, { x: token.x, z: token.z }) / 5) * 5
+      : 0;
+
+    if (token && dist > 0) {
+      if (this.store.viewerRole() === 'players') {
+        this.usedMovementFeetByToken.update((prev) => ({
+          ...prev,
+          [token.key]: (prev[token.key] ?? 0) + dist,
+        }));
+      }
+      if (token.faction === 'party') {
+        this.exploredTrailPoints.update((pts) => [
+          ...pts,
+          { x: token.x, z: token.z, radiusFeet: Math.min(45, this.playerSightDistanceFeet()) },
+        ]);
+      }
+    }
+
+    this.draggingTokenKey.set(null);
+    this.dragStartWorldPos.set(null);
+    return { movedToken: token, distanceFeet: dist };
+  }
+
+  commitStealthGridMove(): { allowed: boolean; reason: string; distanceFeet: number } {
     const obs = this.activeObserverToken();
-    if (!preview || !obs || preview.distanceFeet <= 0) return;
+    const preview = this.activeMovementPreview();
+    if (!obs || !preview || preview.distanceFeet <= 0) {
+      return { allowed: false, reason: 'Move cursor to a valid grid tile first.', distanceFeet: 0 };
+    }
+    const perm = this.canMoveToken(obs);
+    if (!perm.allowed) {
+      return { allowed: false, reason: perm.reason, distanceFeet: 0 };
+    }
 
     const dest = preview.destination;
     this.vtt.tokens.update((list) =>
       list.map((t) => (t.key === obs.key ? { ...t, x: dest.x, z: dest.z } : t)),
     );
-    this.usedMovementFeetByToken.update((prev) => ({
-      ...prev,
-      [obs.key]: (prev[obs.key] ?? 0) + preview.distanceFeet,
-    }));
+    if (this.store.viewerRole() === 'players') {
+      this.usedMovementFeetByToken.update((prev) => ({
+        ...prev,
+        [obs.key]: (prev[obs.key] ?? 0) + preview.distanceFeet,
+      }));
+    }
     this.exploredTrailPoints.update((pts) => [
       ...pts,
       { x: dest.x, z: dest.z, radiusFeet: Math.min(45, this.playerSightDistanceFeet()) },
     ]);
+    return { allowed: true, reason: 'Moved', distanceFeet: preview.distanceFeet };
   }
 
   resetTurnMovement(tokenKey: string): void {
@@ -305,12 +521,66 @@ export class VttBattleStateService {
   beginAbilityTargeting(ability: VttTacticalAbilityVm): void {
     if (!this.isAbilityAvailableOnTurn(ability)) return;
     this.measureEnabled.set(false);
+    this.queuedTargetSequence.set([]);
     this.pendingAbility.set(ability);
+  }
+
+  /**
+   * Handles clicking a token or snapped target while an ability is pending.
+   * - If `maxTargets > 1` (2 or 3 targets, e.g. Magic Missile / Twin-Blade), adds the target
+   *   (allowing the SAME target to be selected 2 or 3 times!) and keeps the overlay active
+   *   until all target slots are filled.
+   */
+  recordPendingAbilityTargetClick(targetToken?: VttTokenVm): {
+    shouldExecuteNow: boolean;
+    selectedCount: number;
+    maxTargets: number;
+  } {
+    const ability = this.pendingAbility();
+    const preview = this.activeRangeAndAoePreview();
+    if (!ability || !preview) {
+      return { shouldExecuteNow: false, selectedCount: 0, maxTargets: 1 };
+    }
+
+    if (!preview.isSingleOrMulti) {
+      // True AoE spell: auto-selects all visible tokens inside the green AoE circle and casts immediately
+      const aoeKeys = preview.highlightedTokens.map((t) => t.key);
+      if (aoeKeys.length > 0) {
+        this.multiTargetKeys.set(aoeKeys);
+        this.queuedTargetSequence.set(aoeKeys);
+        this.vtt.selectedTargetKey.set(aoeKeys[0]);
+      }
+      return {
+        shouldExecuteNow: true,
+        selectedCount: aoeKeys.length,
+        maxTargets: aoeKeys.length,
+      };
+    }
+
+    const picked = targetToken ?? preview.snappedToken;
+    if (!picked) {
+      return {
+        shouldExecuteNow: false,
+        selectedCount: this.queuedTargetSequence().length,
+        maxTargets: preview.maxTargets,
+      };
+    }
+
+    const nextSeq = [...this.queuedTargetSequence(), picked.key];
+    this.queuedTargetSequence.set(nextSeq);
+    this.multiTargetKeys.set(Array.from(new Set(nextSeq)));
+    this.vtt.selectedTargetKey.set(picked.key);
+
+    const shouldExecuteNow = nextSeq.length >= preview.maxTargets;
+    return {
+      shouldExecuteNow,
+      selectedCount: nextSeq.length,
+      maxTargets: preview.maxTargets,
+    };
   }
 
   handleTokenClick(token: VttTokenVm, shiftKey: boolean): void {
     const obs = this.activeObserverToken();
-    // If clicking a party member without Shift/Targeting mode and no pending ability, switch active character
     if (
       token.faction === 'party' &&
       !shiftKey &&
@@ -321,29 +591,18 @@ export class VttBattleStateService {
       return;
     }
 
-    // Check Line of Sight before allowing a player to target a creature
     if (obs && !this.isTokenInPlayerLoS(token) && this.store.viewerRole() === 'players') {
       return;
     }
 
     if (shiftKey || this.targetSelectionMode()) {
-      this.multiTargetKeys.update((keys) => {
-        const exists = keys.includes(token.key);
-        if (exists) {
-          const next = keys.filter((k) => k !== token.key);
-          return next.length > 0 ? next : [token.key];
-        }
-        return [...keys, token.key];
-      });
+      this.multiTargetKeys.update((keys) => [...keys, token.key]);
+      this.queuedTargetSequence.update((seq) => [...seq, token.key]);
       this.vtt.selectedTargetKey.set(token.key);
-    } else {
+    } else if (!this.pendingAbility()) {
       this.multiTargetKeys.set([token.key]);
+      this.queuedTargetSequence.set([token.key]);
       this.vtt.selectedTargetKey.set(token.key);
-    }
-
-    // If a live ability is awaiting target confirmation, execute it immediately on click
-    if (this.pendingAbility()) {
-      this.cursorWorldPos.set({ x: token.x, z: token.z });
     }
   }
 
@@ -356,37 +615,41 @@ export class VttBattleStateService {
     const obs = this.activeObserverToken();
     if (!preview || !ability || !obs) return null;
 
-    // Combine tokens highlighted inside the AoE template + any multi-targeted tokens within range & LoS
-    const templateTargets = preview.highlightedTokens;
-    const explicitTargets = this.vtt
-      .tokens()
-      .filter(
-        (t) =>
-          this.multiTargetKeys().includes(t.key) &&
-          distanceInFeet({ x: obs.x, z: obs.z }, { x: t.x, z: t.z }) <= ability.rangeFeet &&
-          this.isTokenInPlayerLoS(t),
-      );
+    const allTokens = this.vtt.tokens();
+    let finalTargets: VttTokenVm[] = [];
 
-    const mergedMap = new Map<string, VttTokenVm>();
-    templateTargets.forEach((t) => mergedMap.set(t.key, t));
-    if (mergedMap.size === 0) {
-      explicitTargets.forEach((t) => mergedMap.set(t.key, t));
+    if (preview.isSingleOrMulti) {
+      const seq = this.queuedTargetSequence();
+      if (seq.length > 0) {
+        finalTargets = seq
+          .map((key) => allTokens.find((t) => t.key === key))
+          .filter((t): t is VttTokenVm => !!t);
+      } else if (preview.snappedToken) {
+        finalTargets = [preview.snappedToken];
+      }
+    } else {
+      // Auto-select all visible tokens inside the AoE circle
+      finalTargets = [...preview.highlightedTokens];
     }
 
-    const finalTargets = Array.from(mergedMap.values());
     if (finalTargets.length > 0) {
-      this.multiTargetKeys.set(finalTargets.map((t) => t.key));
+      const uniqueKeys = Array.from(new Set(finalTargets.map((t) => t.key)));
+      this.multiTargetKeys.set(uniqueKeys);
       this.vtt.selectedTargetKey.set(finalTargets[0].key);
     }
 
     this.pendingAbility.set(null);
+    this.queuedTargetSequence.set([]);
     return { ability, targets: finalTargets };
   }
 
   cancelAllInteractiveModes(): void {
     this.pendingAbility.set(null);
+    this.queuedTargetSequence.set([]);
     this.targetSelectionMode.set(false);
     this.measureEnabled.set(false);
+    this.draggingTokenKey.set(null);
+    this.dragStartWorldPos.set(null);
   }
 
   sendChatMessage(text: string, gmWhisperOnly = false): void {

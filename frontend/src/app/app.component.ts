@@ -72,7 +72,11 @@ export class AppComponent {
 
   readonly isFullBleedVttRoute = computed(() => {
     const clean = this.currentUrl().split('?')[0].split('#')[0];
-    return clean.startsWith('/arcane-screen') || clean.startsWith('/maps');
+    return (
+      clean.startsWith('/arcane-screen') ||
+      clean.startsWith('/maps') ||
+      clean.startsWith('/dice')
+    );
   });
 
   readonly isLandingSurface = computed(() => {
@@ -153,6 +157,10 @@ export class AppComponent {
           const nextUrl = e.urlAfterRedirects || e.url;
           this.currentUrl.set(nextUrl);
           if (nextUrl.startsWith('/characters')) {
+            this.rightGuideCollapsed.set(true);
+          }
+          if (nextUrl.startsWith('/dice')) {
+            this.leftNavCollapsed.set(false);
             this.rightGuideCollapsed.set(true);
           }
           if (nextUrl.startsWith('/arcane-screen') || nextUrl.startsWith('/maps')) {

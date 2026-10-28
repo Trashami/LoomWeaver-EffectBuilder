@@ -149,7 +149,13 @@ export function buildBabylonDieVertexData(
         faceNormal.x, faceNormal.y, faceNormal.z
       );
       uvs.push(u0, v0uv, u1, v1uv, u2, v2uv);
-      indices.push(baseVert, baseVert + 1, baseVert + 2);
+
+      const triCross = Vector3.Cross(pB.subtract(pA), pC.subtract(pA));
+      if (Vector3.Dot(triCross, faceNormal) > 0) {
+        indices.push(baseVert, baseVert + 2, baseVert + 1);
+      } else {
+        indices.push(baseVert, baseVert + 1, baseVert + 2);
+      }
     }
 
     const indexCount = indices.length - startIdx;
@@ -177,7 +183,8 @@ export function buildBabylonDieVertexData(
 export function getRotationForTopValue(
   type: DicePolyhedronType,
   targetValue: number,
-  yawRadians = 0
+  yawRadians = 0,
+  targetDirection?: Vector3
 ): Quaternion {
   if (!cachedFaceNormals.has(type)) {
     buildBabylonDieVertexData(type, 1.0);
@@ -191,10 +198,11 @@ export function getRotationForTopValue(
   }
 
   const normal = map.get(lookup) ?? map.get(1) ?? new Vector3(0, 1, 0);
-  const up = new Vector3(0, type === 'd4' ? -1 : 1, 0);
+  const desiredDir = targetDirection ? targetDirection.normalizeToNew() : new Vector3(0, 1, 0);
+  const up = type === 'd4' ? desiredDir.scale(-1) : desiredDir;
 
   const alignQ = new Quaternion();
   Quaternion.FromUnitVectorsToRef(normal.normalizeToNew(), up, alignQ);
-  const yawQ = Quaternion.RotationAxis(Vector3.Up(), yawRadians);
+  const yawQ = Quaternion.RotationAxis(desiredDir, yawRadians);
   return yawQ.multiply(alignQ);
 }

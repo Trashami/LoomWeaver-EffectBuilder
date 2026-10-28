@@ -74,9 +74,9 @@ import { LwIconComponent } from '../icon/icon.component';
     `
       .lw-alertify-stack {
         position: fixed;
-        right: 1.15rem;
-        bottom: 1.15rem;
-        z-index: 6500;
+        right: 2rem;
+        bottom: 9.5rem;
+        z-index: 100001;
         display: flex;
         flex-direction: column;
         gap: 0.55rem;

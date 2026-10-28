@@ -1,17 +1,47 @@
 <div
   class="lw-fs-dice-overlay"
-  [class.lw-fs-dice-overlay--rolling]="overlay.overlayPhase() === 'rolling'"
-  [class.lw-fs-dice-overlay--settled]="overlay.overlayPhase() === 'settled'"
-  [class.lw-fs-dice-overlay--fading]="overlay.overlayPhase() === 'fading'"
+  [class.lw-fs-dice-overlay--active]="overlay.overlayPhase() !== 'hidden'"
+  [class.lw-fs-dice-overlay--interactive]="
+    overlay.overlayPhase() === 'rolling' || overlay.overlayPhase() === 'settled'
+  "
   [attr.aria-hidden]="overlay.overlayPhase() === 'hidden'"
   (click)="onBackdropClick()"
 >
-  <canvas #fullscreenDiceCanvas class="lw-fs-dice-overlay__canvas"></canvas>
+  <div
+    class="lw-fs-dice-overlay__backdrop"
+    [class.is-visible]="
+      overlay.overlayPhase() === 'rolling' || overlay.overlayPhase() === 'settled'
+    "
+    [class.is-fading]="
+      overlay.overlayPhase() === 'bg-fading' ||
+      overlay.overlayPhase() === 'dice-hold' ||
+      overlay.overlayPhase() === 'dice-fading' ||
+      overlay.overlayPhase() === 'alert-hold' ||
+      overlay.overlayPhase() === 'alert-fading'
+    "
+  ></div>
+
+  <canvas
+    #fullscreenDiceCanvas
+    class="lw-fs-dice-overlay__canvas"
+    [class.is-visible]="
+      overlay.overlayPhase() === 'rolling' ||
+      overlay.overlayPhase() === 'settled' ||
+      overlay.overlayPhase() === 'bg-fading' ||
+      overlay.overlayPhase() === 'dice-hold'
+    "
+    [class.is-fading]="
+      overlay.overlayPhase() === 'dice-fading' ||
+      overlay.overlayPhase() === 'alert-hold' ||
+      overlay.overlayPhase() === 'alert-fading'
+    "
+  ></canvas>
 
   @if (overlay.activeRollSummary(); as summary) {
-    @if (overlay.overlayPhase() === 'settled' || overlay.overlayPhase() === 'fading') {
+    @if (overlay.overlayPhase() !== 'hidden' && overlay.overlayPhase() !== 'rolling') {
       <aside
         class="lw-fs-dice-overlay__Dock"
+        [class.is-fading]="overlay.overlayPhase() === 'alert-fading'"
         role="status"
         aria-live="polite"
         (click)="$event.stopPropagation()"

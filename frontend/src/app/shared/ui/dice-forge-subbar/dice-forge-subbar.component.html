@@ -1,0 +1,143 @@
+<header class="lw-dice-topbar" role="region" aria-label="Dice Forge Identity, Texture Preview & Actions">
+  <div class="lw-dice-topbar__identity">
+    <!-- Redesigned Card: Shows Selected Dice Texture Only -->
+    <div
+      class="lw-dice-texture-card"
+      [title]="'Selected Dice Texture: ' + activeSkin().name + ' (' + activeSkin().materialFamily + ')'"
+      aria-label="Selected Dice Texture Swatch"
+    >
+      <canvas #textureCanvas width="96" height="96" class="lw-dice-texture-card__canvas"></canvas>
+    </div>
+
+    <div class="lw-dice-identity-copy">
+      <div class="lw-dice-identity-row">
+        @if (editingName()) {
+          <input
+            type="text"
+            class="lw-dice-name-input"
+            [ngModel]="customConfig().customName"
+            (ngModelChange)="customNameChanged.emit($event)"
+            (blur)="editingName.set(false)"
+            (keydown.enter)="editingName.set(false)"
+            placeholder="Custom Dice Set Name..."
+            aria-label="Custom Dice Name"
+          />
+        } @else {
+          <h1 class="lw-dice-name" (click)="toggleNameEdit()" title="Click to rename custom dice set">
+            {{ customConfig().customName || activeSkin().name }}
+          </h1>
+        }
+        <button
+          ngpButton
+          type="button"
+          class="lw-dice-edit-btn"
+          title="Edit Custom Dice Name"
+          (click)="toggleNameEdit()"
+        >
+          <lw-icon name="pen" [size]="12" />
+        </button>
+
+        @if (savedPresets().length > 0) {
+          <div class="lw-dice-preset-pills" title="Saved User Custom Dice Sets">
+            @for (preset of savedPresets(); track preset.id) {
+              <button
+                ngpButton
+                type="button"
+                class="lw-dice-preset-pill"
+                [class.is-active]="preset.id === activePresetId()"
+                (click)="presetSelected.emit(preset)"
+              >
+                {{ preset.name }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="lw-dice-sub-row">
+        <span class="lw-dice-sub-meta">
+          {{ activeSkin().materialFamily }} · {{ (customConfig().surfaceStyleOverride || activeSkin().surfaceStyle).toUpperCase() }} Texture
+        </span>
+        <span class="lw-dice-scale-tag">{{ (customConfig().sizePreset || 'medium').toUpperCase() }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center: Die Focus Pills -->
+  <div class="lw-dice-topbar__center" role="group" aria-label="Showcase Die Selection">
+    @for (dieOpt of dieFocusOptions; track dieOpt) {
+      <button
+        ngpButton
+        type="button"
+        class="lw-dice-focus-pill"
+        [class.is-active]="focusDie() === dieOpt"
+        (click)="focusDieSelected.emit(dieOpt)"
+      >
+        {{ dieOpt === 'all' ? 'Full Set' : dieOpt.toUpperCase() }}
+      </button>
+    }
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-focus-pill lw-dice-focus-pill--ghost"
+      title="Reset 3D Camera Orbit to Center Showcase"
+      (click)="resetCameraRequested.emit()"
+    >
+      Reset View
+    </button>
+  </div>
+
+  <!-- Right: Save, Save As New, Publish & Market Import (Styled like Characters & Maps) -->
+  <div class="lw-dice-topbar__right">
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-action-btn lw-dice-action-btn--save"
+      title="Save customizations under the current dice set name"
+      (click)="savePresetRequested.emit()"
+    >
+      <span>Save Dice</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-action-btn lw-dice-action-btn--secondary"
+      title="Save current customized dice as a brand new named preset"
+      (click)="saveAsNewRequested.emit()"
+    >
+      <span>Save As New</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-action-btn lw-dice-action-btn--secondary"
+      title="Browse and import community dice sets from the Marketplace"
+      (click)="openMarketModalRequested.emit()"
+    >
+      <span>Market Import</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-action-btn lw-dice-action-btn--publish"
+      title="Publish your custom dice configuration to the LoomWeaver Marketplace"
+      (click)="publishToMarketRequested.emit()"
+    >
+      <span>Publish to Market</span>
+    </button>
+
+    <button
+      ngpButton
+      type="button"
+      class="lw-dice-icon-btn"
+      [class.lw-dice-icon-btn--active]="!rightCollapsed()"
+      title="Toggle Right Tool Settings Inspector"
+      (click)="toggleRightDock.emit()"
+    >
+      <lw-icon name="layers" [size]="14" />
+    </button>
+  </div>
+</header>

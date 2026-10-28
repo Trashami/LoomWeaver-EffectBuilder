@@ -1,0 +1,30 @@
+<aside class="lw-dice-dock" role="toolbar" aria-label="Dice Forge Editing Sub-Menu">
+  <div class="lw-dice-dock__list">
+    @for (tool of tools(); track tool.id) {
+      <button
+        ngpButton
+        type="button"
+        class="lw-dice-dock__btn"
+        [class.lw-dice-dock__btn--active]="activeToolId() === tool.id"
+        [attr.aria-pressed]="activeToolId() === tool.id"
+        [title]="tool.label + ' — ' + tool.hint"
+        (click)="toolSelected.emit(tool.id)"
+      >
+        <lw-icon [name]="tool.icon" [size]="18" />
+        <span class="lw-dice-dock__label">{{ tool.label }}</span>
+      </button>
+    }
+  </div>
+
+  <button
+    ngpButton
+    type="button"
+    class="lw-dice-dock__collapse-btn"
+    title="Hide Dice Tools Sub-Menu"
+    aria-label="Hide Dice Tools Sub-Menu"
+    (click)="collapseRequested.emit()"
+  >
+    <lw-icon name="double-arrow-left" [size]="18" />
+    <span class="lw-dice-dock__label">Hide</span>
+  </button>
+</aside>

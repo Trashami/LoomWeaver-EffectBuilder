@@ -1,191 +1,209 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import {
-  AfterViewInit, Component, computed, ElementRef,
-  inject, OnDestroy, OnInit, signal, ViewChild
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  OnDestroy,
+  OnInit,
+  signal,
+  ViewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AuthSessionService } from '../../core/services/auth-session.service';
+import { LwAlertifyService } from '../../core/services/lw-alertify.service';
 import {
-  DiceRollFormulaRequest, DiceRollLedgerItem, LwBadgeComponent,
-  LwButtonComponent, LwCardComponent, LwDiceRollerTrayComponent, LwPanelComponent, LwStatCardComponent
+  DicePoolRollRequest,
+  LwButtonComponent,
+  LwDiceForgeInspectorComponent,
+  LwDiceForgeSubbarComponent,
+  LwDiceRollerMenuComponent,
+  LwDiceToolDockComponent,
+  LwIconComponent,
 } from '../../shared/ui';
-import { DiceCustomizerPanelComponent } from './components/dice-customizer-panel/dice-customizer-panel.component';
+import { buildDefaultMarketplaceDicePresets } from './dice-marketplace-defaults';
 import { DICE_SOUND_PROFILES, DiceSoundService } from './engine/audio';
 import { BabylonDiceStageService } from './engine/babylon-dice-stage.service';
+import {
+  DEFAULT_DICE_PHYSICS_CONFIG,
+  DiceForgeToolId,
+  DicePhysicsConfig,
+} from './engine/dice-physics.types';
 import { DICE_CRITFAIL_EFFECTS, DICE_NAT20_EFFECTS } from './engine/effects';
 import {
-  DICE_MODEL_CATALOG, DiceModelDefinition,
-  DicePolyhedronType, resolveDiceModel
+  DICE_MODEL_CATALOG,
+  DiceModelDefinition,
+  DicePolyhedronType,
+  resolveDiceModel,
 } from './engine/models';
 import {
-  createDefaultRuntimeConfigFromSkin, DICE_SKIN_CATALOG,
-  DiceCustomRuntimeConfig, DiceSkinConfig, resolveDiceSkin
+  createDefaultRuntimeConfigFromSkin,
+  DICE_SKIN_CATALOG,
+  DiceCustomRuntimeConfig,
+  DiceSkinConfig,
+  MarketplaceDicePreset,
+  resolveDiceSkin,
+  SavedUserDicePreset,
 } from './engine/skins';
 
-export interface DiceMilestoneRewardDto {
-  id: string;
-  title: string;
-  description: string;
-  targetType: string;
-  targetItemId: string;
-  targetItemName: string;
-  isCompleted: boolean;
-  isClaimed: boolean;
-  bonusLoommarks: number;
-}
-
-export type SkinVaultFilter = 'all' | 'owned' | 'rewards' | 'store';
+const USER_PRESETS_STORAGE_KEY = 'lw_user_dice_presets_v2';
+const ACTIVE_CONFIG_STORAGE_KEY = 'lw_active_dice_config_v2';
 
 @Component({
   selector: 'app-dice-page',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, LwPanelComponent, LwCardComponent, LwButtonComponent,
-    LwBadgeComponent, LwStatCardComponent, LwDiceRollerTrayComponent,
-    DiceCustomizerPanelComponent
+    CommonModule,
+    FormsModule,
+    LwButtonComponent,
+    LwIconComponent,
+    LwDiceForgeSubbarComponent,
+    LwDiceToolDockComponent,
+    LwDiceRollerMenuComponent,
+    LwDiceForgeInspectorComponent,
   ],
   templateUrl: './dice.page.html',
-  styleUrl: './dice.page.scss'
+  styleUrl: './dice.page.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DicePageComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly http = inject(HttpClient);
-  private readonly stageService = inject(BabylonDiceStageService);
+  private readonly auth = inject(AuthSessionService);
+  private readonly alertify = inject(LwAlertifyService);
+  readonly stageService = inject(BabylonDiceStageService);
   readonly soundService = inject(DiceSoundService);
 
   @ViewChild('diceStageCanvas') diceStageCanvas?: ElementRef<HTMLCanvasElement>;
 
-  readonly skinCatalog = signal<DiceSkinConfig[]>(DICE_SKIN_CATALOG);
-  readonly modelCatalog = signal<DiceModelDefinition[]>(DICE_MODEL_CATALOG);
+  readonly skinCatalog = signal<readonly DiceSkinConfig[]>(DICE_SKIN_CATALOG);
+  readonly modelCatalog = signal<readonly DiceModelDefinition[]>(DICE_MODEL_CATALOG);
   readonly nat20Effects = signal(DICE_NAT20_EFFECTS);
   readonly critFailEffects = signal(DICE_CRITFAIL_EFFECTS);
   readonly soundProfiles = signal(DICE_SOUND_PROFILES);
 
-  readonly vaultFilter = signal<SkinVaultFilter>('all');
+  readonly activeTool = signal<DiceForgeToolId>('skin');
+  readonly inspectorOpen = signal<boolean>(true);
   readonly focusDie = signal<DicePolyhedronType | 'all'>('all');
-  readonly loommarksBalance = signal<number>(1250);
-  readonly statusBanner = signal<string | null>(null);
+  readonly marketModalOpen = signal<boolean>(false);
+  readonly cameraZoomPercent = signal<number>(100);
 
-  readonly unlockedSkinIds = signal<string[]>([
-    'skin-obsidian-gold', 'skin-nordic-stone', 'skin-gloss-resin',
-    'skin-engraved-steel', 'skin-astral-glass'
-  ]);
-  readonly unlockedModelIds = signal<string[]>([
-    'model-classic-chamfer', 'model-sharp-gem', 'model-custom-glb'
-  ]);
-
-  readonly milestones = signal<DiceMilestoneRewardDto[]>([
-    {
-      id: 'milestone-character-studio', title: 'Hero of Icrandor',
-      description: 'Complete a full character build in the Character Studio.',
-      targetType: 'skin', targetItemId: 'skin-fey-emerald',
-      targetItemName: 'Edhellain Moonwood', isCompleted: true, isClaimed: false, bonusLoommarks: 150
-    },
-    {
-      id: 'milestone-cinth-masquerade', title: 'Velvet & Fangs Survivor',
-      description: "Survive the Lord of Cinth's masquerade ambush.",
-      targetType: 'skin', targetItemId: 'skin-vampire-bloodstone',
-      targetItemName: 'Cinth Crimson Bloodstone', isCompleted: true, isClaimed: false, bonusLoommarks: 200
-    },
-    {
-      id: 'milestone-dwarven-delve', title: 'Stone-Sense Delver',
-      description: 'Clear a subterranean encounter using Dwarven Stone-Sense.',
-      targetType: 'model', targetItemId: 'model-dwarven-heavy',
-      targetItemName: 'Dwarven Heavy Forge-Cut Model', isCompleted: true, isClaimed: false, bonusLoommarks: 175
-    }
-  ]);
-
-  readonly customConfig = signal<DiceCustomRuntimeConfig>(createDefaultRuntimeConfigFromSkin(DICE_SKIN_CATALOG[0]));
+  readonly customConfig = signal<DiceCustomRuntimeConfig>(
+    this.loadStoredActiveConfig() ?? createDefaultRuntimeConfigFromSkin(DICE_SKIN_CATALOG[0]),
+  );
   readonly activeSkin = computed(() => resolveDiceSkin(this.customConfig().skinId));
   readonly activeModel = computed(() => resolveDiceModel(this.customConfig().modelId));
 
-  readonly filteredSkins = computed(() => {
-    const filter = this.vaultFilter();
-    const owned = this.unlockedSkinIds();
-    return this.skinCatalog().filter(skin => {
-      if (filter === 'owned') return owned.includes(skin.id);
-      if (filter === 'rewards') return skin.unlockSource === 'reward' || skin.unlockSource === 'loommarks';
-      if (filter === 'store') return skin.unlockSource === 'purchase' || skin.unlockSource === 'loommarks';
-      return true;
-    });
-  });
-
-  readonly rollHistory = signal<DiceRollLedgerItem[]>([
-    {
-      id: 'roll-seed-201', label: 'Fivi Slingshot Tooth Strike', expression: '1d20 + 8 (ADV)',
-      diceResults: [14, 20], modifier: 8, total: 28, isCriticalSuccess: true, isCriticalFailure: false,
-      sha256Hash: 'SHA256:9F4A2C8E1B77D03E', rolledAt: '12m ago'
-    },
-    {
-      id: 'roll-seed-200', label: 'Munk Runed Greatsword Cleave', expression: '2d6 + 5',
-      diceResults: [6, 5], modifier: 5, total: 16, isCriticalSuccess: false, isCriticalFailure: false,
-      sha256Hash: 'SHA256:3D81B60A44E91C20', rolledAt: '18m ago'
-    }
-  ]);
-
-  readonly lastRoll = computed(() => this.rollHistory()[0] ?? null);
-  readonly dieFocusOptions: (DicePolyhedronType | 'all')[] = ['all', 'd4', 'd6', 'd8', 'd10', 'd12', 'd20'];
+  readonly savedUserPresets = signal<readonly SavedUserDicePreset[]>(this.loadStoredUserPresets());
+  readonly activePresetId = signal<string>('');
+  readonly marketplacePresets = signal<readonly MarketplaceDicePreset[]>(
+    buildDefaultMarketplaceDicePresets(),
+  );
 
   ngOnInit(): void {
-    this.http.get<{
-      loommarksBalance: number;
-      unlockedSkinIds: string[];
-      unlockedModelIds: string[];
-      milestones: DiceMilestoneRewardDto[];
-    }>('/api/v2/campaigns/1/dice-forge/state').subscribe({
-      next: state => {
-        this.loommarksBalance.set(state.loommarksBalance);
-        this.unlockedSkinIds.set(state.unlockedSkinIds);
-        this.unlockedModelIds.set(state.unlockedModelIds);
-        this.milestones.set(state.milestones);
-      },
-      error: () => {}
-    });
+    const presets = this.savedUserPresets();
+    if (presets.length > 0 && !this.activePresetId()) {
+      this.activePresetId.set(presets[0].id);
+    }
+
+    this.http
+      .get<{
+        savedPresets?: SavedUserDicePreset[];
+        marketplacePresets?: MarketplaceDicePreset[];
+      }>('/api/v2/campaigns/1/dice-forge/state')
+      .subscribe({
+        next: (state) => {
+          if (Array.isArray(state.savedPresets) && state.savedPresets.length > 0) {
+            this.savedUserPresets.set(state.savedPresets);
+            this.persistUserPresetsToStorage(state.savedPresets);
+          }
+          if (Array.isArray(state.marketplacePresets) && state.marketplacePresets.length > 0) {
+            this.marketplacePresets.set(state.marketplacePresets);
+          }
+        },
+        error: () => {},
+      });
   }
 
   ngAfterViewInit(): void {
     const canvas = this.diceStageCanvas?.nativeElement;
-    if (canvas) this.stageService.mountStage(canvas, this.activeSkin().id);
+    if (!canvas) return;
+    this.stageService.mountStage(canvas, this.customConfig().skinId);
+    this.stageService.applyCustomOverrides(this.customConfig());
   }
 
   ngOnDestroy(): void {
     this.stageService.dispose();
   }
 
-  isSkinUnlocked(skinId: string): boolean {
-    return this.unlockedSkinIds().includes(skinId);
+  onToolSelected(tool: DiceForgeToolId): void {
+    this.activeTool.set(tool);
+    this.inspectorOpen.set(true);
   }
 
-  selectOrUnlockSkin(skin: DiceSkinConfig): void {
-    if (!this.isSkinUnlocked(skin.id)) {
-      this.unlockItem('skin', skin.id, skin.unlockSource, skin.name, skin.loommarksCost);
-      return;
-    }
-    this.customConfig.set(this.stageService.applySkin(skin));
-    this.statusBanner.set(`Equipped skin: ${skin.name}`);
+  selectSkin(skin: DiceSkinConfig): void {
+    const currentName = this.customConfig().customName;
+    const nextCfg = this.stageService.applySkin(skin);
+    const merged = this.stageService.applyCustomOverrides({
+      ...nextCfg,
+      customName:
+        currentName && !DICE_SKIN_CATALOG.some((s) => s.name === currentName)
+          ? currentName
+          : skin.name,
+    });
+    this.customConfig.set(merged);
+    this.persistActiveConfig(merged);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Skin Texture Applied',
+      `Applied ${skin.name} (${skin.materialFamily}) texture to active dice.`,
+      'emerald',
+    );
   }
 
-  unlockModelFromPanel(model: DiceModelDefinition): void {
-    this.unlockItem('model', model.id, model.unlockSource, model.name, model.loommarksCost);
-  }
-
-  claimMilestoneReward(milestone: DiceMilestoneRewardDto): void {
-    this.unlockItem(milestone.targetType as 'skin' | 'model', milestone.targetItemId, 'reward', milestone.targetItemName, 0);
+  onCustomNameChange(newName: string): void {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const updated = this.stageService.applyCustomOverrides({ customName: trimmed });
+    this.customConfig.set(updated);
+    this.persistActiveConfig(updated);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Custom Dice Renamed',
+      `Active dice named "${trimmed}". Click Save Set to store under this name.`,
+      'emerald',
+    );
   }
 
   applyCustomChange(overrides: Partial<DiceCustomRuntimeConfig>): void {
-    this.customConfig.set(this.stageService.applyCustomOverrides(overrides));
+    const updated = this.stageService.applyCustomOverrides(overrides);
+    this.customConfig.set(updated);
+    this.persistActiveConfig(updated);
+  }
+
+  applyPhysicsChange(physicsPatch: Partial<DicePhysicsConfig>): void {
+    const mergedPhysics: DicePhysicsConfig = {
+      ...this.customConfig().physics,
+      ...physicsPatch,
+    };
+    const updated = this.stageService.applyCustomOverrides({ physics: mergedPhysics });
+    this.customConfig.set(updated);
+    this.persistActiveConfig(updated);
   }
 
   resetCustomToSkinDefaults(): void {
-    this.customConfig.set(this.stageService.applySkin(this.activeSkin()));
-    this.statusBanner.set(`Reset custom overrides to ${this.activeSkin().name} defaults.`);
-  }
-
-  saveActiveLoadout(): void {
-    this.http.put('/api/v2/campaigns/1/dice-forge/loadout', this.customConfig()).subscribe({
-      next: () => this.statusBanner.set('Saved active 3D Dice Forge loadout to campaign profile.'),
-      error: () => this.statusBanner.set('Saved active 3D Dice Forge loadout locally.')
-    });
+    const skin = this.activeSkin();
+    const fresh = this.stageService.applySkin(skin);
+    this.customConfig.set(fresh);
+    this.persistActiveConfig(fresh);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Reset to Skin Defaults',
+      `Restored all pigments, glows, typography, and physics to ${skin.name} defaults.`,
+      'gold',
+    );
   }
 
   setFocusDie(focus: DicePolyhedronType | 'all'): void {
@@ -193,101 +211,322 @@ export class DicePageComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stageService.setShowcaseFocusDie(focus);
   }
 
+  returnToStationaryShowcase(): void {
+    this.stageService.clearRollAndReturnToShowcase();
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Stationary Showcase',
+      'Returned dice to stationary 360-degree inspection mode.',
+      'emerald',
+      3200,
+    );
+  }
+
+  zoomStageCamera(deltaRadius: number): void {
+    this.stageService.zoomCamera(deltaRadius);
+    this.cameraZoomPercent.update((pct) =>
+      Math.max(45, Math.min(220, Math.round(pct - deltaRadius * 8))),
+    );
+  }
+
+  resetStageCamera(): void {
+    this.stageService.resetCameraToShowcase();
+    this.cameraZoomPercent.set(100);
+  }
+
+  previewRollCameraView(): void {
+    this.stageService.applyRollCameraView();
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Roll Camera Angle',
+      `Previewing ${this.customConfig().physics.rollCameraPitchDeg}° top-down game throw camera.`,
+      'emerald',
+      3200,
+    );
+  }
+
+  toggleBoundaryWireframe(): void {
+    this.applyPhysicsChange({ showBoundaryBox: !this.customConfig().physics.showBoundaryBox });
+  }
+
   previewCritEffect(kind: 'nat20' | 'critfail'): void {
     this.stageService.previewCritOutcomeEffect(kind);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      kind === 'nat20' ? 'Nat 20 Shader Preview' : 'Crit Fail Shader Preview',
+      kind === 'nat20'
+        ? `Triggered ${this.customConfig().nat20EffectId} critical burst.`
+        : `Triggered ${this.customConfig().critFailEffectId} critical fail fracture.`,
+      kind === 'nat20' ? 'gold' : 'crimson',
+      3600,
+    );
   }
 
   testRollSound(profileId: string): void {
     this.soundService.playRollStartClatter(profileId, 2);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Acoustic Profile Test',
+      `Played sample clatter for ${profileId}.`,
+      'emerald',
+      3000,
+    );
   }
 
-  executeAuthoritativeRoll(req: DiceRollFormulaRequest): void {
-    const formulaStr = req.expression ?? `${req.count ?? 1}d${req.sides ?? 20}${(req.modifier ?? 0) >= 0 ? '+' + (req.modifier ?? 0) : (req.modifier ?? 0)}`;
-    const parsed = req.sides
-      ? { count: req.count ?? 1, sides: req.sides, modifier: req.modifier ?? 0 }
-      : this.parseExpression(formulaStr);
-    const cfg = this.customConfig();
-    const mode = req.advantageMode ?? req.rollMode ?? 'normal';
+  saveCurrentPreset(asNew: boolean): void {
+    const baseCfg = structuredClone(this.customConfig());
+    const name = (baseCfg.customName || this.activeSkin().name).trim();
+    const existingList = [...this.savedUserPresets()];
+    const existingIdx = existingList.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+    const presetId =
+      !asNew && existingIdx >= 0 ? existingList[existingIdx].id : `user-dice-${Date.now()}`;
+    const finalName = asNew && existingIdx >= 0 ? `${name} (${existingList.length + 1})` : name;
+    const cfg: DiceCustomRuntimeConfig = { ...baseCfg, customName: finalName };
 
-    this.http.post<{
-      id: string; formula: string; label: string; rawRolls: number[];
-      modifier: number; total: number; isNat20: boolean; isNat1: boolean; verificationDigest: string;
-    }>('/api/v2/campaigns/1/dice/roll', {
-      sides: parsed.sides, count: parsed.count, modifier: parsed.modifier,
-      rollMode: mode, label: req.label, skinId: cfg.skinId,
-      modelId: cfg.modelId, sizePreset: cfg.sizePreset,
-      nat20EffectId: cfg.nat20EffectId, critFailEffectId: cfg.critFailEffectId,
-      soundProfileId: cfg.soundProfileId
-    }).subscribe({
-      next: res => {
-        const item: DiceRollLedgerItem = {
-          id: res.id, label: res.label, expression: res.formula, diceResults: res.rawRolls,
-          modifier: res.modifier, total: res.total, isCriticalSuccess: res.isNat20,
-          isCriticalFailure: res.isNat1, sha256Hash: res.verificationDigest, rolledAt: 'Just now'
-        };
-        this.rollHistory.update(list => [item, ...list.slice(0, 14)]);
-        this.loommarksBalance.update(b => b + (res.isNat20 ? 35 : 15));
-        this.stageService.animateRoll(res.formula, res.rawRolls, res.isNat20, res.isNat1);
-      },
-      error: () => {
-        const rolls = Array.from({ length: parsed.count }, () => Math.floor(Math.random() * parsed.sides) + 1);
-        const total = rolls.reduce((a, b) => a + b, 0) + parsed.modifier;
-        const isNat20 = parsed.sides === 20 && rolls.includes(20);
-        const isNat1 = parsed.sides === 20 && rolls.includes(1);
-        const item: DiceRollLedgerItem = {
-          id: `roll-${Date.now()}`, label: req.label, expression: formulaStr, diceResults: rolls,
-          modifier: parsed.modifier, total, isCriticalSuccess: isNat20, isCriticalFailure: isNat1,
-          sha256Hash: `SHA256:${Math.random().toString(16).slice(2, 18).toUpperCase()}`, rolledAt: 'Just now'
-        };
-        this.rollHistory.update(list => [item, ...list.slice(0, 14)]);
-        this.loommarksBalance.update(b => b + (isNat20 ? 35 : 15));
-        this.stageService.animateRoll(formulaStr, rolls, isNat20, isNat1);
-      }
-    });
-  }
-
-  private unlockItem(itemType: 'skin' | 'model', itemId: string, method: string, displayName: string, loommarksCost?: number): void {
-    this.http.post<{
-      success: boolean; message: string; loommarksBalance: number;
-      unlockedSkinIds: string[]; unlockedModelIds: string[]; milestones: DiceMilestoneRewardDto[];
-    }>('/api/v2/campaigns/1/dice-forge/unlock', {
-      itemType, itemId, acquisitionMethod: method, loommarksCost: loommarksCost ?? 0
-    }).subscribe({
-      next: res => {
-        this.loommarksBalance.set(res.loommarksBalance);
-        this.unlockedSkinIds.set(res.unlockedSkinIds);
-        this.unlockedModelIds.set(res.unlockedModelIds);
-        this.milestones.set(res.milestones);
-        this.statusBanner.set(res.success ? `Unlocked ${displayName}!` : res.message);
-        if (res.success && itemType === 'skin') this.selectOrUnlockSkin(resolveDiceSkin(itemId));
-        else if (res.success && itemType === 'model') this.applyCustomChange({ modelId: itemId });
-      },
-      error: () => {
-        if (method === 'loommarks' && loommarksCost && this.loommarksBalance() < loommarksCost) {
-          this.statusBanner.set(`Need ${loommarksCost} Loommarks to unlock ${displayName}.`);
-          return;
-        }
-        if (method === 'loommarks' && loommarksCost) this.loommarksBalance.update(b => b - loommarksCost);
-        if (itemType === 'model') {
-          this.unlockedModelIds.update(ids => [...new Set([...ids, itemId])]);
-          this.applyCustomChange({ modelId: itemId });
-        } else {
-          this.unlockedSkinIds.update(ids => [...new Set([...ids, itemId])]);
-          this.selectOrUnlockSkin(resolveDiceSkin(itemId));
-        }
-        this.milestones.update(ms => ms.map(m => (m.targetItemId === itemId ? { ...m, isClaimed: true } : m)));
-        this.statusBanner.set(`Unlocked ${displayName}!`);
-      }
-    });
-  }
-
-  private parseExpression(expr: string): { count: number; sides: number; modifier: number } {
-    const match = /^\s*(\d+)?d(\d+)\s*([+-]\s*\d+)?/i.exec(expr || '1d20');
-    if (!match) return { count: 1, sides: 20, modifier: 0 };
-    return {
-      count: Math.max(1, parseInt(match[1] || '1', 10)),
-      sides: Math.max(2, parseInt(match[2] || '20', 10)),
-      modifier: match[3] ? parseInt(match[3].replace(/\s+/g, ''), 10) : 0
+    const savedPreset: SavedUserDicePreset = {
+      id: presetId,
+      name: finalName,
+      ownerUsername: this.auth.activeProfile().displayName || 'Weaver',
+      updatedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      isPublishedToMarket: false,
+      config: cfg,
     };
+
+    const nextList =
+      !asNew && existingIdx >= 0
+        ? existingList.map((item, idx) => (idx === existingIdx ? savedPreset : item))
+        : [savedPreset, ...existingList];
+
+    this.savedUserPresets.set(nextList);
+    this.activePresetId.set(savedPreset.id);
+    this.customConfig.set(cfg);
+    this.persistUserPresetsToStorage(nextList);
+    this.persistActiveConfig(cfg);
+    this.http.post('/api/v2/campaigns/1/dice-forge/presets', savedPreset).subscribe({ error: () => {} });
+
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      asNew ? 'Saved New Custom Dice' : 'Custom Dice Saved',
+      `Saved "${finalName}" to your personal dice presets.`,
+      'emerald',
+    );
+  }
+
+  loadSavedPreset(preset: SavedUserDicePreset): void {
+    const cfg = structuredClone(preset.config);
+    this.activePresetId.set(preset.id);
+    this.stageService.applySkin(resolveDiceSkin(cfg.skinId));
+    const applied = this.stageService.applyCustomOverrides(cfg);
+    this.customConfig.set(applied);
+    this.persistActiveConfig(applied);
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Loaded Custom Dice',
+      `Equipped "${preset.name}" onto the 3D forge stage.`,
+      'emerald',
+    );
+  }
+
+  deleteSavedPreset(presetId: string): void {
+    const target = this.savedUserPresets().find((p) => p.id === presetId);
+    const nextList = this.savedUserPresets().filter((p) => p.id !== presetId);
+    this.savedUserPresets.set(nextList);
+    this.persistUserPresetsToStorage(nextList);
+    if (this.activePresetId() === presetId) {
+      this.activePresetId.set(nextList[0]?.id ?? '');
+    }
+    this.http.delete(`/api/v2/campaigns/1/dice-forge/presets/${presetId}`).subscribe({ error: () => {} });
+    this.alertify.notifyStatus(
+      '3D Dice Forge',
+      'Preset Removed',
+      `Deleted "${target?.name ?? 'Custom Dice'}" from saved presets.`,
+      'crimson',
+      4000,
+    );
+  }
+
+  publishCurrentToMarketplace(taglineInput?: string): void {
+    const cfg = structuredClone(this.customConfig());
+    const creator = this.auth.activeProfile().displayName || 'Weaver Architect';
+    const marketEntry: MarketplaceDicePreset = {
+      id: `mkt-dice-${Date.now()}`,
+      name: cfg.customName || this.activeSkin().name,
+      creatorHandle: creator,
+      tagline:
+        taglineInput?.trim() ||
+        `${this.activeSkin().materialFamily} custom forge set on ${this.activeModel().name} with tuned physics & glow shaders.`,
+      downloadsCount: 1,
+      rating: 5.0,
+      publishedAt: 'Just now',
+      config: cfg,
+    };
+
+    this.marketplacePresets.update((list) => [marketEntry, ...list]);
+    this.http.post('/api/v2/marketplace/dice-presets', marketEntry).subscribe({ error: () => {} });
+    this.alertify.notifyStatus(
+      'Creator Marketplace',
+      'Dice Published to Market',
+      `Published "${marketEntry.name}" by ${creator} so other players and GMs can import it.`,
+      'gold',
+    );
+  }
+
+  importFromMarketplace(marketPreset: MarketplaceDicePreset): void {
+    const importedCfg: DiceCustomRuntimeConfig = {
+      ...structuredClone(marketPreset.config),
+      customName: marketPreset.name,
+    };
+    const savedPreset: SavedUserDicePreset = {
+      id: `user-imported-${Date.now()}`,
+      name: marketPreset.name,
+      ownerUsername: marketPreset.creatorHandle,
+      updatedAt: 'Imported',
+      isPublishedToMarket: true,
+      config: importedCfg,
+    };
+    const nextList = [savedPreset, ...this.savedUserPresets()];
+    this.savedUserPresets.set(nextList);
+    this.activePresetId.set(savedPreset.id);
+    this.persistUserPresetsToStorage(nextList);
+    this.stageService.applySkin(resolveDiceSkin(importedCfg.skinId));
+    const applied = this.stageService.applyCustomOverrides(importedCfg);
+    this.customConfig.set(applied);
+    this.persistActiveConfig(applied);
+    this.marketModalOpen.set(false);
+    this.alertify.notifyStatus(
+      'Creator Marketplace',
+      'Dice Imported & Equipped',
+      `Imported "${marketPreset.name}" by ${marketPreset.creatorHandle} into your saved presets.`,
+      'gold',
+    );
+  }
+
+  executePoolRoll(req: DicePoolRollRequest): void {
+    const entries: { dieType: DicePolyhedronType; value: number }[] = [];
+    for (const grp of req.pool) {
+      const count =
+        grp.dieType === 'd20' && grp.count === 1 && req.rollMode !== 'normal' ? 2 : grp.count;
+      for (let i = 0; i < count && entries.length < 20; i++) {
+        entries.push({
+          dieType: grp.dieType,
+          value: Math.floor(Math.random() * grp.sides) + 1,
+        });
+      }
+    }
+    if (entries.length === 0) return;
+
+    const rawRolls = entries.map((e) => e.value);
+    const total =
+      entries.length === 2 && req.pool.length === 1 && req.pool[0].dieType === 'd20' && req.rollMode !== 'normal'
+        ? req.rollMode === 'advantage'
+          ? Math.max(rawRolls[0], rawRolls[1])
+          : Math.min(rawRolls[0], rawRolls[1])
+        : rawRolls.reduce((sum, n) => sum + n, 0);
+    const isNat20 = entries.some((e) => e.dieType === 'd20' && e.value === 20);
+    const isCritFail = entries.some((e) => e.dieType === 'd20' && e.value === 1);
+    const formula = req.pool.map((p) => `${p.count}${p.dieType}`).join(' + ');
+
+    this.stageService.animatePoolRoll(entries, isNat20, isCritFail);
+
+    const cfg = this.customConfig();
+    this.http
+      .post('/api/v2/campaigns/1/dice/roll', {
+        sides: req.pool[0]?.sides ?? 20,
+        count: entries.length,
+        modifier: 0,
+        rollMode: req.rollMode,
+        label: req.isRandomQuickRoll ? `Quick Random Roll (${entries.length} Dice)` : `${cfg.customName} Roll`,
+        skinId: cfg.skinId,
+        modelId: cfg.modelId,
+        sizePreset: cfg.sizePreset,
+        nat20EffectId: cfg.nat20EffectId,
+        critFailEffectId: cfg.critFailEffectId,
+        soundProfileId: cfg.soundProfileId,
+      })
+      .subscribe({ error: () => {} });
+
+    this.alertify.notifyRoll({
+      whoRolled: cfg.customName || this.activeSkin().name,
+      rollType: req.isRandomQuickRoll
+        ? `Random Throw (${entries.length} Dice)`
+        : req.rollMode === 'advantage'
+          ? 'Advantage Throw'
+          : req.rollMode === 'disadvantage'
+            ? 'Disadvantage Throw'
+            : '3D Dice Forge Throw',
+      formula,
+      naturalDie: rawRolls[0] ?? total,
+      rawRolls,
+      modifier: 0,
+      modifiersBreakdown: `${this.activeModel().name} · ${this.activeSkin().name}`,
+      adjustedTotal: total,
+      isNat20,
+      isCritFail,
+      outcomeSubtext: `Breakdown: ${entries.map((e) => `${e.dieType}(${e.value})`).join(' + ')}`,
+    });
+  }
+
+  triggerQuickRandomRollUpTo5(): void {
+    const options: { dieType: DicePolyhedronType; sides: number }[] = [
+      { dieType: 'd4', sides: 4 },
+      { dieType: 'd6', sides: 6 },
+      { dieType: 'd8', sides: 8 },
+      { dieType: 'd10', sides: 10 },
+      { dieType: 'd12', sides: 12 },
+      { dieType: 'd20', sides: 20 },
+      { dieType: 'd100', sides: 100 },
+    ];
+    const totalDice = Math.floor(Math.random() * 5) + 1; // 1..5 random dice, never exceeds 5
+    const bucket = new Map<DicePolyhedronType, { dieType: DicePolyhedronType; sides: number; count: number }>();
+    for (let i = 0; i < totalDice; i++) {
+      const pick = options[Math.floor(Math.random() * options.length)];
+      const cur = bucket.get(pick.dieType);
+      if (cur) cur.count += 1;
+      else bucket.set(pick.dieType, { ...pick, count: 1 });
+    }
+    this.executePoolRoll({
+      pool: Array.from(bucket.values()),
+      rollMode: 'normal',
+      isRandomQuickRoll: true,
+    });
+  }
+
+  private loadStoredUserPresets(): SavedUserDicePreset[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(USER_PRESETS_STORAGE_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private persistUserPresetsToStorage(presets: readonly SavedUserDicePreset[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(USER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    } catch {}
+  }
+
+  private loadStoredActiveConfig(): DiceCustomRuntimeConfig | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<DiceCustomRuntimeConfig>;
+      const base = createDefaultRuntimeConfigFromSkin(
+        resolveDiceSkin(parsed.skinId || DICE_SKIN_CATALOG[0].id),
+      );
+      return { ...base, ...parsed, physics: { ...DEFAULT_DICE_PHYSICS_CONFIG, ...(parsed.physics ?? {}) } };
+    } catch {
+      return null;
+    }
+  }
+
+  private persistActiveConfig(cfg: DiceCustomRuntimeConfig): void {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(ACTIVE_CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+    } catch {}
   }
 }
