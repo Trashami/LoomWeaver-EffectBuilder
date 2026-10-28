@@ -60,6 +60,27 @@ export interface MapCommandEntry {
 export type MapObjectSurfaceFinish = 'standard' | 'matte' | 'metallic' | 'runic-glow';
 export type MapObjectPlacementMode = 'floor' | 'custom';
 
+export type MapFloorBlendMode =
+  | 'multiply'
+  | 'overlay'
+  | 'soft-light'
+  | 'color'
+  | 'screen'
+  | 'color-burn'
+  | 'color-dodge'
+  | 'source-over'
+  | 'eraser';
+
+export interface MapFloorPaintDab {
+  readonly x: number;
+  readonly z: number;
+  readonly radius: number;
+  readonly sharpness: number;
+  readonly opacity: number;
+  readonly colorHex: string;
+  readonly blendMode: MapFloorBlendMode;
+}
+
 export interface MapStampNode {
   readonly id: string;
   readonly label: string;
@@ -175,7 +196,14 @@ export interface MapSceneGraphState {
   readonly revision: number;
   readonly floorAlbedoUrl?: string;
   readonly floorNormalUrl?: string;
+  readonly floorHeightUrl?: string;
   readonly floorTilingScale?: number;
+  readonly floorBumpIntensity?: number;
+  readonly floorHeightScale?: number;
+  readonly floorColorHex?: string;
+  readonly floorColorStrength?: number;
+  readonly floorColorBlendMode?: MapFloorBlendMode;
+  readonly floorPaintDabs?: readonly MapFloorPaintDab[];
   readonly scatterSeed: number;
   readonly scatterDensity: number;
   readonly scatterClusters?: readonly MapScatterClusterNode[];

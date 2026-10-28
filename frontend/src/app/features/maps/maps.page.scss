@@ -117,12 +117,15 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
 
   &--left {
-    left: 0;
+    left: 0.35rem;
     top: auto;
-    bottom: 2.6rem;
+    bottom: 2.55rem;
     transform: none;
-    border-left: none;
-    border-radius: 0 6px 6px 0;
+    width: 48px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 4px;
   }
 
   &--right {

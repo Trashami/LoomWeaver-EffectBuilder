@@ -55,6 +55,8 @@ const MATERIAL_ICON_MAP: Readonly<Record<string, string>> = {
   'chevron-left': 'chevron_left',
   'panel-right-close': 'keyboard_double_arrow_right',
   'panel-right-open': 'keyboard_double_arrow_left',
+  'double-arrow-left': 'keyboard_double_arrow_left',
+  'double-arrow-right': 'keyboard_double_arrow_right',
   'zoom-in': 'zoom_in',
   'zoom-out': 'zoom_out',
   'alert-triangle': 'warning_amber',

@@ -17,6 +17,7 @@ import {
   SceneLightingController,
 } from '../lighting/scene-lighting.controller';
 import {
+  MapFloorPaintDab,
   MapObjectPlacementMode,
   MapObjectSurfaceFinish,
   MapRenderMode,
@@ -26,7 +27,7 @@ import {
 } from '../map-scene-contract';
 import { PathRibbonEngine } from '../paths/path-ribbon.engine';
 import { SeededScatterEngine } from '../scatter/seeded-scatter.engine';
-import { TerrainMeshBuilder } from '../terrain/terrain-mesh.builder';
+import { FloorBumpAndColorConfig, TerrainMeshBuilder } from '../terrain/terrain-mesh.builder';
 import { WallMeshBuilder } from '../walls/wall-mesh.builder';
 import { WaterSplineBuilder } from '../water/water-spline.builder';
 import { GlbCloneMetadata, GlbModelCache } from './glb-model-cache';
@@ -41,7 +42,16 @@ export interface PickedSceneEntityMeta {
 export interface GhostAssetConfig {
   readonly enabled: boolean;
   readonly label: string;
-  readonly kind: 'prop' | 'wall' | 'door' | 'light' | 'terrain' | 'decal' | 'water' | 'scatter';
+  readonly kind:
+    | 'prop'
+    | 'wall'
+    | 'door'
+    | 'light'
+    | 'terrain'
+    | 'decal'
+    | 'water'
+    | 'scatter'
+    | 'floor-paint';
   readonly modelUrl?: string;
   readonly albedoUrl?: string;
   readonly normalUrl?: string;
@@ -59,6 +69,7 @@ export interface GhostAssetConfig {
   readonly freehandPoints?: readonly (readonly [number, number])[];
   readonly colorHex?: string;
   readonly surfaceFinish?: MapObjectSurfaceFinish;
+  readonly brushSharpness?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -422,13 +433,14 @@ export class BabylonMapStageService {
       return;
     }
 
-    // Terrain, Water, or Scatter brush: outline circle conforming 1:1 to terrain
+    // Terrain, Water, Scatter, or Floor Paint Brush: outline circle conforming 1:1 to terrain
     if (
       this.ghostConfig.kind === 'terrain' ||
       this.ghostConfig.kind === 'water' ||
-      this.ghostConfig.kind === 'scatter'
+      this.ghostConfig.kind === 'scatter' ||
+      this.ghostConfig.kind === 'floor-paint'
     ) {
-      const radius = Math.max(0.6, this.ghostConfig.scale);
+      const radius = Math.max(0.4, this.ghostConfig.scale);
       const pts: Vector3[] = [];
       const steps = 48;
       for (let i = 0; i <= steps; i++) {
@@ -440,9 +452,34 @@ export class BabylonMapStageService {
       }
       const ring = MeshBuilder.CreateLines('lw-ghost-terrain-ring', { points: pts }, this.scene);
       ring.color = Color3.FromHexString(
-        this.ghostConfig.kind === 'water' ? '#38bdf8' : '#49e892',
+        this.ghostConfig.kind === 'water'
+          ? '#38bdf8'
+          : this.ghostConfig.kind === 'floor-paint'
+            ? this.ghostConfig.colorHex || '#49e892'
+            : '#49e892',
       );
       ring.isPickable = false;
+
+      // For Floor Paint Brush, also render the inner sharpness/feather core ring
+      if (this.ghostConfig.kind === 'floor-paint') {
+        const sharpFrac = Math.max(0.08, Math.min(0.95, (this.ghostConfig.brushSharpness ?? 25) / 100));
+        const innerR = radius * sharpFrac;
+        const innerPts: Vector3[] = [];
+        for (let i = 0; i <= 36; i++) {
+          const angle = (i / 36) * Math.PI * 2;
+          const px = gx + Math.cos(angle) * innerR;
+          const pz = gz + Math.sin(angle) * innerR;
+          const py = TerrainMeshBuilder.sampleElevationAt(this.scene, px, pz) + 0.085;
+          innerPts.push(new Vector3(px, py, pz));
+        }
+        const innerRing = MeshBuilder.CreateLines(
+          'lw-ghost-paint-feather-ring',
+          { points: innerPts },
+          this.scene,
+        );
+        innerRing.color = Color3.FromHexString('#d9b77a');
+        innerRing.isPickable = false;
+      }
       return;
     }
 
@@ -533,9 +570,33 @@ export class BabylonMapStageService {
     }
   }
 
-  applyFloorBumpMap(albedoUrl: string, normalUrl: string, tilingScale = 10): void {
+  applyFloorBumpMap(
+    albedoUrl: string,
+    normalUrl: string,
+    tilingScale = 10,
+    heightUrl?: string,
+  ): void {
     if (!this.scene) return;
-    TerrainMeshBuilder.applyFloorBumpTexture(this.scene, albedoUrl, normalUrl, tilingScale);
+    TerrainMeshBuilder.applyFloorBumpTexture(
+      this.scene,
+      albedoUrl,
+      normalUrl,
+      tilingScale,
+      heightUrl,
+    );
+  }
+
+  configureFloorProperties(config: FloorBumpAndColorConfig): void {
+    if (!this.scene) return;
+    TerrainMeshBuilder.configureFloorProperties(this.scene, config);
+  }
+
+  paintFloorStrokeAt(dab: MapFloorPaintDab): void {
+    TerrainMeshBuilder.paintFloorStrokeAt(this.scene, dab);
+  }
+
+  clearFloorPaint(): void {
+    TerrainMeshBuilder.clearFloorPaint(this.scene);
   }
 
   resetTerrainElevations(): void {

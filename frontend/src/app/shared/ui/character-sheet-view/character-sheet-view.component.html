@@ -1,430 +1,370 @@
-<div class="lw-dnd-sheet-shell" [class.has-drawer-open]="interactive.rightDrawerOpen()"> <!-- TOP CHARACTER BAR & LIVE SIGNALR SESSION/ENCOUNTER BAR -->
-  <header class="lw-dnd-topbar"> <div class="lw-dnd-topbar__identity">
-      <button type="button" class="lw-dnd-avatar-btn" (click)="portraitModalOpen.set(true)" title="Change Character Portrait"> <img [src]="sheet().portraitUrl" [alt]="sheet().name" />
-        <span class="lw-dnd-avatar-btn__edit"><lw-icon name="edit" [size]="12" /></span> </button>
-      <div class="lw-dnd-identity-copy"> <div class="lw-dnd-identity-row">
-          <h1 class="lw-dnd-char-name">{{ sheet().name }}</h1> @if (partyRoster().length > 1) {
-            <div class="lw-dnd-party-pills"> @for (member of partyRoster(); track member.characterKey) {
-                <button type="button" class="lw-dnd-party-pill" [class.is-active]="member.characterKey === sheet().characterKey" (click)="characterSelected.emit(member.characterKey)"> {{ member.name.split(' ')[0] }}
-                </button> }
-            </div> }
-        </div> <p class="lw-dnd-char-sub">
-          {{ sheet().ancestryOrClan }} · {{ sheet().classOrArchetype }} · {{ sheet().backgroundName }} </p>
-        <div class="lw-dnd-xp-row"> <span class="lw-dnd-lvl-tag">LVL {{ sheet().level }}</span>
-          <div class="lw-dnd-xp-bar" ngpProgress [ngpProgressValue]="xpProgressPercent()" [ngpProgressMax]="100"> <div class="lw-dnd-xp-bar__track" ngpProgressTrack>
-              <div class="lw-dnd-xp-bar__fill" ngpProgressIndicator [style.width.%]="xpProgressPercent()"></div> </div>
-          </div> <span class="lw-dnd-xp-text">{{ sheet().currentXp }} / {{ sheet().nextLevelXp }} XP</span>
-        </div> </div>
-    </div> <!-- SIGNALR LIVE SESSION & ENCOUNTER GATING + TARGET CONTROLS -->
-    <div class="lw-dnd-topbar__live"> <button type="button" class="lw-live-pill" [class.is-live]="interactive.isSessionLive()" (click)="interactive.toggleSessionLive()" title="Rolls are only tracked for Session stats when Session is Live">
-        <span class="lw-live-dot"></span> {{ interactive.isSessionLive() ? 'SESSION LIVE' : 'SESSION OFFLINE' }}
-      </button> <button type="button" class="lw-live-pill lw-live-pill--encounter" [class.is-live]="interactive.isEncounterLive()" (click)="interactive.toggleEncounterLive()" title="Combat strikes, damage, & action slots are tracked when Encounter is Live">
-        <span class="lw-live-dot"></span> {{ interactive.isEncounterLive() ? 'ENCOUNTER LIVE' : 'ENCOUNTER IDLE' }}
-      </button> <select class="lw-dnd-target-select" [ngModel]="interactive.selectedTargetAc()" (ngModelChange)=" interactive.selectedTargetAc.set(+$event); interactive.selectedTargetName.set( +$event === 15 ? 'Cinth Vampire Spawn (AC 15)' : +$event === 17 ? 'Priors Inquisitor (AC 17)' : +$event === 16 ? 'Gwaedhellain Stalker (AC 16)' : 'Trapped Mountain Dragon (AC 19)' ) ">
-        <option [ngValue]="15">Target: Cinth Vampire Spawn (AC 15)</option> <option [ngValue]="16">Target: Gwaedhellain Stalker (AC 16)</option>
-        <option [ngValue]="17">Target: Priors Inquisitor (AC 17)</option> <option [ngValue]="19">Target: Trapped Mountain Dragon (AC 19)</option>
-      </select> <select class="lw-dnd-target-select lw-dnd-target-select--reaction" [ngModel]="interactive.reactionOutcomeMode()" (ngModelChange)="interactive.reactionOutcomeMode.set($event)" title="Simulate enemy/ally reaction interrupting or reducing damage">
-        <option value="none">Outcome: Normal Resolution</option> <option value="interrupted">Outcome: Attack Interrupted (Shield / Counter)</option>
-        <option value="reduced">Outcome: Reduced Damage (-5 Ward/Resistance)</option> </select>
-    </div> <!-- REST & MANAGE ACTIONS -->
-    <div class="lw-dnd-topbar__actions"> <button type="button" class="lw-dnd-rest-btn" (click)="interactive.takeShortRest(sheet())">
-        <lw-icon name="schedule" [size]="14" /> SHORT REST </button>
-      <button type="button" class="lw-dnd-rest-btn" (click)="interactive.takeLongRest(sheet())"> <lw-icon name="bedtime" [size]="14" /> LONG REST
-      </button> <button type="button" class="lw-dnd-rest-btn lw-dnd-rest-btn--gold" (click)="editCharacterRequested.emit(sheet())">
-        <lw-icon name="edit" [size]="14" /> EDIT CHARACTER </button>
-      <button type="button" class="lw-dnd-rest-btn" (click)="createCharacterRequested.emit()"> <lw-icon name="add" [size]="14" /> NEW
-      </button> <button type="button" class="lw-dnd-rest-btn" [class.lw-dnd-rest-btn--active]="interactive.rightDrawerOpen()" (click)="interactive.rightDrawerOpen.set(!interactive.rightDrawerOpen())">
-        <lw-icon name="menu_book" [size]="14" /> RULES </button>
-    </div> </header>
-  <!-- LIVE ROLL TOAST BANNER --> @if (interactive.rollToastBanner(); as banner) {
-    <div class="lw-dnd-roll-banner"> <div class="lw-dnd-roll-banner__left">
-        <lw-icon name="casino" [size]="16" /> <span>{{ banner }}</span>
-      </div> <div class="lw-dnd-roll-banner__right">
-        <a routerLink="/arcane-screen" class="lw-dnd-roll-banner__link">VTT Combat</a> <a routerLink="/dice" class="lw-dnd-roll-banner__link">3D Dice</a>
-        <button type="button" class="lw-dnd-roll-banner__close" (click)="interactive.rollToastBanner.set(null)"> <lw-icon name="close" [size]="14" />
-        </button> </div>
-    </div> }
-  <!-- D&D BEYOND TOP STAT STRIP: 6 ABILITY SHIELDS + PROFICIENCY + SPEED + INSPIRATION + HP WIDGET --> <section class="lw-dnd-stat-strip">
-    <div class="lw-dnd-abilities-row"> @for (ab of sheet().abilities; track ab.code) {
-        <button type="button" class="lw-dnd-ability-shield" (click)="onAbilityClicked(ab)" title="Click to roll {{ ab.label }} Check (1d20 {{ formatMod(ab.modifier) }}) & inspect campaign rules"> <span class="lw-dnd-ability-shield__label">{{ ab.label }}</span>
-          <span class="lw-dnd-ability-shield__mod">{{ formatMod(ab.modifier) }}</span> <span class="lw-dnd-ability-shield__score">{{ ab.score }}</span>
-        </button> }
-    </div> <div class="lw-dnd-vitals-row">
-      <div class="lw-dnd-vital-box"> <span class="lw-dnd-vital-box__lbl">PROFICIENCY</span>
-        <strong class="lw-dnd-vital-box__val">+{{ sheet().proficiencyBonus }}</strong> <span class="lw-dnd-vital-box__sub">BONUS</span>
-      </div> <div class="lw-dnd-vital-box">
-        <span class="lw-dnd-vital-box__lbl">WALKING</span> <strong class="lw-dnd-vital-box__val">{{ sheet().speedFeet }}<small>ft.</small></strong>
-        <span class="lw-dnd-vital-box__sub">SPEED</span> </div>
-      <button type="button" class="lw-dnd-vital-box lw-dnd-vital-box--insp" [class.is-inspired]="economy().heroicInspiration" (click)="interactive.toggleHeroicInspiration(sheet().characterKey)"> <span class="lw-dnd-vital-box__lbl">HEROIC</span>
-        <span class="lw-dnd-insp-diamond">{{ economy().heroicInspiration ? 'ON' : 'OFF' }}</span> <span class="lw-dnd-vital-box__sub">INSPIRATION</span>
-      </button> <!-- HIT POINTS MANAGER -->
-      <div class="lw-dnd-hp-widget"> <div class="lw-dnd-hp-widget__controls">
-          <button type="button" class="lw-hp-btn lw-hp-btn--heal" (click)="applyHeal()">HEAL</button> <input type="number" min="1" max="999" class="lw-hp-input" [ngModel]="hpDeltaInput()" (ngModelChange)="hpDeltaInput.set(+$event)" />
-          <button type="button" class="lw-hp-btn lw-hp-btn--dmg" (click)="applyDamage()">DAMAGE</button> </div>
-        <div class="lw-dnd-hp-widget__readout"> <div class="lw-hp-col">
-            <span class="lw-hp-col__lbl">CURRENT</span> <strong class="lw-hp-col__num">{{ effectiveHpCurrent() }}</strong>
-          </div> <span class="lw-hp-slash">/</span>
-          <div class="lw-hp-col"> <span class="lw-hp-col__lbl">MAX</span>
-            <strong class="lw-hp-col__num">{{ sheet().maxHp }}</strong> </div>
-          <div class="lw-hp-col"> <span class="lw-hp-col__lbl">TEMP</span>
-            <strong class="lw-hp-col__num lw-hp-col__num--temp">{{ economy().tempHp || '--' }}</strong> </div>
-        </div> <span class="lw-dnd-hp-widget__title">HIT POINTS</span>
-      </div> </div>
-  </section> <!-- 3-COLUMN D&D BEYOND MAIN SHEET BODY + RIGHT COLLAPSIBLE RULES DRAWER -->
-  <div class="lw-dnd-main-grid"> <!-- COLUMN 1: SAVING THROWS + SENSES + PROFICIENCIES -->
-    <aside class="lw-dnd-col lw-dnd-col--left"> <section class="lw-dnd-panel">
-        <header class="lw-dnd-panel__head"> <h2>SAVING THROWS</h2>
-        </header> <div class="lw-dnd-saves-grid">
-          @for (sv of sheet().savingThrows; track sv.code) { <button type="button" class="lw-dnd-save-pill" [class.is-proficient]="sv.proficient" (click)="onSaveClicked(sv)">
-              <span class="lw-dnd-prof-dot" [class.is-filled]="sv.proficient"></span> <span class="lw-dnd-save-pill__code">{{ sv.code }}</span>
-              <span class="lw-dnd-save-pill__mod">{{ formatMod(sv.bonus) }}</span> </button>
-          } </div>
-        <p class="lw-dnd-panel__foot-note">Saving Throw Modifiers · Click any save to roll 1d20</p> </section>
-      <section class="lw-dnd-panel"> <header class="lw-dnd-panel__head">
-          <h2>SENSES</h2> </header>
-        <div class="lw-dnd-senses-list"> <div class="lw-dnd-sense-row">
-            <span class="lw-dnd-sense-row__val">{{ passivePerception() }}</span> <span class="lw-dnd-sense-row__lbl">PASSIVE PERCEPTION</span>
-          </div> <div class="lw-dnd-sense-row">
-            <span class="lw-dnd-sense-row__val">{{ passiveInvestigation() }}</span> <span class="lw-dnd-sense-row__lbl">PASSIVE INVESTIGATION</span>
-          </div> <div class="lw-dnd-sense-row">
-            <span class="lw-dnd-sense-row__val">{{ passiveInsight() }}</span> <span class="lw-dnd-sense-row__lbl">PASSIVE INSIGHT</span>
-          </div> </div>
-        <p class="lw-dnd-panel__foot-note">Darkvision 60 ft. · Anelith / Stone-Sense</p> </section>
-      <section class="lw-dnd-panel"> <header class="lw-dnd-panel__head">
-          <h2>PROFICIENCIES &amp; TRAINING</h2> </header>
-        <div class="lw-dnd-prof-blocks"> <div class="lw-dnd-prof-block">
-            <span class="lw-dnd-prof-block__lbl">ARMOR</span> <p>Light Armor, Medium Armor, Shields</p>
-          </div> <div class="lw-dnd-prof-block">
-            <span class="lw-dnd-prof-block__lbl">WEAPONS</span> <p>Simple Weapons, Martial Blades, Arcane Focuses</p>
-          </div> <div class="lw-dnd-prof-block">
-            <span class="lw-dnd-prof-block__lbl">TOOLS</span> <p>Artificer's Tools, Cartographer's Tools, Thieves' Tools</p>
-          </div> <div class="lw-dnd-prof-block">
-            <span class="lw-dnd-prof-block__lbl">LANGUAGES</span> <p>{{ 'Common, Elvish, Dwarvish, Draconic' }}</p>
-          </div> </div>
-      </section> </aside>
-    <!-- COLUMN 2: ALL 18 SKILLS --> <section class="lw-dnd-col lw-dnd-col--skills">
-      <div class="lw-dnd-panel lw-dnd-panel--skills"> <header class="lw-dnd-panel__head">
-          <h2>SKILLS</h2> </header>
-        <div class="lw-dnd-skills-table-head"> <span>PROF</span>
-          <span>MOD</span> <span>SKILL</span>
-          <span>BONUS</span> </div>
-        <div class="lw-dnd-skills-list"> @for (sk of sheet().skills; track sk.label) {
-            <button type="button" class="lw-dnd-skill-row" [class.is-proficient]="sk.proficient" (click)="onSkillClicked(sk)"> <span class="lw-dnd-prof-dot" [class.is-filled]="sk.proficient"></span>
-              <span class="lw-dnd-skill-row__abil">{{ sk.abilityCode }}</span> <span class="lw-dnd-skill-row__name">{{ sk.label }}</span>
-              <span class="lw-dnd-skill-row__bonus">{{ formatMod(sk.bonus) }}</span> </button>
-          } </div>
-      </div> </section>
-    <!-- COLUMN 3: INITIATIVE/AC/DEFENSES + ACTION ECONOMY + TABBED WORKSPACE --> <main class="lw-dnd-col lw-dnd-col--workspace">
-      <!-- TOP COMBAT & ACTION ECONOMY BAR --> <div class="lw-dnd-combat-header">
-        <button type="button" class="lw-dnd-init-box" (click)="onInitiativeClicked()"> <span class="lw-dnd-init-box__lbl">INITIATIVE</span>
-          <strong class="lw-dnd-init-box__val">{{ formatMod(sheet().initiativeBonus) }}</strong> </button>
-        <button type="button" class="lw-dnd-ac-shield" (click)="onArmorClassClicked()"> <span class="lw-dnd-ac-shield__lbl">ARMOR</span>
-          <strong class="lw-dnd-ac-shield__val">{{ sheet().armorClass }}</strong> <span class="lw-dnd-ac-shield__sub">CLASS</span>
-        </button> <div class="lw-dnd-defenses-box">
-          <div class="lw-dnd-def-col"> <span class="lw-dnd-def-col__lbl">DEFENSES</span>
-            <p>Anelith Ward · Fey Ancestry</p> </div>
-          <div class="lw-dnd-def-col"> <span class="lw-dnd-def-col__lbl">CONDITIONS</span>
-            <p>{{ economy().heroicInspiration ? 'Heroic Inspiration' : 'None Active' }}</p> </div>
-        </div> <!-- LIVE TURN ACTION ECONOMY SLOTS -->
-        <div class="lw-dnd-economy-bar"> <div class="lw-dnd-economy-bar__top">
-            <span class="lw-dnd-economy-bar__lbl">TURN ACTION SLOTS</span> <button type="button" class="lw-dnd-economy-reset" (click)="interactive.resetTurnEconomy(sheet().characterKey)">
-              Reset Turn </button>
-          </div> <div class="lw-dnd-economy-pills">
-            <button type="button" class="lw-econ-slot" [class.is-spent]="economy().actionUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'actionUsed')"> <span class="lw-econ-dot"></span>
-              Action {{ economy().actionUsed ? '(Spent)' : '(Ready)' }} </button>
-            <button type="button" class="lw-econ-slot lw-econ-slot--bonus" [class.is-spent]="economy().bonusUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'bonusUsed')"> <span class="lw-econ-dot"></span>
-              Bonus {{ economy().bonusUsed ? '(Spent)' : '(Ready)' }} </button>
-            <button type="button" class="lw-econ-slot lw-econ-slot--reaction" [class.is-spent]="economy().reactionUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'reactionUsed')"> <span class="lw-econ-dot"></span>
-              Reaction {{ economy().reactionUsed ? '(Spent)' : '(Ready)' }} </button>
-          </div> </div>
-      </div> <!-- PRIMARY D&D BEYOND WORKSPACE TABS -->
-      <section class="lw-dnd-workspace-card"> <nav class="lw-dnd-tabs" aria-label="Character Sheet Sections">
-          @for (tab of mainTabs; track tab.id) { <button type="button" class="lw-dnd-tab" [class.is-active]="mainSheetTab() === tab.id" (click)="mainSheetTab.set(tab.id)">
-              {{ tab.label }} </button>
-          } </nav>
-        <!-- TAB 1: ACTIONS (MATCHING SCREENSHOT 4) --> @if (mainSheetTab() === 'ACTIONS') {
-          <div class="lw-dnd-tab-body"> <div class="lw-dnd-subfilters">
-              @for (flt of actionFilters; track flt) { <button type="button" class="lw-dnd-subfilter-pill" [class.is-active]="actionSubFilter() === flt" (click)="actionSubFilter.set(flt)">
-                  {{ flt }} </button>
-              } </div>
-            <!-- ATTACKS & SIGNATURE ACTIONS TABLE --> <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"> <h3>ATTACKS &amp; ACTIVE ABILITIES</h3>
-                <span>Consumes Turn Action Slot &amp; Rolls Live Dice</span> </div>
-              <div class="lw-dnd-attacks-table"> <div class="lw-dnd-attacks-head">
-                  <span>ATTACK / ABILITY</span> <span>RANGE</span>
-                  <span>HIT / DC</span> <span>DAMAGE / EFFECT</span>
-                  <span>USES / NOTES</span> </div>
-                @for (row of filteredActionRows(); track row.id) { <div class="lw-dnd-attack-row" (click)="interactive.inspectRuleInDrawer(buildActionRowRuleVm(row))">
-                    <div class="lw-dnd-attack-row__name"> <strong>{{ row.name }}</strong>
-                      <small>{{ row.subtitle }} · {{ row.actionSlotCost.toUpperCase() }}</small> </div>
-                    <span class="lw-dnd-attack-row__range">{{ row.rangeLabel }}</span> <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="$event.stopPropagation(); onActionRowHitClicked(row)">
-                      {{ row.hitOrDcLabel }} </button>
-                    <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--dmg" (click)="$event.stopPropagation(); onActionRowDamageClicked(row)"> {{ row.damageFormula }} <small>{{ row.damageType }}</small>
-                    </button> <div class="lw-dnd-attack-row__notes" (click)="$event.stopPropagation()">
-                      @if (row.limitedUseId && row.limitedUseMax) { <div class="lw-dnd-use-boxes">
-                          @for (idx of slotRange(row.limitedUseMax); track idx) { <button type="button" class="lw-slot-checkbox" [class.is-checked]="idx < (economy().limitedUsesSpent[row.limitedUseId] ?? 0)" (click)="interactive.toggleLimitedUseBox(sheet().characterKey, row.limitedUseId, idx, row.limitedUseMax)"></button>
-                          } <span class="lw-dnd-use-reset">/ {{ row.resetOn }}</span>
-                        </div> } @else {
-                        <span>{{ row.notes }}</span> }
-                    </div> </div>
-                } </div>
-            </div> <!-- ACTIONS IN COMBAT (STANDARD 5E + CAMPAIGN ADJUSTED) -->
-            @if (actionSubFilter() === 'ALL' || actionSubFilter() === 'ACTION' || actionSubFilter() === 'OTHER') { <div class="lw-dnd-section-block">
-                <div class="lw-dnd-section-title"> <h3>ACTIONS IN COMBAT</h3>
-                  <span>Click any combat action to execute &amp; view Campaign Adjusted Rules</span> </div>
-                <div class="lw-dnd-combat-action-pills"> @for (ca of standardCombatActions; track ca.id) {
-                    <button type="button" class="lw-dnd-combat-pill" (click)="onCombatActionClicked(ca)"> <strong>{{ ca.name }}</strong>
-                      <small>{{ ca.cost.toUpperCase() }}</small> </button>
-                  } </div>
-              </div> }
-          </div> }
-        <!-- TAB 2: SPELLS --> @if (mainSheetTab() === 'SPELLS') {
-          <div class="lw-dnd-tab-body"> <div class="lw-dnd-spell-header-strip">
-              <div class="lw-spell-kpi"><span>ABILITY</span><strong>{{ primaryAbilityCode() }} ({{ formatMod(primaryAbilityMod()) }})</strong></div> <div class="lw-spell-kpi"><span>SPELL ATTACK</span><strong>{{ formatMod(spellAttackBonus()) }}</strong></div>
-              <div class="lw-spell-kpi"><span>SAVE DC</span><strong>{{ spellSaveDc() }}</strong></div> <div class="lw-spell-kpi"><span>PREPARED</span><strong>{{ preparedLeveledSpellsCount() }} / {{ maxPreparedSpells() }}</strong></div>
-            </div> @for (group of sheet().spellGroups; track group.label; let gIdx = $index) {
-              <div class="lw-dnd-section-block"> <div class="lw-dnd-section-title">
-                  <h3>{{ group.label }}</h3> @if (!group.isCantrip) {
-                    <div class="lw-dnd-use-boxes"> @for (idx of slotRange(group.slotsMax); track idx) {
-                        <button type="button" class="lw-slot-checkbox" [class.is-checked]="idx < (economy().spellSlotsUsed[gIdx] ?? 0)" (click)="interactive.toggleSpellSlotBox(sheet().characterKey, gIdx, idx, group.slotsMax)"></button> }
-                      <span class="lw-dnd-use-reset">SLOTS EXPENDED ({{ economy().spellSlotsUsed[gIdx] ?? 0 }}/{{ group.slotsMax }})</span> </div>
-                  } @else { <span>At-Will Cantrips (0 Slots)</span>
-                  } </div>
-                <div class="lw-dnd-attacks-table"> @for (sp of group.spells; track sp.id) {
-                    <div class="lw-dnd-attack-row" (click)="onSpellCastClicked(sp, group.slotsMax)"> <div class="lw-dnd-attack-row__name">
-                        <strong>{{ sp.name }}</strong> <small>{{ sp.school }} · {{ sp.actionCost }}</small>
-                      </div> <span class="lw-dnd-attack-row__range">{{ (sp.range ?? '60 ft.') }}</span>
-                      <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="$event.stopPropagation(); onSpellCastClicked(sp, group.slotsMax)"> CAST ({{ formatMod(spellAttackBonus()) }})
-                      </button> @if (!group.isCantrip) {
-                        <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); promptSpellPreparationToggle(sp)"> {{ sp.prepared !== false ? 'Prepared' : 'Prepare' }}
-                        </button> } @else {
-                        <span class="lw-dnd-attack-row__range">Always Prepared</span> }
-                      <span class="lw-dnd-attack-row__notes">{{ sp.concentration ? 'Concentration' : 'Instant' }}</span> </div>
-                  } </div>
-              </div> }
-          </div> }
-        <!-- TAB 3: INVENTORY & EQUIPMENT (SYNCED WITH EDIT CHARACTER) --> @if (mainSheetTab() === 'INVENTORY') {
-          <div class="lw-dnd-tab-body"> <div class="lw-dnd-spell-header-strip">
-              <div class="lw-spell-kpi"><span>WEIGHT CARRIED</span><strong>{{ totalCarriedWeightLbs() }} / {{ carryingCapacityLbs() }} lbs</strong></div> <div class="lw-spell-kpi"><span>GOLD PIECES</span><strong>{{ 250 }} GP</strong></div>
-              <div class="lw-spell-kpi"><span>EQUIPPED</span><strong>{{ equippedItems().length }} Items</strong></div> <div class="lw-spell-kpi"><span>BACKPACK</span><strong>{{ backpackItems().length }} Stowed</strong></div>
-            </div> <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"><h3>EQUIPPED ON CHARACTER</h3><span>Synced with Edit Character</span></div> <div class="lw-dnd-attacks-table">
-                @for (item of equippedItems(); track item.id) { <div class="lw-dnd-attack-row" (click)="onFeatureOrItemInspect(item, 'item')">
-                    <div class="lw-dnd-attack-row__name"><strong>{{ item.name }}</strong><small>{{ item.slot }} · {{ item.weightLb ?? 2 }} lbs</small></div> <span class="lw-dnd-attack-row__notes">{{ item.summary }}</span>
-                    <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentToggled.emit(item.id)">Stow in Pack</button> <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentRemoved.emit(item.id)">Remove</button>
-                  </div> }
-              </div>
-            </div>
-            <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"><h3>STOWED IN BACKPACK</h3><span>Click Equip to move to active loadout</span></div>
-              <div class="lw-dnd-attacks-table">
-                @for (item of backpackItems(); track item.id) {
-                  <div class="lw-dnd-attack-row" (click)="onFeatureOrItemInspect(item, 'item')">
-                    <div class="lw-dnd-attack-row__name"><strong>{{ item.name }}</strong><small>{{ item.slot }} · {{ item.weightLb ?? 2 }} lbs</small></div>
-                    <span class="lw-dnd-attack-row__notes">{{ item.summary }}</span>
-                    <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="$event.stopPropagation(); equipmentToggled.emit(item.id)">Equip</button>
-                    <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentRemoved.emit(item.id)">Drop</button>
-                  </div>
-                }
-              </div>
-            </div>
-            <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title">
-                <h3>ADD 5E COMPENDIUM EQUIPMENT</h3>
-                <input type="search" class="lw-dnd-search" placeholder="Search weapons, armor, gear..." [ngModel]="equipmentSearch()" (ngModelChange)="equipmentSearch.set($event)" />
-              </div>
-              <div class="lw-dnd-attacks-table">
-                @for (item of filteredEquipmentCatalog(); track item.id) {
-                  <div class="lw-dnd-attack-row">
-                    <div class="lw-dnd-attack-row__name"><strong>{{ item.name }}</strong><small>{{ item.slot }} · {{ item.rarity }}</small></div>
-                    <span class="lw-dnd-attack-row__notes">{{ item.summary }}</span>
-                    <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="equipmentAdded.emit({ item, equipNow: true })">+ Equip</button>
-                    <button type="button" class="lw-dnd-roll-btn" (click)="equipmentAdded.emit({ item, equipNow: false })">+ Backpack</button>
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-        }
-        <!-- TAB 4: FEATURES & TRAITS -->
-        @if (mainSheetTab() === 'FEATURES') {
-          <div class="lw-dnd-tab-body">
-            <div class="lw-dnd-features-grid">
-              @for (feat of sheet().featureCards; track feat.id) {
-                <article class="lw-dnd-feat-card" (click)="onFeatureOrItemInspect(feat, 'feature')">
-                  <div class="lw-dnd-feat-card__top">
-                    <span class="lw-dnd-feat-card__src">{{ feat.category }}</span>
-                    <span class="lw-dnd-feat-card__cat">{{ feat.category.toUpperCase() }}</span>
-                  </div>
-                  <h4>{{ feat.title }}</h4>
-                  <p>{{ feat.summary }}</p>
-                </article>
-              }
-            </div>
-          </div>
-        }
-        <!-- TAB 5: BACKGROUND -->
-        @if (mainSheetTab() === 'BACKGROUND') {
-          <div class="lw-dnd-tab-body">
-            <div class="lw-dnd-spell-header-strip">
-              <div class="lw-spell-kpi"><span>BACKGROUND</span><strong>{{ sheet().backgroundName }}</strong></div>
-              <div class="lw-spell-kpi"><span>ALIGNMENT</span><strong>{{ sheet().alignment }}</strong></div>
-              <div class="lw-spell-kpi"><span>FAITH / PATRON</span><strong>{{ 'Ekkos & The Anelith' }}</strong></div>
-              <div class="lw-spell-kpi"><span>SIZE</span><strong>{{ 'Medium' }}</strong></div>
-            </div>
-            <div class="lw-dnd-section-block">
-              <h3>CHRONICLE BACKSTORY</h3>
-              @for (para of [sheet().backgroundSummary, sheet().quote]; track para) {
-                <p class="lw-dnd-prose">{{ para }}</p>
-              }
-            </div>
-          </div>
-        }
-        <!-- TAB 6: NOTES (@ LOOM TAGGER & PRIVACY SCOPES) -->
-        @if (mainSheetTab() === 'NOTES') {
-          <div class="lw-dnd-tab-body">
-            <div class="lw-dnd-section-title">
-              <h3>CAMPAIGN JOURNAL &amp; LOOM-LINKED NOTES</h3>
-              <button type="button" class="lw-dnd-rest-btn lw-dnd-rest-btn--gold" (click)="noteComposerOpen.set(true)">
-                <lw-icon name="edit_note" [size]="14" /> + ADD NOTE (@LOOM)
-              </button>
-            </div>
-            <div class="lw-dnd-features-grid">
-              @for (note of sheet().richNotes ?? []; track note.id) {
-                <article class="lw-dnd-feat-card">
-                  <div class="lw-dnd-feat-card__top">
-                    <span class="lw-dnd-feat-card__src">{{ note.noteType }}</span>
-                    <span class="lw-dnd-feat-card__cat">{{ note.visibility }}</span>
-                  </div>
-                  <h4>{{ note.title }}</h4>
-                  <div class="lw-dnd-prose" [innerHTML]="note.contentHtml"></div>
-                </article>
-              }
-            </div>
-          </div>
-        }
-        <!-- TAB 7: EXTRAS & LIVE SESSION/ENCOUNTER TELEMETRY -->
-        @if (mainSheetTab() === 'EXTRAS') {
-          <div class="lw-dnd-tab-body">
-            <div class="lw-dnd-section-title">
-              <h3>LIVE SESSION &amp; ENCOUNTER TELEMETRY ({{ sheet().name }})</h3>
-              <span>Tracked ONLY when Session / Encounter is Live</span>
-            </div>
-            <div class="lw-dnd-telemetry-kpis">
-              <div class="lw-spell-kpi"><span>TOTAL DAMAGE</span><strong>{{ telemetry().totalDamageDealt }}</strong></div>
-              <div class="lw-spell-kpi"><span>NAT 20s ROLLED</span><strong>{{ telemetry().nat20Count }}</strong></div>
-              <div class="lw-spell-kpi"><span>CRIT FAILS (NAT 1)</span><strong>{{ telemetry().critFailCount }}</strong></div>
-              <div class="lw-spell-kpi"><span>LANDED / MISSED</span><strong>{{ telemetry().landedStrikes }} / {{ telemetry().missedStrikes }}</strong></div>
-              <div class="lw-spell-kpi"><span>INTERRUPTED / REDUCED</span><strong>{{ telemetry().attacksInterrupted }} / {{ telemetry().attacksReducedDamage }}</strong></div>
-              <div class="lw-spell-kpi"><span>DMG MITIGATED</span><strong>{{ telemetry().totalDamageReducedOrMitigated }}</strong></div>
-            </div>
-            <!-- ROLLS BY NUMBER (1..20 DISTRIBUTION) -->
-            <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"><h3>D20 ROLLS BY NUMBER (1–20 DISTRIBUTION)</h3><span>SQL &amp; SignalR Verified</span></div>
-              <div class="lw-dnd-d20-bars">
-                @for (num of d20Numbers; track num) {
-                  <div class="lw-d20-col" [class.is-crit]="num === 20" [class.is-fail]="num === 1">
-                    <span class="lw-d20-col__cnt">{{ telemetry().rollsByNumber[num] ?? 0 }}</span>
-                    <div class="lw-d20-col__bar-wrap">
-                      <div class="lw-d20-col__bar" [style.height.%]="((telemetry().rollsByNumber[num] ?? 0) * 100) / 14"></div>
-                    </div>
-                    <span class="lw-d20-col__num">{{ num }}</span>
-                  </div>
-                }
-              </div>
-            </div>
-            <!-- LIVE ROLL LOGS + PLACES & NPCS MET -->
-            <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"><h3>RECENT SHEET ROLL LOG (SESSION &amp; ENCOUNTER)</h3></div>
-              <div class="lw-dnd-roll-log-list">
-                @for (log of interactive.rollLogs(); track log.id) {
-                  <div class="lw-dnd-roll-log-item">
-                    <span>{{ log.summaryMessage }}</span>
-                    <code>{{ log.sha256Digest }}</code>
-                  </div>
-                }
-              </div>
-            </div>
-            <div class="lw-dnd-section-block">
-              <div class="lw-dnd-section-title"><h3>PLACES &amp; NPCS MET ({{ metEntitiesList().length }})</h3></div>
-              <div class="lw-dnd-features-grid">
-                @for (entity of metEntitiesList(); track entity.id) {
-                  <article class="lw-dnd-feat-card">
-                    <div class="lw-dnd-feat-card__top">
-                      <span class="lw-dnd-feat-card__src">{{ entity.entityType }} · {{ entity.roleOrRegion }}</span>
-                      <a [routerLink]="entity.routeLink" class="lw-dnd-roll-banner__link">Open in Loom</a>
-                    </div>
-                    <h4>{{ entity.name }}</h4>
-                    <p>{{ entity.summary }}</p>
-                  </article>
-                }
-              </div>
-            </div>
-          </div>
-        }
-      </section>
-    </main>
-    <!-- RIGHT COLLAPSIBLE CAMPAIGN RULES DRAWER (AUTO-OPENS ON ITEM SELECTION) -->
-    @if (interactive.rightDrawerOpen()) {
-      <aside class="lw-dnd-rules-drawer">
-        @if (interactive.inspectedRule(); as rule) {
-          <header class="lw-dnd-rules-drawer__head">
-            <div>
-              <span class="lw-dnd-rules-drawer__eyebrow">{{ rule.categoryLabel }}</span>
-              <h3>{{ rule.title }}</h3>
-              <p>{{ rule.subtitle }}</p>
-            </div>
-            <button type="button" class="lw-dnd-drawer-close" (click)="interactive.rightDrawerOpen.set(false)">
-              <lw-icon name="close" [size]="16" />
-            </button>
-          </header>
-          <div class="lw-dnd-rules-drawer__meta">
-            <div><span>TIME / ACTION</span><strong>{{ rule.castingOrActionTime }}</strong></div>
-            <div><span>RANGE</span><strong>{{ rule.rangeOrArea }}</strong></div>
-            <div><span>COST / SLOT</span><strong>{{ rule.componentsOrSlot }}</strong></div>
-            <div><span>EFFECT</span><strong>{{ rule.damageOrBonusBadge }}</strong></div>
-          </div>
-          @if (rule.rollConfig) {
-            <button type="button" class="lw-dnd-drawer-roll-cta" (click)="executeInspectedRuleRoll(rule)">
-              <lw-icon name="casino" [size]="16" />
-              Roll {{ rule.title }} ({{ rule.damageOrBonusBadge }})
-            </button>
-          }
-          <div class="lw-dnd-rules-drawer__section">
-            <h4>STANDARD D&amp;D 5E RULE</h4>
-            <p>{{ rule.standardRuleText }}</p>
-          </div>
-          <div class="lw-dnd-rules-drawer__section lw-dnd-rules-drawer__section--campaign">
-            <div class="lw-campaign-rule-badge">ADJUSTED RULE FOR THIS CAMPAIGN</div>
-            <h4>{{ rule.campaignAdjustedRuleTitle }}</h4>
-            <p>{{ rule.campaignAdjustedRuleText }}</p>
-            @if (rule.campaignClauseFormula) {
-              <code class="lw-campaign-clause">{{ rule.campaignClauseFormula }}</code>
-            }
-          </div>
-          <div class="lw-dnd-rules-drawer__tags">
-            @for (tag of rule.tags; track tag) {
-              <span class="lw-dnd-tag">{{ tag }}</span>
-            }
-          </div>
-        }
-      </aside>
-    }
-  </div>
-  <!-- MODALS: PORTRAIT PICKER, SPELL PREP CONFIRMATION, & @LOOM NOTE COMPOSER -->
-  @if (portraitModalOpen()) { <div class="lw-dnd-modal-backdrop" (click)="portraitModalOpen.set(false)"><div class="lw-dnd-modal-card" (click)="$event.stopPropagation()"><lw-character-portrait-picker [portraitUrl]="sheet().portraitUrl" [characterName]="sheet().name" (portraitSelected)="portraitSelected.emit($event); portraitModalOpen.set(false)" /></div></div> }
-  <lw-note-composer-modal [(open)]="noteComposerOpen" defaultNoteType="character" defaultVisibility="global" [sourceEntityKey]="sheet().characterKey" [sourceEntityName]="sheet().name" [mentionableEntities]="mentionableEntities()" (noteSaved)="richNoteAdded.emit($event)" />
-  @if (pendingSpellPrep(); as prep) {
-    <div class="lw-dnd-modal-backdrop" (click)="pendingSpellPrep.set(null)">
-      <div class="lw-dnd-modal-card" (click)="$event.stopPropagation()">
-        <h3>{{ prep.rule.ruleHeading }}</h3>
-        <p><strong>Required Time:</strong> {{ prep.rule.durationBadge }}</p>
-        <p>{{ prep.rule.explanation }}</p>
-        <div class="lw-dnd-modal-actions">
-          <lw-button variant="secondary" size="sm" (pressed)="pendingSpellPrep.set(null)">Cancel</lw-button>
-          <lw-button variant="gold" size="sm" (pressed)="confirmSpellPreparationChange()">Confirm Spell Preparation</lw-button>
-        </div>
-      </div>
-    </div>
-  }
+<div class="lw-dnd-sheet-shell" [class.has-drawer-open]="interactive.rightDrawerOpen()">   <!-- COMPACT TOP CHARACTER BAR & LIVE SIGNALR ENCOUNTER STATUS -->
+  <header class="lw-dnd-topbar">     <div class="lw-dnd-topbar__identity">
+      <button type="button" class="lw-dnd-avatar-btn" (click)="portraitModalOpen.set(true)" title="Change Character Portrait">         <img [src]="sheet().portraitUrl" [alt]="sheet().name" />
+        <span class="lw-dnd-avatar-btn__edit"><lw-icon name="edit" [size]="11" /></span>       </button>
+      <div class="lw-dnd-identity-copy">         <div class="lw-dnd-identity-row">
+          <h1 class="lw-dnd-char-name">{{ sheet().name }}</h1>           @if (partyRoster().length > 1) {
+            <div class="lw-dnd-party-pills">               @for (member of partyRoster(); track member.characterKey) {
+                <button type="button" class="lw-dnd-party-pill" [class.is-active]="member.characterKey === sheet().characterKey" (click)="characterSelected.emit(member.characterKey)">                   {{ member.name.split(' ')[0] }}
+                </button>               }
+            </div>           }
+        </div>         <div class="lw-dnd-sub-xp-row">
+          <span class="lw-dnd-char-sub">{{ sheet().ancestryOrClan }} · {{ sheet().classOrArchetype }} · {{ sheet().backgroundName }}</span>           <span class="lw-dnd-lvl-tag">LVL {{ sheet().level }}</span>
+          <div class="lw-dnd-xp-bar" ngpProgress [ngpProgressValue]="xpProgressPercent()" [ngpProgressMax]="100">             <div class="lw-dnd-xp-bar__track" ngpProgressTrack>
+              <div class="lw-dnd-xp-bar__fill" ngpProgressIndicator [style.width.%]="xpProgressPercent()"></div>             </div>
+          </div>           <span class="lw-dnd-xp-text">{{ sheet().currentXp }}/{{ sheet().nextLevelXp }} XP</span>
+        </div>       </div>
+    </div>     <!-- REST & LIVE ROLL MODE CONTROLS (SYNCED WITH ENCOUNTER; UNCLICKABLE WHEN SPENT) -->
+    <div class="lw-dnd-topbar__center">       <button
+        type="button"         class="lw-dnd-rest-btn"
+        [class.is-spent]="economy().shortRestSpent"         [disabled]="economy().shortRestSpent"
+        (click)="interactive.takeShortRest(sheet())"         [title]="economy().shortRestSpent ? 'Short Rest already spent (restores on Long Rest)' : 'Take Short Rest (1 Hour)'"
+      >         <lw-icon [name]="economy().shortRestSpent ? 'hourglass_disabled' : 'schedule'" [size]="13" />
+        {{ economy().shortRestSpent ? 'SHORT REST (SPENT)' : 'SHORT REST' }}       </button>
+      <button         type="button"
+        class="lw-dnd-rest-btn"         [class.is-spent]="economy().longRestSpent"
+        [disabled]="economy().longRestSpent"         (click)="interactive.takeLongRest(sheet())"
+        [title]="economy().longRestSpent ? 'Long Rest already spent this session' : 'Take Long Rest (8 Hours)'"       >
+        <lw-icon [name]="economy().longRestSpent ? 'bedtime_off' : 'bedtime'" [size]="13" />         {{ economy().longRestSpent ? 'LONG REST (SPENT)' : 'LONG REST' }}
+      </button>       <span
+        class="lw-dnd-rollmode-pill"         [class.is-adv]="economy().rollMode === 'advantage'"
+        [class.is-dis]="economy().rollMode === 'disadvantage'"         title="Synced live from Encounter conditions and Heroic Inspiration"
+      >         <lw-icon [name]="economy().rollMode === 'advantage' ? 'trending_up' : economy().rollMode === 'disadvantage' ? 'trending_down' : 'sync'" [size]="13" />
+        {{ economy().rollMode === 'advantage' ? 'ADVANTAGE ACTIVE' : economy().rollMode === 'disadvantage' ? 'DISADVANTAGE ACTIVE' : 'STANDARD ROLL' }}       </span>
+    </div>     <!-- TOP RIGHT: EDIT CHARACTER BUTTON ON TOP + LIVE SIGNALR TARGET & OUTCOME PILLS DIRECTLY UNDERNEATH -->
+    <div class="lw-dnd-topbar__right">       <div class="lw-dnd-topbar__right-top">
+        <button type="button" class="lw-live-pill" [class.is-live]="interactive.isSessionLive()" (click)="interactive.toggleSessionLive()" title="Rolls are tracked for Session telemetry when Session is Live">           <span class="lw-live-dot"></span> {{ interactive.isSessionLive() ? 'SESSION LIVE' : 'SESSION OFFLINE' }}
+        </button>         <button type="button" class="lw-live-pill lw-live-pill--encounter" [class.is-live]="interactive.isEncounterLive()" (click)="interactive.toggleEncounterLive()" title="Combat strikes, damage, & action slots sync live when Encounter is Live">
+          <span class="lw-live-dot"></span> {{ interactive.isEncounterLive() ? 'ENCOUNTER LIVE' : 'ENCOUNTER IDLE' }}         </button>
+        <button type="button" class="lw-dnd-rest-btn lw-dnd-rest-btn--gold" (click)="editCharacterRequested.emit(sheet())">           <lw-icon name="edit" [size]="13" /> EDIT CHARACTER
+        </button>       </div>
+      <div class="lw-dnd-topbar__live-pills">         <span class="lw-live-readout-pill" title="Reads live from selected target in active VTT Encounter">
+          <lw-icon name="gps_fixed" [size]="12" /> Target: <strong>{{ interactive.liveTargetLabel() }}</strong>         </span>
+        <span class="lw-live-readout-pill lw-live-readout-pill--outcome" title="Reads live from active VTT Encounter combat resolution">           <lw-icon name="shield" [size]="12" /> Outcome: <strong>{{ interactive.liveOutcomeLabel() }}</strong>
+        </span>       </div>
+    </div>   </header>
+  @if (interactive.rollToastBanner(); as banner) {     <div class="lw-dnd-roll-banner">
+      <div class="lw-dnd-roll-banner__left"><lw-icon name="casino" [size]="15" /><span>{{ banner }}</span></div>       <div class="lw-dnd-roll-banner__right">
+        <a routerLink="/arcane-screen" class="lw-dnd-roll-banner__link">VTT Combat</a>         <a routerLink="/dice" class="lw-dnd-roll-banner__link">3D Dice</a>
+        <button type="button" class="lw-dnd-roll-banner__close" (click)="interactive.rollToastBanner.set(null)"><lw-icon name="close" [size]="13" /></button>       </div>
+    </div>   }
+  <!-- COMPACT TOP STAT STRIP: 6 ABILITY CARDS + PROFICIENCY + SPEED + HEROIC INSPIRATION + LIVE HP -->   <section class="lw-dnd-stat-strip">
+    <div class="lw-dnd-abilities-row">       @for (ab of sheet().abilities; track ab.code) {
+        <div class="lw-dnd-ability-shield" role="button" tabindex="0" (click)="inspectAbility(ab)" title="Click card to inspect {{ ab.label }} rules & character breakdown">           <span class="lw-dnd-ability-shield__label">{{ ab.label }}</span>
+          <div class="lw-dnd-ability-shield__main">             <button
+              type="button"               class="lw-dnd-ability-shield__mod lw-roll-box-trigger"
+              (click)="$event.stopPropagation(); rollAbilityOnly(ab)"               title="Roll {{ ab.label }} Check (1d20 {{ formatMod(ab.modifier) }})"
+            >               {{ formatMod(ab.modifier) }}
+            </button>             <span class="lw-dnd-ability-shield__score">{{ ab.score }}</span>
+          </div>         </div>
+      }     </div>
+    <div class="lw-dnd-vitals-row">       <div class="lw-dnd-vital-box is-selectable" role="button" tabindex="0" (click)="inspectContextRule('proficiency', 'Proficiency Bonus (+' + sheet().proficiencyBonus + ')', 'Applies to proficient attacks, saves, skills, and Spell Save DC')">
+        <span class="lw-dnd-vital-box__lbl">PROFICIENCY</span>         <strong class="lw-dnd-vital-box__val">+{{ sheet().proficiencyBonus }}</strong>
+        <span class="lw-dnd-vital-box__sub">BONUS</span>       </div>
+      <div class="lw-dnd-vital-box is-selectable" role="button" tabindex="0" (click)="inspectContextRule('speed', 'Walking Speed (' + sheet().speedFeet + ' ft.)', sheet().ancestryOrClan + ' base movement speed')">         <span class="lw-dnd-vital-box__lbl">WALKING</span>
+        <strong class="lw-dnd-vital-box__val">{{ sheet().speedFeet }}<small>ft.</small></strong>         <span class="lw-dnd-vital-box__sub">SPEED</span>
+      </div>       <div class="lw-dnd-vital-box lw-dnd-vital-box--insp is-selectable" [class.is-inspired]="economy().heroicInspiration" [class.is-spent]="!economy().heroicInspiration" role="button" tabindex="0" (click)="inspectContextRule('inspiration', 'Heroic Inspiration', economy().heroicInspiration ? 'Available — Click READY to expend for Advantage' : 'Spent — Restores on Long Rest or GM award')">
+        <span class="lw-dnd-vital-box__lbl">HEROIC</span>         <button
+          type="button"           class="lw-dnd-insp-diamond"
+          [class.lw-roll-box-trigger]="economy().heroicInspiration"           [class.is-spent]="!economy().heroicInspiration"
+          [disabled]="!economy().heroicInspiration"           (click)="$event.stopPropagation(); interactive.spendHeroicInspiration(sheet().characterKey)"
+          [title]="economy().heroicInspiration ? 'Expend Heroic Inspiration to gain Advantage on your next d20 roll' : 'Heroic Inspiration Spent'"         >
+          <lw-icon [name]="economy().heroicInspiration ? 'military_tech' : 'block'" [size]="12" />           {{ economy().heroicInspiration ? 'READY' : 'SPENT' }}
+        </button>         <span class="lw-dnd-vital-box__sub">INSPIRATION</span>
+      </div>       <!-- LIVE-SYNCED HIT POINTS WIDGET -->
+      <div class="lw-dnd-hp-widget is-selectable" role="button" tabindex="0" (click)="inspectContextRule('hp', 'Hit Points & Vitality', effectiveHpCurrent() + ' / ' + sheet().maxHp + ' HP (Live Encounter Synced)')" title="Click to inspect Hit Points, Hit Dice, & Rest rules for {{ sheet().name }}">         <div class="lw-dnd-hp-widget__controls" (click)="$event.stopPropagation()">
+          <button type="button" class="lw-hp-btn lw-hp-btn--heal" (click)="applyHeal()">HEAL</button>           <input type="number" min="1" max="999" class="lw-hp-input" [ngModel]="hpDeltaInput()" (ngModelChange)="hpDeltaInput.set(+$event)" />
+          <button type="button" class="lw-hp-btn lw-hp-btn--dmg" (click)="applyDamage()">DAMAGE</button>         </div>
+        <div class="lw-dnd-hp-widget__readout">           <div class="lw-hp-col"><span class="lw-hp-col__lbl">CURRENT</span><strong class="lw-hp-col__num">{{ effectiveHpCurrent() }}</strong></div>
+          <span class="lw-hp-slash">/</span>           <div class="lw-hp-col"><span class="lw-hp-col__lbl">MAX</span><strong class="lw-hp-col__num">{{ sheet().maxHp }}</strong></div>
+          <div class="lw-hp-col"><span class="lw-hp-col__lbl">TEMP</span><strong class="lw-hp-col__num lw-hp-col__num--temp">{{ economy().tempHp || '--' }}</strong></div>         </div>
+      </div>     </div>
+  </section>   <!-- 3-COLUMN MAIN SHEET BODY + RIGHT COLLAPSIBLE RULES DRAWER -->
+  <div class="lw-dnd-main-grid">     <!-- COLUMN 1: SAVING THROWS + SENSES + PROFICIENCIES -->
+    <aside class="lw-dnd-col lw-dnd-col--left">       <section class="lw-dnd-panel">
+        <header class="lw-dnd-panel__head"><h2>SAVING THROWS</h2></header>         <div class="lw-dnd-saves-grid">
+          @for (sv of sheet().savingThrows; track sv.code) {             <div class="lw-dnd-save-pill" [class.is-proficient]="sv.proficient" role="button" tabindex="0" (click)="inspectSave(sv)" title="Click row to inspect {{ sv.label }} Save breakdown">
+              <span class="lw-dnd-prof-dot" [class.is-filled]="sv.proficient"></span>               <span class="lw-dnd-save-pill__code">{{ sv.code }}</span>
+              <button                 type="button"
+                class="lw-dnd-save-pill__mod lw-roll-box-trigger"                 (click)="$event.stopPropagation(); rollSaveOnly(sv)"
+                title="Roll {{ sv.code }} Saving Throw (1d20 {{ formatMod(sv.bonus) }})"               >
+                {{ formatMod(sv.bonus) }}               </button>
+            </div>           }
+        </div>       </section>
+      <section class="lw-dnd-panel">         <header class="lw-dnd-panel__head"><h2>SENSES</h2></header>
+        <div class="lw-dnd-senses-list">           <div class="lw-dnd-sense-row is-selectable" role="button" tabindex="0" (click)="inspectContextRule('sense', 'Passive Perception (' + passivePerception() + ')', '10 + WIS (Perception) bonus')">
+            <span class="lw-dnd-sense-row__val">{{ passivePerception() }}</span>             <span class="lw-dnd-sense-row__lbl">PASSIVE PERCEPTION</span>
+          </div>           <div class="lw-dnd-sense-row is-selectable" role="button" tabindex="0" (click)="inspectContextRule('sense', 'Passive Investigation (' + passiveInvestigation() + ')', '10 + INT (Investigation) bonus')">
+            <span class="lw-dnd-sense-row__val">{{ passiveInvestigation() }}</span>             <span class="lw-dnd-sense-row__lbl">PASSIVE INVESTIGATION</span>
+          </div>           <div class="lw-dnd-sense-row is-selectable" role="button" tabindex="0" (click)="inspectContextRule('sense', 'Passive Insight (' + passiveInsight() + ')', '10 + WIS (Insight) bonus')">
+            <span class="lw-dnd-sense-row__val">{{ passiveInsight() }}</span>             <span class="lw-dnd-sense-row__lbl">PASSIVE INSIGHT</span>
+          </div>         </div>
+        <p class="lw-dnd-panel__foot-note is-selectable" role="button" tabindex="0" (click)="inspectContextRule('sense', 'Darkvision 60 ft. & Anelith Sense', 'See in dim light within 60 ft as bright light and in darkness as dim light')">           Darkvision 60 ft. · Anelith / Stone-Sense
+        </p>       </section>
+      <section class="lw-dnd-panel">         <header class="lw-dnd-panel__head"><h2>PROFICIENCIES &amp; TRAINING</h2></header>
+        <div class="lw-dnd-prof-blocks">           <div class="lw-dnd-prof-block is-selectable" role="button" tabindex="0" (click)="inspectContextRule('training', 'Armor Training', 'Light Armor, Medium Armor, Shields')">
+            <span class="lw-dnd-prof-block__lbl">ARMOR</span>             <p>Light Armor, Medium Armor, Shields</p>
+          </div>           <div class="lw-dnd-prof-block is-selectable" role="button" tabindex="0" (click)="inspectContextRule('training', 'Weapon Proficiencies', 'Simple Weapons, Martial Blades, Arcane Focuses')">
+            <span class="lw-dnd-prof-block__lbl">WEAPONS</span>             <p>Simple Weapons, Martial Blades, Arcane Focuses</p>
+          </div>           <div class="lw-dnd-prof-block is-selectable" role="button" tabindex="0" (click)="inspectContextRule('training', 'Tool Proficiencies', 'Artificer Tools, Cartographer Tools, Thieves Tools')">
+            <span class="lw-dnd-prof-block__lbl">TOOLS</span>             <p>Artificer's Tools, Cartographer's Tools, Thieves' Tools</p>
+          </div>           <div class="lw-dnd-prof-block is-selectable" role="button" tabindex="0" (click)="inspectContextRule('training', 'Known Languages', 'Common, Elvish, Dwarvish, Draconic')">
+            <span class="lw-dnd-prof-block__lbl">LANGUAGES</span>             <p>Common, Elvish, Dwarvish, Draconic</p>
+          </div>         </div>
+      </section>     </aside>
+    <!-- COLUMN 2: ALL 18 SKILLS (ROW OPENS DRAWER, +BONUS BOX ROLLS DIRECTLY) -->     <section class="lw-dnd-col lw-dnd-col--skills">
+      <div class="lw-dnd-panel lw-dnd-panel--skills">         <header class="lw-dnd-panel__head"><h2>SKILLS</h2></header>
+        <div class="lw-dnd-skills-table-head"><span>PROF</span><span>MOD</span><span>SKILL</span><span>BONUS</span></div>         <div class="lw-dnd-skills-list lw-custom-scroll">
+          @for (sk of sheet().skills; track sk.label) {             <div class="lw-dnd-skill-row" [class.is-proficient]="sk.proficient" role="button" tabindex="0" (click)="inspectSkill(sk)" title="Click row to inspect {{ sk.label }} rules & breakdown">
+              <span class="lw-dnd-prof-dot" [class.is-filled]="sk.proficient"></span>               <span class="lw-dnd-skill-row__abil">{{ sk.abilityCode }}</span>
+              <span class="lw-dnd-skill-row__name">{{ sk.label }}</span>               <button
+                type="button"                 class="lw-dnd-skill-row__bonus lw-roll-box-trigger"
+                (click)="$event.stopPropagation(); rollSkillOnly(sk)"                 title="Roll {{ sk.label }} Check (1d20 {{ formatMod(sk.bonus) }})"
+              >                 {{ formatMod(sk.bonus) }}
+              </button>             </div>
+          }         </div>
+      </div>     </section>
+    <!-- COLUMN 3: INITIATIVE/AC/DEFENSES + ACTION ECONOMY + INDEPENDENTLY SCROLLABLE TABBED WORKSPACE -->     <main class="lw-dnd-col lw-dnd-col--workspace">
+      <div class="lw-dnd-combat-header">         <div class="lw-dnd-init-box is-selectable" role="button" tabindex="0" (click)="inspectInitiative()" title="Click card to inspect Initiative rules">
+          <span class="lw-dnd-init-box__lbl">INITIATIVE</span>           <button
+            type="button"             class="lw-dnd-init-box__val lw-roll-box-trigger"
+            (click)="$event.stopPropagation(); rollInitiativeOnly()"             title="Roll Initiative (1d20 {{ formatMod(sheet().initiativeBonus) }})"
+          >             {{ formatMod(sheet().initiativeBonus) }}
+          </button>         </div>
+        <button type="button" class="lw-dnd-ac-shield" (click)="inspectArmorClass()" title="Click to inspect Armor Class calculation & reactions">           <span class="lw-dnd-ac-shield__lbl">ARMOR</span>
+          <strong class="lw-dnd-ac-shield__val">{{ sheet().armorClass }}</strong>           <span class="lw-dnd-ac-shield__sub">CLASS</span>
+        </button>         <div class="lw-dnd-defenses-box">
+          <div class="lw-dnd-def-col is-selectable" role="button" tabindex="0" (click)="inspectContextRule('defense', 'Defenses & Lineage Wards', 'Anelith Ward · Fey Ancestry (Advantage vs Charmed, Immune to Magical Sleep)')">             <span class="lw-dnd-def-col__lbl">DEFENSES</span>
+            <p>Anelith Ward · Fey Ancestry</p>           </div>
+          <div class="lw-dnd-def-col is-selectable" role="button" tabindex="0" (click)="inspectContextRule('condition', 'Active Conditions & Roll State', economy().rollMode !== 'normal' ? economy().rollMode.toUpperCase() + ' Active' : economy().heroicInspiration ? 'Heroic Inspiration Ready' : 'No Negative Conditions')">             <span class="lw-dnd-def-col__lbl">CONDITIONS</span>
+            <p>{{ economy().rollMode !== 'normal' ? economy().rollMode.toUpperCase() : economy().heroicInspiration ? 'Inspiration Ready' : 'None Active' }}</p>           </div>
+        </div>         <div class="lw-dnd-economy-bar">
+          <div class="lw-dnd-economy-bar__top">             <span class="lw-dnd-economy-bar__lbl">TURN ACTION SLOTS</span>
+            <button type="button" class="lw-dnd-economy-reset" (click)="interactive.resetTurnEconomy(sheet().characterKey)">Reset Turn</button>           </div>
+          <div class="lw-dnd-economy-pills">             <button type="button" class="lw-econ-slot" [class.is-spent]="economy().actionUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'actionUsed')">
+              <span class="lw-econ-dot"></span> Action {{ economy().actionUsed ? '(Spent)' : '(Ready)' }}             </button>
+            <button type="button" class="lw-econ-slot lw-econ-slot--bonus" [class.is-spent]="economy().bonusUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'bonusUsed')">               <span class="lw-econ-dot"></span> Bonus {{ economy().bonusUsed ? '(Spent)' : '(Ready)' }}
+            </button>             <button type="button" class="lw-econ-slot lw-econ-slot--reaction" [class.is-spent]="economy().reactionUsed" (click)="interactive.toggleActionSlotManual(sheet().characterKey, 'reactionUsed')">
+              <span class="lw-econ-dot"></span> Reaction {{ economy().reactionUsed ? '(Spent)' : '(Ready)' }}             </button>
+          </div>         </div>
+      </div>       <!-- PRIMARY WORKSPACE TABS WITH INDEPENDENT STYLIZED SCROLLER -->
+      <section class="lw-dnd-workspace-card">         <nav class="lw-dnd-tabs" aria-label="Character Sheet Sections">
+          @for (tab of mainTabs; track tab.id) {             <button type="button" class="lw-dnd-tab" [class.is-active]="mainSheetTab() === tab.id" (click)="mainSheetTab.set(tab.id)">{{ tab.label }}</button>
+          }         </nav>
+        <!-- TAB 1: ACTIONS -->         @if (mainSheetTab() === 'ACTIONS') {
+          <div class="lw-dnd-tab-body lw-custom-scroll">             <div class="lw-dnd-subfilters">
+              @for (flt of actionFilters; track flt) {                 <button type="button" class="lw-dnd-subfilter-pill" [class.is-active]="actionSubFilter() === flt" (click)="actionSubFilter.set(flt)">{{ flt }}</button>
+              }             </div>
+            <div class="lw-dnd-section-block">               <div class="lw-dnd-section-title">
+                <h3>ATTACKS &amp; ACTIVE ABILITIES</h3>                 <span>Click row to inspect rules · Click Hit/DC to roll attack · Click Damage to roll damage</span>
+              </div>               <div class="lw-dnd-attacks-table">
+                <div class="lw-dnd-attacks-head"><span>ATTACK / ABILITY</span><span>RANGE</span><span>HIT / DC</span><span>DAMAGE / EFFECT</span><span>USES / NOTES</span></div>                 @for (row of filteredActionRows(); track row.id) {
+                  <div class="lw-dnd-attack-row" role="button" tabindex="0" (click)="inspectActionRow(row)" title="Click row to inspect {{ row.name }} rules & requirements">                     <div class="lw-dnd-attack-row__name">
+                      <strong>{{ row.name }}</strong>                       <small>{{ row.subtitle }} · {{ row.actionSlotCost.toUpperCase() }}</small>
+                    </div>                     <span class="lw-dnd-attack-row__range">{{ row.rangeLabel }}</span>
+                    <button                       type="button"
+                      class="lw-dnd-roll-btn lw-dnd-roll-btn--hit lw-roll-box-trigger"                       (click)="$event.stopPropagation(); rollActionHitOnly(row)"
+                      title="Roll {{ row.name }} Attack / Check (1d20 {{ row.hitOrDcLabel }})"                     >
+                      {{ row.hitOrDcLabel }}                     </button>
+                    <button                       type="button"
+                      class="lw-dnd-roll-btn lw-dnd-roll-btn--dmg lw-roll-box-trigger"                       (click)="$event.stopPropagation(); rollActionDamageOnly(row)"
+                      title="Roll {{ row.name }} Damage ({{ row.damageFormula }} {{ row.damageType }})"                     >
+                      {{ row.damageFormula }} <small>{{ row.damageType }}</small>                     </button>
+                    <div class="lw-dnd-attack-row__notes" (click)="$event.stopPropagation()">                       @if (row.limitedUseId && row.limitedUseMax) {
+                        <div class="lw-dnd-use-boxes">                           @for (idx of slotRange(row.limitedUseMax); track idx) {
+                            <button type="button" class="lw-slot-checkbox" [class.is-checked]="idx < (economy().limitedUsesSpent[row.limitedUseId] ?? 0)" (click)="interactive.toggleLimitedUseBox(sheet().characterKey, row.limitedUseId, idx, row.limitedUseMax)"></button>                           }
+                          <span class="lw-dnd-use-reset">/ {{ row.resetOn }}</span>                         </div>
+                      } @else {                         <span (click)="inspectActionRow(row)">{{ row.notes }}</span>
+                      }                     </div>
+                  </div>                 }
+              </div>             </div>
+            @if (actionSubFilter() === 'ALL' || actionSubFilter() === 'ACTION' || actionSubFilter() === 'OTHER') {               <div class="lw-dnd-section-block">
+                <div class="lw-dnd-section-title">                   <h3>ACTIONS IN COMBAT</h3>
+                  <span>Click any combat action to inspect Campaign Adjusted Rules</span>                 </div>
+                <div class="lw-dnd-combat-action-pills">                   @for (ca of standardCombatActions; track ca.id) {
+                    <button type="button" class="lw-dnd-combat-pill" (click)="inspectCombatAction(ca)">                       <strong>{{ ca.name }}</strong>
+                      <small>{{ ca.cost.toUpperCase() }}</small>                     </button>
+                  }                 </div>
+              </div>             }
+          </div>         }
+        <!-- TAB 2: SPELLS -->         @if (mainSheetTab() === 'SPELLS') {
+          <div class="lw-dnd-tab-body lw-custom-scroll">             <div class="lw-dnd-spell-header-strip">
+              <div class="lw-spell-kpi"><span>ABILITY</span><strong>{{ primaryAbilityCode() }} ({{ formatMod(primaryAbilityMod()) }})</strong></div>               <div class="lw-spell-kpi"><span>SPELL ATTACK</span><strong>{{ formatMod(spellAttackBonus()) }}</strong></div>
+              <div class="lw-spell-kpi"><span>SAVE DC</span><strong>{{ spellSaveDc() }}</strong></div>               <div class="lw-spell-kpi"><span>PREPARED</span><strong>{{ preparedLeveledSpellsCount() }} / {{ maxPreparedSpells() }}</strong></div>
+            </div>             @for (group of sheet().spellGroups; track group.label; let gIdx = $index) {
+              <div class="lw-dnd-section-block">                 <div class="lw-dnd-section-title">
+                  <h3>{{ group.label }}</h3>                   @if (!group.isCantrip) {
+                    <div class="lw-dnd-use-boxes">                       @for (idx of slotRange(group.slotsMax); track idx) {
+                        <button type="button" class="lw-slot-checkbox" [class.is-checked]="idx < (economy().spellSlotsUsed[gIdx] ?? 0)" (click)="interactive.toggleSpellSlotBox(sheet().characterKey, gIdx, idx, group.slotsMax)"></button>                       }
+                      <span class="lw-dnd-use-reset">SLOTS EXPENDED ({{ economy().spellSlotsUsed[gIdx] ?? 0 }}/{{ group.slotsMax }})</span>                     </div>
+                  } @else {                     <span>At-Will Cantrips (0 Slots)</span>
+                  }                 </div>
+                <div class="lw-dnd-attacks-table">                   @for (sp of group.spells; track sp.id) {
+                    <div class="lw-dnd-attack-row" role="button" tabindex="0" (click)="inspectSpellRow(sp)" title="Click row to inspect {{ sp.name }} spell rules & components">                       <div class="lw-dnd-attack-row__name">
+                        <strong>{{ sp.name }}</strong>                         <small>{{ sp.school }} · {{ sp.actionCost }}</small>
+                      </div>                       <span class="lw-dnd-attack-row__range">{{ sp.range ?? '60 ft.' }}</span>
+                      <button                         type="button"
+                        class="lw-dnd-roll-btn lw-dnd-roll-btn--hit lw-roll-box-trigger"                         (click)="$event.stopPropagation(); rollSpellCastOnly(sp, group.slotsMax)"
+                        title="Cast {{ sp.name }} & roll spell attack"                       >
+                        CAST ({{ formatMod(spellAttackBonus()) }})                       </button>
+                      @if (!group.isCantrip) {                         <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); promptSpellPreparationToggle(sp)">
+                          {{ sp.prepared !== false ? 'Prepared' : 'Prepare' }}                         </button>
+                      } @else {                         <span class="lw-dnd-attack-row__range">Always Prepared</span>
+                      }                       <span class="lw-dnd-attack-row__notes">{{ sp.concentration ? 'Concentration' : 'Instant' }}</span>
+                    </div>                   }
+                </div>               </div>
+            }           </div>
+        }         <!-- TAB 3: INVENTORY & EQUIPMENT (WITH TOP-RIGHT + ADD ITEMS BUTTON OPENING LARGE MODAL) -->
+        @if (mainSheetTab() === 'INVENTORY') {           <div class="lw-dnd-tab-body lw-custom-scroll">
+            <div class="lw-dnd-inventory-toprow">               <div class="lw-dnd-spell-header-strip lw-dnd-spell-header-strip--compact">
+                <div class="lw-spell-kpi"><span>WEIGHT CARRIED</span><strong>{{ totalCarriedWeightLbs() }} / {{ carryingCapacityLbs() }} lbs</strong></div>                 <div class="lw-spell-kpi"><span>GOLD PIECES</span><strong>250 GP</strong></div>
+                <div class="lw-spell-kpi"><span>EQUIPPED</span><strong>{{ equippedItems().length }} Items</strong></div>                 <div class="lw-spell-kpi"><span>BACKPACK</span><strong>{{ backpackItems().length }} Stowed</strong></div>
+              </div>               <button type="button" class="lw-dnd-rest-btn lw-dnd-rest-btn--gold lw-add-items-trigger" (click)="itemBrowserModalOpen.set(true)">
+                <lw-icon name="add_circle" [size]="15" /> + ADD ITEMS               </button>
+            </div>             <div class="lw-dnd-section-block">
+              <div class="lw-dnd-section-title"><h3>EQUIPPED ON CHARACTER</h3><span>Click any item row to inspect rules &amp; properties</span></div>               <div class="lw-dnd-attacks-table">
+                @for (item of equippedItems(); track item.id) {                   <div class="lw-dnd-attack-row" role="button" tabindex="0" (click)="inspectFeatureOrItem(item, 'item')">
+                    <div class="lw-dnd-attack-row__name"><strong>{{ item.name }}</strong><small>{{ item.slot }} · {{ item.weightLb ?? 2 }} lbs</small></div>                     <span class="lw-dnd-attack-row__notes">{{ item.summary }}</span>
+                    <span class="lw-dnd-attack-row__range">{{ item.bonusLabel }}</span>                     <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentToggled.emit(item.id)">Stow in Pack</button>
+                    <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentRemoved.emit(item.id)">Remove</button>                   </div>
+                }               </div>
+            </div>             <div class="lw-dnd-section-block">
+              <div class="lw-dnd-section-title"><h3>STOWED IN BACKPACK</h3><span>Click Equip to move to active loadout</span></div>               <div class="lw-dnd-attacks-table">
+                @for (item of backpackItems(); track item.id) {                   <div class="lw-dnd-attack-row" role="button" tabindex="0" (click)="inspectFeatureOrItem(item, 'item')">
+                    <div class="lw-dnd-attack-row__name"><strong>{{ item.name }}</strong><small>{{ item.slot }} · {{ item.weightLb ?? 2 }} lbs</small></div>                     <span class="lw-dnd-attack-row__notes">{{ item.summary }}</span>
+                    <span class="lw-dnd-attack-row__range">{{ item.bonusLabel }}</span>                     <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="$event.stopPropagation(); equipmentToggled.emit(item.id)">Equip</button>
+                    <button type="button" class="lw-dnd-roll-btn" (click)="$event.stopPropagation(); equipmentRemoved.emit(item.id)">Drop</button>                   </div>
+                }               </div>
+            </div>           </div>
+        }         <!-- TAB 4: FEATURES & TRAITS -->
+        @if (mainSheetTab() === 'FEATURES') {           <div class="lw-dnd-tab-body lw-custom-scroll">
+            <div class="lw-dnd-features-grid">               @for (feat of sheet().featureCards; track feat.id) {
+                <article class="lw-dnd-feat-card" (click)="inspectFeatureOrItem(feat, 'feature')">                   <div class="lw-dnd-feat-card__top">
+                    <span class="lw-dnd-feat-card__src">{{ feat.category }}</span>                     <span class="lw-dnd-feat-card__cat">{{ feat.category.toUpperCase() }}</span>
+                  </div>                   <h4>{{ feat.title }}</h4>
+                  <p>{{ feat.summary }}</p>                 </article>
+              }             </div>
+          </div>         }
+        <!-- TAB 5: BACKGROUND -->         @if (mainSheetTab() === 'BACKGROUND') {
+          <div class="lw-dnd-tab-body lw-custom-scroll">             <div class="lw-dnd-spell-header-strip">
+              <div class="lw-spell-kpi is-selectable" (click)="inspectContextRule('training', 'Background: ' + sheet().backgroundName, sheet().backgroundSummary)"><span>BACKGROUND</span><strong>{{ sheet().backgroundName }}</strong></div>               <div class="lw-spell-kpi is-selectable" (click)="inspectContextRule('condition', 'Alignment: ' + sheet().alignment, sheet().quote)"><span>ALIGNMENT</span><strong>{{ sheet().alignment }}</strong></div>
+              <div class="lw-spell-kpi is-selectable" (click)="inspectContextRule('defense', 'Faith & Patron', 'Ekkos & The Anelith')"><span>FAITH / PATRON</span><strong>Ekkos &amp; The Anelith</strong></div>               <div class="lw-spell-kpi"><span>SIZE</span><strong>Medium</strong></div>
+            </div>             <div class="lw-dnd-section-block">
+              <h3>CHRONICLE BACKSTORY</h3>               <p class="lw-dnd-prose">{{ sheet().backgroundSummary }}</p>
+              <p class="lw-dnd-prose"><em>{{ sheet().quote }}</em></p>             </div>
+          </div>         }
+        <!-- TAB 6: NOTES -->         @if (mainSheetTab() === 'NOTES') {
+          <div class="lw-dnd-tab-body lw-custom-scroll">             <div class="lw-dnd-section-title">
+              <h3>CAMPAIGN JOURNAL &amp; LOOM-LINKED NOTES</h3>               <button type="button" class="lw-dnd-rest-btn lw-dnd-rest-btn--gold" (click)="noteComposerOpen.set(true)"><lw-icon name="edit_note" [size]="14" /> + ADD NOTE (@LOOM)</button>
+            </div>             <div class="lw-dnd-features-grid">
+              @for (note of sheet().richNotes ?? []; track note.id) {                 <article class="lw-dnd-feat-card">
+                  <div class="lw-dnd-feat-card__top"><span class="lw-dnd-feat-card__src">{{ note.noteType }}</span><span class="lw-dnd-feat-card__cat">{{ note.visibility }}</span></div>                   <h4>{{ note.title }}</h4>
+                  <div class="lw-dnd-prose" [innerHTML]="note.contentHtml"></div>                 </article>
+              }             </div>
+          </div>         }
+        <!-- TAB 7: EXTRAS & TELEMETRY -->         @if (mainSheetTab() === 'EXTRAS') {
+          <div class="lw-dnd-tab-body lw-custom-scroll">             <div class="lw-dnd-section-title">
+              <h3>LIVE SESSION &amp; ENCOUNTER TELEMETRY ({{ sheet().name }})</h3>               <span>Tracked ONLY when Session / Encounter is Live</span>
+            </div>             <div class="lw-dnd-telemetry-kpis">
+              <div class="lw-spell-kpi"><span>TOTAL DAMAGE</span><strong>{{ telemetry().totalDamageDealt }}</strong></div>               <div class="lw-spell-kpi"><span>NAT 20s ROLLED</span><strong>{{ telemetry().nat20Count }}</strong></div>
+              <div class="lw-spell-kpi"><span>CRIT FAILS (NAT 1)</span><strong>{{ telemetry().critFailCount }}</strong></div>               <div class="lw-spell-kpi"><span>LANDED / MISSED</span><strong>{{ telemetry().landedStrikes }} / {{ telemetry().missedStrikes }}</strong></div>
+              <div class="lw-spell-kpi"><span>INTERRUPTED / REDUCED</span><strong>{{ telemetry().attacksInterrupted }} / {{ telemetry().attacksReducedDamage }}</strong></div>               <div class="lw-spell-kpi"><span>DMG MITIGATED</span><strong>{{ telemetry().totalDamageReducedOrMitigated }}</strong></div>
+            </div>             <div class="lw-dnd-section-block">
+              <div class="lw-dnd-section-title"><h3>D20 ROLLS BY NUMBER (1–20 DISTRIBUTION)</h3><span>SQL &amp; SignalR Verified</span></div>               <div class="lw-dnd-d20-bars">
+                @for (num of d20Numbers; track num) {                   <div class="lw-d20-col" [class.is-crit]="num === 20" [class.is-fail]="num === 1">
+                    <span class="lw-d20-col__cnt">{{ telemetry().rollsByNumber[num] ?? 0 }}</span>                     <div class="lw-d20-col__bar-wrap"><div class="lw-d20-col__bar" [style.height.%]="((telemetry().rollsByNumber[num] ?? 0) * 100) / 14"></div></div>
+                    <span class="lw-d20-col__num">{{ num }}</span>                   </div>
+                }               </div>
+            </div>             <div class="lw-dnd-section-block">
+              <div class="lw-dnd-section-title"><h3>RECENT SHEET ROLL LOG (SESSION &amp; ENCOUNTER)</h3></div>               <div class="lw-dnd-roll-log-list">
+                @for (log of interactive.rollLogs(); track log.id) {                   <div class="lw-dnd-roll-log-item"><span>{{ log.summaryMessage }}</span><code>{{ log.sha256Digest }}</code></div>
+                }               </div>
+            </div>             <div class="lw-dnd-section-block">
+              <div class="lw-dnd-section-title"><h3>PLACES &amp; NPCS MET ({{ metEntitiesList().length }})</h3></div>               <div class="lw-dnd-features-grid">
+                @for (entity of metEntitiesList(); track entity.id) {                   <article class="lw-dnd-feat-card" (click)="inspectContextRule('sense', entity.name + ' (' + entity.entityType + ')', entity.summary + ' — ' + entity.details)">
+                    <div class="lw-dnd-feat-card__top">                       <span class="lw-dnd-feat-card__src">{{ entity.entityType }} · {{ entity.roleOrRegion }}</span>
+                      <a [routerLink]="entity.routeLink" class="lw-dnd-roll-banner__link" (click)="$event.stopPropagation()">Open in Loom</a>                     </div>
+                    <h4>{{ entity.name }}</h4>                     <p>{{ entity.summary }}</p>
+                  </article>                 }
+              </div>             </div>
+          </div>         }
+      </section>     </main>
+    <!-- RIGHT COLLAPSIBLE CAMPAIGN RULES DRAWER (STYLIZED CLOSE BUTTON + INDEPENDENT SCROLLER) -->     @if (interactive.rightDrawerOpen()) {
+      <aside class="lw-dnd-rules-drawer lw-custom-scroll">         @if (interactive.inspectedRule(); as rule) {
+          <header class="lw-dnd-rules-drawer__head">             <div>
+              <span class="lw-dnd-rules-drawer__eyebrow">{{ rule.categoryLabel }}</span>               <h3>{{ rule.title }}</h3>
+              <p>{{ rule.subtitle }}</p>             </div>
+            <button type="button" class="lw-dnd-drawer-close" (click)="interactive.rightDrawerOpen.set(false)" title="Close Rules Panel">               <lw-icon name="close" [size]="16" />
+            </button>           </header>
+          <div class="lw-dnd-rules-drawer__meta">             <div><span>TIME / ACTION</span><strong>{{ rule.castingOrActionTime }}</strong></div>
+            <div><span>RANGE</span><strong>{{ rule.rangeOrArea }}</strong></div>             <div><span>CHARACTER / COST</span><strong>{{ rule.componentsOrSlot }}</strong></div>
+            <div><span>EFFECT</span><strong>{{ rule.damageOrBonusBadge }}</strong></div>           </div>
+          @if (rule.rollConfig) {             <button type="button" class="lw-dnd-drawer-roll-cta" (click)="executeInspectedRuleRoll(rule)">
+              <lw-icon name="casino" [size]="16" /> Roll {{ rule.title }} ({{ rule.damageOrBonusBadge }})             </button>
+          }           <div class="lw-dnd-rules-drawer__section">
+            <h4>CHARACTER-SPECIFIC RULE &amp; BREAKDOWN</h4>             <p>{{ rule.standardRuleText }}</p>
+          </div>           <div class="lw-dnd-rules-drawer__section lw-dnd-rules-drawer__section--campaign">
+            <div class="lw-campaign-rule-badge">ADJUSTED RULE FOR THIS CAMPAIGN</div>             <h4>{{ rule.campaignAdjustedRuleTitle }}</h4>
+            <p>{{ rule.campaignAdjustedRuleText }}</p>             @if (rule.campaignClauseFormula) {
+              <code class="lw-campaign-clause">{{ rule.campaignClauseFormula }}</code>             }
+          </div>           <div class="lw-dnd-rules-drawer__tags">
+            @for (tag of rule.tags; track tag) {               <span class="lw-dnd-tag">{{ tag }}</span>
+            }           </div>
+        }       </aside>
+    }   </div>
+  <!-- FLOATING 3D BABYLON.JS DICE ROLL TRAY & RESULT POPOVER -->   <div class="lw-dnd-dice-tray" [class.is-open]="interactive.diceTrayOpen()">
+    <div class="lw-dnd-dice-tray__header">       <span><lw-icon name="casino" [size]="14" /> 3D DICE ENGINE</span>
+      <button type="button" class="lw-dnd-drawer-close" (click)="interactive.diceTrayOpen.set(false)"><lw-icon name="close" [size]="14" /></button>     </div>
+    <canvas #miniDiceCanvas class="lw-dnd-dice-tray__canvas"></canvas>     @if (interactive.lastRollResult(); as res) {
+      <div class="lw-dnd-dice-tray__result" [class.is-crit]="res.isNat20" [class.is-fail]="res.isCritFail">         <div class="lw-dnd-dice-tray__meta">
+          <strong>{{ res.itemName }}</strong>           <span>{{ res.formula }} · Natural {{ res.naturalDie }}</span>
+        </div>         <div class="lw-dnd-dice-tray__total">{{ res.total }}</div>
+      </div>     }
+  </div>   <!-- LARGE STYLIZED ITEM BROWSER MODAL -->
+  @if (itemBrowserModalOpen()) {     <div class="lw-dnd-modal-backdrop" (click)="itemBrowserModalOpen.set(false)">
+      <div class="lw-item-catalog-modal" (click)="$event.stopPropagation()">         <header class="lw-item-catalog-modal__head">
+          <div>             <span class="lw-dnd-rules-drawer__eyebrow">CHARACTER INVENTORY &amp; EQUIPMENT</span>
+            <h2>Add Items to {{ sheet().name }}</h2>           </div>
+          <button type="button" class="lw-dnd-drawer-close" (click)="itemBrowserModalOpen.set(false)" title="Close Item Browser">             <lw-icon name="close" [size]="18" />
+          </button>         </header>
+        <div class="lw-item-catalog-modal__toolbar">           <div class="lw-stylized-search">
+            <lw-icon name="search" [size]="18" />             <input
+              type="search"               placeholder="Search items by name, category, rarity, or bonus..."
+              [ngModel]="equipmentSearch()"               (ngModelChange)="equipmentSearch.set($event)"
+            />             @if (equipmentSearch()) {
+              <button type="button" class="lw-stylized-search__clear" (click)="equipmentSearch.set('')">                 <lw-icon name="close" [size]="14" />
+              </button>             }
+            <span class="lw-stylized-search__count">{{ filteredEquipmentCatalog().length }} Items</span>           </div>
+          <div class="lw-item-quick-filters">             @for (qf of itemQuickFilters; track qf.id) {
+              <button                 type="button"
+                class="lw-dnd-subfilter-pill"                 [class.is-active]="itemQuickFilter() === qf.id"
+                (click)="itemQuickFilter.set(qf.id)"               >
+                {{ qf.label }}               </button>
+            }           </div>
+        </div>         <div class="lw-item-catalog-grid lw-custom-scroll">
+          @for (item of filteredEquipmentCatalog(); track item.id) {             <article class="lw-item-card" [class.is-rare]="item.rarity === 'Rare'" [class.is-uncommon]="item.rarity === 'Uncommon'">
+              <div class="lw-item-card__media">                 <img [src]="itemImageUrl(item)" [alt]="item.name" />
+                <span class="lw-item-card__rarity">{{ item.rarity ?? 'Common' }}</span>               </div>
+              <div class="lw-item-card__body">                 <div class="lw-item-card__top">
+                  <h4>{{ item.name }}</h4>                   <span class="lw-item-card__slot">{{ item.slot }} · {{ item.weightLb ?? 1 }} lb</span>
+                </div>                 <p class="lw-item-card__desc">{{ item.summary }}</p>
+                <div class="lw-item-card__bonus">{{ item.bonusLabel }}</div>                 <div class="lw-item-card__actions">
+                  <button type="button" class="lw-dnd-roll-btn lw-dnd-roll-btn--hit" (click)="equipmentAdded.emit({ item, equipNow: true })">                     + Equip Now
+                  </button>                   <button type="button" class="lw-dnd-roll-btn" (click)="equipmentAdded.emit({ item, equipNow: false })">
+                    + Backpack                   </button>
+                </div>               </div>
+            </article>           }
+        </div>       </div>
+    </div>   }
+  <!-- PORTRAIT & NOTE & SPELL PREP MODALS -->   @if (portraitModalOpen()) {
+    <div class="lw-dnd-modal-backdrop" (click)="portraitModalOpen.set(false)">       <div class="lw-dnd-modal-card" (click)="$event.stopPropagation()">
+        <lw-character-portrait-picker [portraitUrl]="sheet().portraitUrl" [characterName]="sheet().name" (portraitSelected)="portraitSelected.emit($event); portraitModalOpen.set(false)" />       </div>
+    </div>   }
+  <lw-note-composer-modal [(open)]="noteComposerOpen" defaultNoteType="character" defaultVisibility="global" [sourceEntityKey]="sheet().characterKey" [sourceEntityName]="sheet().name" [mentionableEntities]="mentionableEntities()" (noteSaved)="richNoteAdded.emit($event)" />   @if (pendingSpellPrep(); as prep) {
+    <div class="lw-dnd-modal-backdrop" (click)="pendingSpellPrep.set(null)">       <div class="lw-dnd-modal-card" (click)="$event.stopPropagation()">
+        <h3>{{ prep.rule.title }} — {{ prep.rule.ruleHeading }}</h3>         <p><strong>Required Time:</strong> {{ prep.rule.durationBadge }}</p>
+        <p>{{ prep.rule.explanation }}</p>         <div class="lw-dnd-modal-actions">
+          <lw-button variant="secondary" size="sm" (pressed)="pendingSpellPrep.set(null)">Cancel</lw-button>           <lw-button variant="gold" size="sm" (pressed)="confirmSpellPreparationChange()">Confirm Spell Preparation</lw-button>
+        </div>       </div>
+    </div>   }
 </div>

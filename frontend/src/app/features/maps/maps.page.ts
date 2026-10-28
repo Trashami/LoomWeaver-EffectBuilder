@@ -52,6 +52,7 @@ import { MapPngAssetApiService } from './application/map-png-asset-api.service';
 import { MapStudioStoreService } from './application/map-studio-store.service';
 import { MapStudioSnapshot } from './application/map-studio.models';
 import {
+  MapFloorBlendMode,
   MapSceneGraphState,
   MapWallSegmentNode,
   WallDrawMode,
@@ -141,6 +142,18 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   readonly selectedNode = signal<LwSelectedSceneNode>(INITIAL_SELECTED_WALL_NODE);
 
   readonly floorTilingScale = signal<number>(10);
+  readonly floorBumpIntensity = signal<number>(135);
+  readonly floorHeightScale = signal<number>(100);
+  readonly floorColorHex = signal<string>('#ffffff');
+  readonly floorColorStrength = signal<number>(0);
+  readonly floorColorBlendMode = signal<MapFloorBlendMode>('multiply');
+  readonly floorBrushActive = signal<boolean>(false);
+  readonly floorBrushColorHex = signal<string>('#3b7a47');
+  readonly floorBrushBlendMode = signal<MapFloorBlendMode>('multiply');
+  readonly floorBrushOpacity = signal<number>(35);
+  readonly floorBrushRadius = signal<number>(3.0);
+  readonly floorBrushSharpness = signal<number>(22);
+  private lastFloorPaintPos: { x: number; z: number } | null = null;
   readonly wallDrawMode = signal<WallDrawMode>('line');
   readonly wallStartAnchor = signal<{ x: number; z: number } | null>(null);
   readonly freehandWallPoints = signal<readonly (readonly [number, number])[]>([]);
@@ -331,8 +344,13 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     const tool = this.activeDockToolId();
     const isFreehandWall =
       (tool === 'wall' || tool === 'room') && this.wallDrawMode() === 'freehand';
+    const isFloorBrush = tool === 'floor-bump' && this.floorBrushActive();
     const shouldLockSurface =
-      tool === 'terrain' || tool === 'water' || tool === 'scatter' || isFreehandWall;
+      tool === 'terrain' ||
+      tool === 'water' ||
+      tool === 'scatter' ||
+      isFreehandWall ||
+      isFloorBrush;
     this.stage.setSurfaceDrawingLock(shouldLockSurface);
   }
 
@@ -632,13 +650,35 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.syncGhostCursorToStage();
   }
 
-  private applyFloorTextureToScene(name: string, albedoUrl: string, normalUrl: string): void {
-    this.stage.applyFloorBumpMap(albedoUrl, normalUrl, this.floorTilingScale());
+  private applyFloorTextureToScene(
+    name: string,
+    albedoUrl: string,
+    normalUrl: string,
+    heightUrl?: string,
+  ): void {
+    this.stage.applyFloorBumpMap(
+      albedoUrl,
+      normalUrl,
+      this.floorTilingScale(),
+      heightUrl,
+    );
+    this.stage.configureFloorProperties({
+      albedoUrl,
+      normalUrl,
+      heightUrl,
+      tilingScale: this.floorTilingScale(),
+      bumpIntensity: this.floorBumpIntensity(),
+      heightScale: this.floorHeightScale(),
+      colorHex: this.floorColorHex(),
+      colorStrength: this.floorColorStrength(),
+      colorBlendMode: this.floorColorBlendMode(),
+    });
     this.commitSceneUpdate((cur) => ({
       ...cur,
       revision: cur.revision + 1,
       floorAlbedoUrl: albedoUrl,
       floorNormalUrl: normalUrl,
+      floorHeightUrl: heightUrl,
       floorTilingScale: this.floorTilingScale(),
     }));
     this.pngPipelineBanner.set(`Applied Seamless Flooring: ${name}`);
@@ -651,7 +691,11 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     const albedo = node.albedoUrl || this.sceneGraph().floorAlbedoUrl;
     const normal = node.normalUrl || this.sceneGraph().floorNormalUrl;
     if (albedo && normal) {
-      this.stage.applyFloorBumpMap(albedo, normal, scale);
+      this.stage.configureFloorProperties({
+        albedoUrl: albedo,
+        normalUrl: normal,
+        tilingScale: scale,
+      });
       this.commitSceneUpdate((cur) => ({
         ...cur,
         floorTilingScale: scale,
@@ -659,12 +703,96 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  onFloorBumpIntensityChange(val: number): void {
+    this.floorBumpIntensity.set(val);
+    this.stage.configureFloorProperties({ bumpIntensity: val });
+    this.render2dViewport();
+  }
+
+  onFloorHeightScaleChange(val: number): void {
+    this.floorHeightScale.set(val);
+    this.stage.configureFloorProperties({ heightScale: val });
+    this.render2dViewport();
+  }
+
+  onFloorColorHexChange(hex: string): void {
+    this.floorColorHex.set(hex);
+    if (hex !== '#ffffff' && this.floorColorStrength() === 0) {
+      this.floorColorStrength.set(45);
+    }
+    this.stage.configureFloorProperties({
+      colorHex: hex,
+      colorStrength: this.floorColorStrength(),
+      colorBlendMode: this.floorColorBlendMode(),
+    });
+    this.render2dViewport();
+  }
+
+  onFloorColorStrengthChange(val: number): void {
+    this.floorColorStrength.set(val);
+    this.stage.configureFloorProperties({
+      colorHex: this.floorColorHex(),
+      colorStrength: val,
+      colorBlendMode: this.floorColorBlendMode(),
+    });
+    this.render2dViewport();
+  }
+
+  onFloorColorBlendModeChange(mode: MapFloorBlendMode): void {
+    this.floorColorBlendMode.set(mode);
+    this.stage.configureFloorProperties({
+      colorHex: this.floorColorHex(),
+      colorStrength: this.floorColorStrength(),
+      colorBlendMode: mode,
+    });
+    this.render2dViewport();
+  }
+
+  onFloorBrushActiveChange(active: boolean): void {
+    this.floorBrushActive.set(active);
+    this.syncSurfaceLock();
+    this.syncGhostCursorToStage();
+  }
+
+  onFloorBrushColorHexChange(hex: string): void {
+    this.floorBrushColorHex.set(hex);
+    this.syncGhostCursorToStage();
+  }
+
+  onFloorBrushBlendModeChange(mode: MapFloorBlendMode): void {
+    this.floorBrushBlendMode.set(mode);
+    this.syncGhostCursorToStage();
+  }
+
+  onClearFloorPaint(): void {
+    this.stage.clearFloorPaint();
+    this.render2dViewport();
+    this.pngPipelineBanner.set('Cleared painted floor color layer.');
+  }
+
+  private paintFloorDabAt(x: number, z: number): void {
+    this.stage.paintFloorStrokeAt({
+      x,
+      z,
+      radius: this.floorBrushRadius(),
+      sharpness: this.floorBrushSharpness(),
+      opacity: this.floorBrushOpacity(),
+      colorHex: this.floorBrushColorHex(),
+      blendMode: this.floorBrushBlendMode(),
+    });
+    if (this.show2dCanvas()) {
+      this.render2dViewport(x, z);
+    }
+  }
+
   syncGhostCursorToStage(): void {
     const tool = this.activeDockToolId();
     const node = this.selectedNode();
+    const isFloorPaint = tool === 'floor-bump' && this.floorBrushActive();
     const isDecalStamp = Boolean(node.albedoUrl && !node.modelUrl && !node.isFloor);
-    const kind =
-      tool === 'wall' || tool === 'room'
+    const kind = isFloorPaint
+      ? 'floor-paint'
+      : tool === 'wall' || tool === 'room'
         ? 'wall'
         : tool === 'door'
           ? 'door'
@@ -679,8 +807,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
                   : isDecalStamp
                     ? 'decal'
                     : 'prop';
-    const scale =
-      tool === 'terrain' || tool === 'scatter'
+    const scale = isFloorPaint
+      ? this.floorBrushRadius()
+      : tool === 'terrain' || tool === 'scatter'
         ? this.terrainBrushRadius()
         : tool === 'water'
           ? this.waterWidthMeters() * 0.5
@@ -692,7 +821,10 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
     this.stage.setGhostConfig(
       {
-        enabled: tool !== 'select' && tool !== 'floor-bump' && tool !== 'sun-moon',
+        enabled:
+          tool !== 'select' &&
+          tool !== 'sun-moon' &&
+          (tool !== 'floor-bump' || isFloorPaint),
         label: node.name,
         kind,
         modelUrl: node.modelUrl,
@@ -710,8 +842,9 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         thicknessMeters: 0.45 * node.thickness,
         wallDrawMode: this.wallDrawMode(),
         freehandPoints: this.freehandWallPoints(),
-        colorHex: node.colorHex ?? '#ffffff',
+        colorHex: isFloorPaint ? this.floorBrushColorHex() : (node.colorHex ?? '#ffffff'),
         surfaceFinish: node.surfaceFinish ?? 'standard',
+        brushSharpness: this.floorBrushSharpness(),
       },
       this.wallStartAnchor(),
     );
@@ -730,6 +863,19 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
   onSurfaceDragAt(x: number, z: number, holdTicks: number): void {
     const tool = this.activeDockToolId();
+    if (tool === 'floor-bump' && this.floorBrushActive()) {
+      const minStep = Math.max(0.22, this.floorBrushRadius() * 0.22);
+      if (
+        this.lastFloorPaintPos &&
+        Math.hypot(x - this.lastFloorPaintPos.x, z - this.lastFloorPaintPos.z) < minStep
+      ) {
+        return;
+      }
+      this.lastFloorPaintPos = { x, z };
+      this.paintFloorDabAt(x, z);
+      return;
+    }
+
     if (tool === 'terrain') {
       const rateFactor = this.terrainGradualRate() / 100;
       const stepDelta = Math.max(0.06, this.terrainBrushDelta() * rateFactor * 0.22);
@@ -820,6 +966,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   onSurfaceReleaseAt(x: number, z: number): void {
     this.activeWaterSplineId = null;
     this.lastScatterPaintPos = null;
+    this.lastFloorPaintPos = null;
     const tool = this.activeDockToolId();
     if ((tool === 'wall' || tool === 'room') && this.wallDrawMode() === 'freehand') {
       const pts = this.freehandWallPoints();
@@ -994,6 +1141,10 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     }
 
     if (dockTool === 'floor-bump') {
+      if (this.floorBrushActive()) {
+        this.paintFloorDabAt(x, z);
+        return;
+      }
       const node = this.selectedNode();
       if (node.albedoUrl && node.normalUrl) {
         this.applyFloorTextureToScene(node.name, node.albedoUrl, node.normalUrl);
@@ -1344,15 +1495,23 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   private render2dViewport(ghostX?: number, ghostZ?: number): void {
     const canvas = this.canvas2dRef?.nativeElement;
     if (!canvas) return;
+    const isFloorPaint =
+      this.activeDockToolId() === 'floor-bump' && this.floorBrushActive();
     Real2dMapRenderer.renderSceneToCanvas(canvas, this.sceneGraph(), {
       hideGmSecrets: this.showPlayerSafeOnly(),
       selectedNodeId: this.selectedPlacedId() ?? this.selectedNode().id,
       gridMode: this.gridSizeLabel(),
       floorAlbedoUrl: this.sceneGraph().floorAlbedoUrl,
       floorTilingScale: this.floorTilingScale(),
+      floorColorHex: this.floorColorHex(),
+      floorColorStrength: this.floorColorStrength(),
+      floorColorBlendMode: this.floorColorBlendMode(),
       ghostX,
       ghostZ,
       ghostLabel: this.selectedNode().name,
+      ghostRadiusMeters: isFloorPaint ? this.floorBrushRadius() : undefined,
+      ghostSharpness: isFloorPaint ? this.floorBrushSharpness() : undefined,
+      ghostColorHex: isFloorPaint ? this.floorBrushColorHex() : undefined,
       wallStartAnchor: this.wallStartAnchor(),
       celestialMode: this.celestialMode(),
       celestialAzimuthDeg: this.celestialAzimuthDeg(),

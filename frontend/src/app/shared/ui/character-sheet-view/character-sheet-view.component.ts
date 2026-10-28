@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
@@ -8,6 +9,7 @@ import {
   model,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -15,7 +17,6 @@ import { NgpProgress, NgpProgressIndicator, NgpProgressTrack } from 'ng-primitiv
 import {
   CREATOR_EQUIPMENT_DATABASE,
   CREATOR_SPELL_DATABASE,
-  DEFAULT_CAMPAIGN_HISTORY,
   DEFAULT_MENTIONABLE_ENTITIES,
   DEFAULT_MET_ENTITIES,
   calculateMaxPreparedSpells,
@@ -23,18 +24,17 @@ import {
 } from '../../../features/characters/models/character-creator-catalog.data';
 import {
   AbilityScoreVm,
-  CharacterCampaignHistoryEventVm,
   CharacterConnectionChipVm,
   CharacterFeatureCardVm,
   CharacterMetEntityVm,
   CharacterRichNoteVm,
-  SavingThrowVm,
   CharacterSheetTab,
   CharacterSheetVm,
   CharacterSkillVm,
   CharacterSpellVm,
   EquipmentLoadoutItemVm,
   LwNoteMentionTagVm,
+  SavingThrowVm,
 } from '../../../features/characters/models/character-studio.models';
 import {
   CampaignAdjustedRuleVm,
@@ -45,19 +45,24 @@ import {
 import {
   buildAbilityRuleVm,
   buildActionRowRuleVm,
+  buildCharacterContextRuleVm,
   buildCharacterSheetActionRows,
   buildCombatActionRuleVm,
   buildFeatureOrItemRuleVm,
   buildSaveRuleVm,
   buildSkillRuleVm,
   buildSpellRuleVm,
+  getEquipmentItemImageUrl,
+  matchesItemQuickFilter,
 } from '../../../features/characters/services/character-sheet-rules.helpers';
 import { LwButtonComponent } from '../button/button.component';
 import { LwCharacterPortraitPickerComponent } from '../character-portrait-picker/character-portrait-picker.component';
 import { LwIconComponent } from '../icon/icon.component';
 import { LwNoteComposerModalComponent } from '../note-composer-modal/note-composer-modal.component';
+
 export type DndSheetMainTab = 'ACTIONS' | 'SPELLS' | 'INVENTORY' | 'FEATURES' | 'BACKGROUND' | 'NOTES' | 'EXTRAS';
 export type DndActionFilter = 'ALL' | 'ATTACK' | 'ACTION' | 'BONUS ACTION' | 'REACTION' | 'OTHER' | 'LIMITED USE';
+
 @Component({
   selector: 'lw-character-sheet-view',
   standalone: true,
@@ -84,6 +89,7 @@ export class LwCharacterSheetViewComponent {
   readonly spellDatabase = input<readonly CharacterSpellVm[]>(CREATOR_SPELL_DATABASE);
   readonly mentionableEntities = input<readonly LwNoteMentionTagVm[]>(DEFAULT_MENTIONABLE_ENTITIES);
   readonly activeTab = model<CharacterSheetTab>('overview');
+
   readonly characterSelected = output<string>();
   readonly createCharacterRequested = output<void>();
   readonly editCharacterRequested = output<CharacterSheetVm>();
@@ -100,22 +106,24 @@ export class LwCharacterSheetViewComponent {
   readonly connectionSelected = output<CharacterConnectionChipVm>();
   readonly noteAdded = output<string>();
   readonly richNoteAdded = output<CharacterRichNoteVm>();
+
+  readonly miniDiceCanvas = viewChild<ElementRef<HTMLCanvasElement>>('miniDiceCanvas');
   readonly mainSheetTab = signal<DndSheetMainTab>('ACTIONS');
   readonly actionSubFilter = signal<DndActionFilter>('ALL');
   readonly hpDeltaInput = signal<number>(5);
-  readonly customHpCurrent = signal<number | null>(null);
   readonly portraitModalOpen = signal<boolean>(false);
   readonly noteComposerOpen = signal<boolean>(false);
+  readonly itemBrowserModalOpen = signal<boolean>(false);
   readonly equipmentSearch = signal<string>('');
+  readonly itemQuickFilter = signal<string>('all');
   readonly spellSearch = signal<string>('');
   readonly metFilter = signal<'All' | 'NPC' | 'Place'>('All');
-  readonly historyFilter = signal<'All' | 'Session' | 'Encounter' | 'Quest' | 'Milestone'>('All');
-  readonly inspectedMetEntity = signal<CharacterMetEntityVm | null>(null);
   readonly pendingSpellPrep = signal<{
     spell: CharacterSpellVm;
     makingPrepared: boolean;
     rule: ReturnType<typeof getSpellPreparationRuleExplanation>;
   } | null>(null);
+
   readonly mainTabs: readonly { id: DndSheetMainTab; label: string }[] = [
     { id: 'ACTIONS', label: 'ACTIONS' },
     { id: 'SPELLS', label: 'SPELLS' },
@@ -125,6 +133,7 @@ export class LwCharacterSheetViewComponent {
     { id: 'NOTES', label: 'NOTES' },
     { id: 'EXTRAS', label: 'EXTRAS & TELEMETRY' },
   ];
+
   readonly actionFilters: readonly DndActionFilter[] = [
     'ALL',
     'ATTACK',
@@ -134,9 +143,21 @@ export class LwCharacterSheetViewComponent {
     'OTHER',
     'LIMITED USE',
   ];
+
+  readonly itemQuickFilters: readonly { id: string; label: string }[] = [
+    { id: 'all', label: 'All Items' },
+    { id: 'magical', label: 'Magical' },
+    { id: 'rings', label: 'Rings & Amulets' },
+    { id: 'weapons', label: 'Weapons' },
+    { id: 'armor', label: 'Armor & Shields' },
+    { id: 'potions', label: 'Potions & Vials' },
+    { id: 'focuses', label: 'Arcane Focuses' },
+    { id: 'gear', label: 'Gear & Tools' },
+  ];
+
   readonly standardCombatActions = STANDARD_COMBAT_ACTIONS;
-  readonly buildActionRowRuleVm = buildActionRowRuleVm;
   readonly d20Numbers = Array.from({ length: 20 }, (_, i) => i + 1);
+
   constructor() {
     effect(() => {
       const s = this.sheet();
@@ -144,8 +165,15 @@ export class LwCharacterSheetViewComponent {
         this.interactive.fetchLiveState(s.characterKey);
       }
     });
+    effect(() => {
+      const canvasRef = this.miniDiceCanvas();
+      if (canvasRef?.nativeElement) {
+        this.interactive.mountMiniDiceCanvas(canvasRef.nativeElement);
+      }
+    });
   }
-  readonly effectiveHpCurrent = computed<number>(() => this.customHpCurrent() ?? this.sheet().currentHp);
+
+  readonly effectiveHpCurrent = computed<number>(() => this.interactive.getLiveHpFor(this.sheet()));
   readonly economy = computed(() => this.interactive.getEconomyFor(this.sheet().characterKey));
   readonly telemetry = computed(() =>
     this.interactive.getTelemetryFor(this.sheet().characterKey, this.sheet().name),
@@ -178,6 +206,7 @@ export class LwCharacterSheetViewComponent {
   readonly passiveInsight = computed<number>(
     () => 10 + (this.sheet().skills.find((sk) => sk.label === 'Insight')?.bonus ?? 2),
   );
+
   readonly allActionRows = computed<readonly CharacterSheetActionRowVm[]>(() =>
     buildCharacterSheetActionRows(this.sheet(), this.primaryAbilityMod(), this.spellSaveDc()),
   );
@@ -188,6 +217,7 @@ export class LwCharacterSheetViewComponent {
     if (f === 'ACTION') return list.filter((r) => r.actionSlotCost === 'action');
     return list.filter((r) => r.filterCategory === f);
   });
+
   readonly maxPreparedSpells = computed<number>(() =>
     calculateMaxPreparedSpells(this.sheet().level, this.primaryAbilityScore()),
   );
@@ -203,231 +233,200 @@ export class LwCharacterSheetViewComponent {
   readonly preparedLeveledSpellsCount = computed<number>(
     () => this.allCharacterSpells().filter((sp) => (sp.level ?? 1) > 0 && sp.prepared).length,
   );
-  readonly filteredSpellCompendium = computed<readonly CharacterSpellVm[]>(() => {
-    const q = this.spellSearch().trim().toLowerCase();
-    return this.spellDatabase()
-      .filter((sp) => !q || sp.name.toLowerCase().includes(q) || sp.school.toLowerCase().includes(q))
-      .slice(0, 14);
-  });
   readonly equippedItems = computed<readonly EquipmentLoadoutItemVm[]>(() =>
     this.sheet().equipment.filter((e) => e.equipped),
   );
   readonly backpackItems = computed<readonly EquipmentLoadoutItemVm[]>(() =>
     this.sheet().equipment.filter((e) => !e.equipped),
   );
+
   readonly filteredEquipmentCatalog = computed<readonly EquipmentLoadoutItemVm[]>(() => {
     const q = this.equipmentSearch().trim().toLowerCase();
-    return this.equipmentDatabase()
-      .filter((item) => !q || item.name.toLowerCase().includes(q) || item.slot.toLowerCase().includes(q))
-      .slice(0, 16);
+    const flt = this.itemQuickFilter();
+    return this.equipmentDatabase().filter((item) => {
+      if (!matchesItemQuickFilter(item, flt)) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.slot.toLowerCase().includes(q) ||
+        item.summary.toLowerCase().includes(q) ||
+        item.bonusLabel.toLowerCase().includes(q) ||
+        (item.rarity ?? '').toLowerCase().includes(q)
+      );
+    });
   });
+
   readonly metEntitiesList = computed<readonly CharacterMetEntityVm[]>(() => {
     const list = this.sheet().metEntities ?? DEFAULT_MET_ENTITIES;
     const f = this.metFilter();
     return f === 'All' ? list : list.filter((e) => e.entityType === f);
   });
-  readonly campaignHistoryList = computed<readonly CharacterCampaignHistoryEventVm[]>(() => {
-    const list = this.sheet().campaignHistory ?? DEFAULT_CAMPAIGN_HISTORY;
-    const f = this.historyFilter();
-    return f === 'All' ? list : list.filter((e) => e.category === f);
-  });
-  readonly totalCarriedWeightLbs = computed<number>(() => this.sheet().equipment.reduce((acc, e) => acc + (e.weightLb ?? 2), 0));
+
+  readonly totalCarriedWeightLbs = computed<number>(() =>
+    this.sheet().equipment.reduce((acc, e) => acc + (e.weightLb ?? 2), 0),
+  );
   readonly carryingCapacityLbs = computed<number>(() => {
     const str = this.sheet().abilities.find((a) => a.code === 'STR')?.score ?? 10;
     return str * 15;
   });
+
+  itemImageUrl(item: EquipmentLoadoutItemVm): string {
+    return getEquipmentItemImageUrl(item);
+  }
+
   formatMod(mod: number): string {
     return mod >= 0 ? `+${mod}` : `${mod}`;
   }
+
   applyHeal(): void {
     const amt = Math.max(1, Number(this.hpDeltaInput()) || 1);
-    this.customHpCurrent.set(Math.min(this.sheet().maxHp, this.effectiveHpCurrent() + amt));
+    this.interactive.applyCharacterHpChange(this.sheet(), this.effectiveHpCurrent() + amt);
   }
+
   applyDamage(): void {
     const amt = Math.max(1, Number(this.hpDeltaInput()) || 1);
-    this.customHpCurrent.set(Math.max(0, this.effectiveHpCurrent() - amt));
+    this.interactive.applyCharacterHpChange(this.sheet(), this.effectiveHpCurrent() - amt);
   }
-  onAbilityClicked(ab: AbilityScoreVm): void {
-    const rule = buildAbilityRuleVm(ab);
-    this.interactive.inspectRuleInDrawer(rule);
+
+  /* 1. PURE ROLL HANDLERS (Clicking the +Modifier / Hit / Damage Box ONLY rolls!) */
+  rollAbilityOnly(ab: AbilityScoreVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'ability',
-      itemId: rule.id,
-      itemName: `${ab.label} Check`,
-      actionSlotCost: 'none',
-      diceSides: 20,
-      diceCount: 1,
-      modifier: ab.modifier,
+      category: 'ability', itemId: `rule-ab-${ab.code}`, itemName: `${ab.label} Check`,
+      actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: ab.modifier,
     });
   }
-  onSaveClicked(sv: SavingThrowVm): void {
-    const rule = buildSaveRuleVm(sv);
-    this.interactive.inspectRuleInDrawer(rule);
+
+  rollSaveOnly(sv: SavingThrowVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'save',
-      itemId: rule.id,
-      itemName: `${sv.code} Saving Throw`,
-      actionSlotCost: 'none',
-      diceSides: 20,
-      diceCount: 1,
-      modifier: sv.bonus,
+      category: 'save', itemId: `rule-save-${sv.code}`, itemName: `${sv.code} Saving Throw`,
+      actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: sv.bonus,
     });
   }
-  onSkillClicked(sk: CharacterSkillVm): void {
-    const rule = buildSkillRuleVm(sk);
-    this.interactive.inspectRuleInDrawer(rule);
+
+  rollSkillOnly(sk: CharacterSkillVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'skill',
-      itemId: rule.id,
-      itemName: `${sk.label} (${sk.abilityCode})`,
-      actionSlotCost: 'none',
-      diceSides: 20,
-      diceCount: 1,
-      modifier: sk.bonus,
+      category: 'skill', itemId: `rule-skill-${sk.id}`, itemName: `${sk.label} (${sk.abilityCode})`,
+      actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: sk.bonus,
     });
   }
-  onInitiativeClicked(): void {
+
+  rollInitiativeOnly(): void {
     const s = this.sheet();
-    const rule: CampaignAdjustedRuleVm = {
-      id: 'rule-initiative',
-      categoryLabel: 'Combat Initiative',
-      title: 'Initiative Roll',
-      subtitle: `DEX Modifier ${this.formatMod(s.initiativeBonus)}`,
-      castingOrActionTime: 'Start of Encounter',
-      rangeOrArea: 'Self',
-      componentsOrSlot: 'Free Roll',
-      durationLabel: 'Encounter Duration',
-      sourceLabel: 'PHB 2024 / VTT Combat Engine',
-      damageOrBonusBadge: `${this.formatMod(s.initiativeBonus)} Init`,
-      standardRuleText: 'At the beginning of every combat encounter, roll 1d20 + your Initiative bonus to determine turn order.',
-      campaignAdjustedRuleTitle: 'Adjusted Campaign Rule (VTT Sync)',
-      campaignAdjustedRuleText: 'Rolling Initiative from your Character Sheet automatically updates your turn position in the live VTT Initiative Tracker.',
-      tags: ['Initiative', 'DEX', 'VTT Synced'],
-      rollConfig: { category: 'initiative', actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: s.initiativeBonus },
-    };
-    this.interactive.inspectRuleInDrawer(rule);
     this.interactive.executeSheetRollAndAction(s, {
-      category: 'initiative',
-      itemId: 'init-roll',
-      itemName: 'Initiative',
-      actionSlotCost: 'none',
-      diceSides: 20,
-      diceCount: 1,
-      modifier: s.initiativeBonus,
+      category: 'initiative', itemId: 'init-roll', itemName: 'Initiative',
+      actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: s.initiativeBonus,
     });
   }
-  onArmorClassClicked(): void {
-    const s = this.sheet();
-    this.interactive.inspectRuleInDrawer({
-      id: 'rule-ac',
-      categoryLabel: 'Defense & Ward',
-      title: `Armor Class (${s.armorClass})`,
-      subtitle: 'Equipped Armor & Dexterity Defense',
-      castingOrActionTime: 'Passive Defense',
-      rangeOrArea: 'Self',
-      componentsOrSlot: `AC ${s.armorClass}`,
-      durationLabel: 'Continuous',
-      sourceLabel: 'PHB 2024 / Action Studio',
-      damageOrBonusBadge: `AC ${s.armorClass}`,
-      standardRuleText: `Enemy attack rolls must meet or exceed AC ${s.armorClass} to land a strike.`,
-      campaignAdjustedRuleTitle: 'Adjusted Campaign Rule (Shield & Deflection)',
-      campaignAdjustedRuleText: 'Casting Shield (+5 AC) or triggering Cinth Artificer wards as a Reaction turns a hit into an Interrupted Attack in campaign telemetry.',
-      tags: [`AC ${s.armorClass}`, 'Defense', 'Reaction Ready'],
-    });
-  }
-  onActionRowHitClicked(row: CharacterSheetActionRowVm): void {
-    const rule = buildActionRowRuleVm(row);
-    this.interactive.inspectRuleInDrawer(rule);
+
+  rollActionHitOnly(row: CharacterSheetActionRowVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
       category: row.filterCategory === 'ATTACK' ? 'attack' : 'feature',
-      itemId: row.id,
-      itemName: row.name,
-      actionSlotCost: row.actionSlotCost,
-      diceSides: 20,
-      diceCount: 1,
-      modifier: row.attackBonus,
-      damageDiceCount: row.damageDiceCount,
-      damageDiceSides: row.damageDiceSides,
-      damageBonus: row.damageBonus,
-      damageType: row.damageType,
-      spellSlotLevel: row.spellSlotLevel,
-      limitedUseId: row.limitedUseId,
-      maxLimitedUses: row.limitedUseMax,
+      itemId: row.id, itemName: `${row.name} (Attack / Check)`,
+      actionSlotCost: row.actionSlotCost, diceSides: 20, diceCount: 1, modifier: row.attackBonus,
+      spellSlotLevel: row.spellSlotLevel, limitedUseId: row.limitedUseId, maxLimitedUses: row.limitedUseMax,
     });
   }
-  onActionRowDamageClicked(row: CharacterSheetActionRowVm): void {
-    this.interactive.inspectRuleInDrawer(buildActionRowRuleVm(row));
+
+  rollActionDamageOnly(row: CharacterSheetActionRowVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'damage',
-      itemId: `${row.id}-dmg`,
-      itemName: `${row.name} (${row.damageType})`,
-      actionSlotCost: 'none',
-      diceSides: row.damageDiceSides,
-      diceCount: row.damageDiceCount,
-      modifier: row.damageBonus,
-      damageType: row.damageType,
+      category: 'damage', itemId: `${row.id}-dmg`, itemName: `${row.name} (${row.damageType} Damage)`,
+      actionSlotCost: 'none', diceSides: row.damageDiceSides, diceCount: row.damageDiceCount,
+      modifier: row.damageBonus, damageType: row.damageType,
     });
   }
-  onCombatActionClicked(ca: (typeof STANDARD_COMBAT_ACTIONS)[number]): void {
-    const rule = buildCombatActionRuleVm(ca, this.primaryAbilityMod());
-    this.interactive.inspectRuleInDrawer(rule);
-    this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'combat-action',
-      itemId: ca.id,
-      itemName: `${ca.name} Action`,
-      actionSlotCost: ca.cost,
-      diceSides: 20,
-      diceCount: 1,
-      modifier: this.primaryAbilityMod(),
-    });
-  }
-  onSpellCastClicked(sp: CharacterSpellVm, slotMax = 4): void {
-    const rule = buildSpellRuleVm(sp, this.spellAttackBonus(), this.spellSaveDc());
-    this.interactive.inspectRuleInDrawer(rule);
+
+  rollSpellCastOnly(sp: CharacterSpellVm, slotMax = 4): void {
     const isCantrip = (sp.level ?? 0) === 0;
-    const cost: 'action' | 'bonus' | 'reaction' = (sp.actionCost ?? "1 Action").toLowerCase().includes('bonus')
-      ? 'bonus'
-      : (sp.actionCost ?? "1 Action").toLowerCase().includes('reaction')
-        ? 'reaction'
-        : 'action';
+    const costStr = (sp.actionCost ?? '1 Action').toLowerCase();
+    const cost: 'action' | 'bonus' | 'reaction' = costStr.includes('bonus') ? 'bonus' : costStr.includes('reaction') ? 'reaction' : 'action';
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'spell-attack',
-      itemId: sp.id,
-      itemName: sp.name,
-      actionSlotCost: cost,
-      diceSides: 20,
-      diceCount: 1,
-      modifier: this.spellAttackBonus(),
-      damageDiceCount: isCantrip ? 2 : (sp.level ?? 1) + 1,
-      damageDiceSides: 8,
-      damageBonus: 0,
-      damageType: `${sp.school} Force`,
-      spellSlotLevel: isCantrip ? undefined : (sp.level ?? 1),
-      maxSpellSlots: slotMax,
+      category: 'spell-attack', itemId: sp.id, itemName: sp.name, actionSlotCost: cost,
+      diceSides: 20, diceCount: 1, modifier: this.spellAttackBonus(),
+      damageDiceCount: isCantrip ? 2 : (sp.level ?? 1) + 1, damageDiceSides: 8, damageBonus: 0,
+      damageType: `${sp.school} Force`, spellSlotLevel: isCantrip ? undefined : (sp.level ?? 1), maxSpellSlots: slotMax,
     });
   }
-  onFeatureOrItemInspect(item: CharacterFeatureCardVm | EquipmentLoadoutItemVm, kind: 'feature' | 'item'): void {
-    const rule = buildFeatureOrItemRuleVm(item, kind, this.primaryAbilityMod());
-    this.interactive.inspectRuleInDrawer(rule);
+
+  /* 2. INSPECT HANDLERS (Clicking any Card / Row / Section opens Right Drawer!) */
+  inspectAbility(ab: AbilityScoreVm): void {
+    this.interactive.inspectRuleInDrawer(buildAbilityRuleVm(ab, this.sheet()));
   }
+
+  inspectSave(sv: SavingThrowVm): void {
+    this.interactive.inspectRuleInDrawer(buildSaveRuleVm(sv, this.sheet()));
+  }
+
+  inspectSkill(sk: CharacterSkillVm): void {
+    this.interactive.inspectRuleInDrawer(buildSkillRuleVm(sk, this.sheet()));
+  }
+
+  inspectContextRule(
+    kind: 'proficiency' | 'speed' | 'inspiration' | 'hp' | 'sense' | 'training' | 'defense' | 'condition',
+    title: string,
+    detail: string,
+  ): void {
+    this.interactive.inspectRuleInDrawer(buildCharacterContextRuleVm(kind, title, detail, this.sheet()));
+  }
+
+  inspectInitiative(): void {
+    const s = this.sheet();
+    this.interactive.inspectRuleInDrawer({
+      id: 'rule-initiative', categoryLabel: `${s.name} · Combat Initiative`,
+      title: `Initiative (${this.formatMod(s.initiativeBonus)})`,
+      subtitle: `DEX Modifier (${this.formatMod(s.initiativeBonus)}) · Level ${s.level} ${s.classOrArchetype}`,
+      castingOrActionTime: 'Start of Encounter', rangeOrArea: 'Self', componentsOrSlot: `1d20 ${this.formatMod(s.initiativeBonus)}`,
+      durationLabel: 'Encounter Duration', sourceLabel: 'VTT Combat Engine', damageOrBonusBadge: `${this.formatMod(s.initiativeBonus)} Init`,
+      standardRuleText: `${s.name}'s Initiative bonus is ${this.formatMod(s.initiativeBonus)} (derived from DEX score). Click the ${this.formatMod(s.initiativeBonus)} box to roll 1d20 ${this.formatMod(s.initiativeBonus)} directly.`,
+      campaignAdjustedRuleTitle: 'Adjusted Campaign Rule (VTT Sync)',
+      campaignAdjustedRuleText: `Rolling Initiative from ${s.name}'s sheet automatically updates turn order in the live VTT Initiative Tracker.`,
+      tags: ['Initiative', s.name, `${this.formatMod(s.initiativeBonus)}`],
+      rollConfig: { category: 'initiative', actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: s.initiativeBonus },
+    });
+  }
+
+  inspectArmorClass(): void {
+    const s = this.sheet();
+    const dexMod = s.abilities.find((a) => a.code === 'DEX')?.modifier ?? 2;
+    this.interactive.inspectRuleInDrawer({
+      id: 'rule-ac', categoryLabel: `${s.name} · Defense & Ward`, title: `Armor Class (AC ${s.armorClass})`,
+      subtitle: `${s.name} · Equipped Armor + DEX (${this.formatMod(dexMod)})`,
+      castingOrActionTime: 'Passive Defense', rangeOrArea: 'Self', componentsOrSlot: `AC ${s.armorClass}`,
+      durationLabel: 'Continuous', sourceLabel: 'Action Studio', damageOrBonusBadge: `AC ${s.armorClass}`,
+      standardRuleText: `Enemy attack rolls against ${s.name} must meet or exceed AC ${s.armorClass} to land a strike. Equipped armor and wards contribute to this total.`,
+      campaignAdjustedRuleTitle: 'Adjusted Campaign Rule (Shield & Deflection)',
+      campaignAdjustedRuleText: `Casting Shield (+5 AC -> AC ${s.armorClass + 5}) as a Reaction turns an incoming hit into an Interrupted Attack in campaign telemetry.`,
+      tags: [`AC ${s.armorClass}`, s.name, 'Reaction Ready'],
+    });
+  }
+
+  inspectActionRow(row: CharacterSheetActionRowVm): void {
+    this.interactive.inspectRuleInDrawer(buildActionRowRuleVm(row));
+  }
+
+  inspectCombatAction(ca: (typeof STANDARD_COMBAT_ACTIONS)[number]): void {
+    this.interactive.inspectRuleInDrawer(buildCombatActionRuleVm(ca, this.primaryAbilityMod()));
+  }
+
+  inspectSpellRow(sp: CharacterSpellVm): void {
+    this.interactive.inspectRuleInDrawer(buildSpellRuleVm(sp, this.spellAttackBonus(), this.spellSaveDc()));
+  }
+
+  inspectFeatureOrItem(item: CharacterFeatureCardVm | EquipmentLoadoutItemVm, kind: 'feature' | 'item'): void {
+    this.interactive.inspectRuleInDrawer(buildFeatureOrItemRuleVm(item, kind, this.primaryAbilityMod()));
+  }
+
   executeInspectedRuleRoll(rule: CampaignAdjustedRuleVm): void {
     if (!rule.rollConfig) return;
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: rule.rollConfig.category,
-      itemId: rule.id,
-      itemName: rule.title,
-      actionSlotCost: rule.rollConfig.actionSlotCost,
-      diceSides: rule.rollConfig.diceSides,
-      diceCount: rule.rollConfig.diceCount,
-      modifier: rule.rollConfig.modifier,
-      damageDiceCount: rule.rollConfig.damageDiceCount,
-      damageDiceSides: rule.rollConfig.damageDiceSides,
-      damageBonus: rule.rollConfig.damageBonus,
-      damageType: rule.rollConfig.damageType,
-      spellSlotLevel: rule.rollConfig.spellSlotLevel,
-      limitedUseId: rule.rollConfig.limitedUseId,
+      category: rule.rollConfig.category, itemId: rule.id, itemName: rule.title,
+      actionSlotCost: rule.rollConfig.actionSlotCost, diceSides: rule.rollConfig.diceSides,
+      diceCount: rule.rollConfig.diceCount, modifier: rule.rollConfig.modifier,
+      damageDiceCount: rule.rollConfig.damageDiceCount, damageDiceSides: rule.rollConfig.damageDiceSides,
+      damageBonus: rule.rollConfig.damageBonus, damageType: rule.rollConfig.damageType,
+      spellSlotLevel: rule.rollConfig.spellSlotLevel, limitedUseId: rule.rollConfig.limitedUseId,
     });
   }
+
   promptSpellPreparationToggle(spell: CharacterSpellVm): void {
     if ((spell.level ?? 1) === 0) return;
     const makingPrepared = !spell.prepared;
@@ -440,12 +439,14 @@ export class LwCharacterSheetViewComponent {
     );
     this.pendingSpellPrep.set({ spell, makingPrepared, rule });
   }
+
   confirmSpellPreparationChange(): void {
     const pending = this.pendingSpellPrep();
     if (!pending) return;
     this.spellPreparedToggled.emit(pending.spell.id);
     this.pendingSpellPrep.set(null);
   }
+
   slotRange(count: number): number[] {
     return Array.from({ length: Math.max(0, count) }, (_, i) => i);
   }

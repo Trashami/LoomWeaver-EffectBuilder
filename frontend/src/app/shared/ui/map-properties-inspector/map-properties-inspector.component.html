@@ -57,22 +57,346 @@
       <!-- 1. FLOORING TOOL -->
       @if (effectiveMode() === 'floor-bump') {
         <div class="lw-map-inspector__section">
-          <div class="lw-map-inspector__slider-head">
-            <span>Flooring Tile Density</span>
-            <strong>{{ floorTilingScale() }}x Repeat</strong>
+          <div class="lw-map-inspector__subsection">
+            <span class="lw-map-inspector__subhead">Flooring Action Mode</span>
+            <div class="lw-map-inspector__mode-toggle">
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__mode-btn"
+                [class.lw-map-inspector__mode-btn--active]="!floorBrushActive()"
+                (click)="floorBrushActiveChange.emit(false)"
+              >
+                <lw-icon name="grid" [size]="14" />
+                <span>Bump & Height Setup</span>
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__mode-btn"
+                [class.lw-map-inspector__mode-btn--active]="floorBrushActive()"
+                (click)="floorBrushActiveChange.emit(true)"
+              >
+                <lw-icon name="pipette" [size]="14" />
+                <span>Paint Floor Color</span>
+              </button>
+            </div>
           </div>
-          <input
-            type="range"
-            min="4"
-            max="24"
-            step="1"
-            class="lw-map-inspector__range"
-            [value]="floorTilingScale()"
-            (input)="onNumInput($event, floorTilingChange)"
-          />
-          <p class="lw-map-inspector__hint">
-            Applies to both 2D and 3D map views in real time. Click the asset card above to switch seamless Bump/Height floor textures.
-          </p>
+
+          <!-- BUMP, HEIGHT & TILING CONTROLS -->
+          <div class="lw-map-inspector__subsection">
+            <span class="lw-map-inspector__subhead">Bump, Height & Tile Relief</span>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Flooring Tile Density</span>
+                <strong>{{ floorTilingScale() }}x Repeat</strong>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="28"
+                step="1"
+                class="lw-map-inspector__range"
+                [value]="floorTilingScale()"
+                (input)="onNumInput($event, floorTilingChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Bump Map Intensity (Normal Depth)</span>
+                <strong>{{ floorBumpIntensity() }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="300"
+                step="5"
+                class="lw-map-inspector__range"
+                [value]="floorBumpIntensity()"
+                (input)="onNumInput($event, floorBumpIntensityChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Height Map Depth (Elevation Relief)</span>
+                <strong>{{ floorHeightScale() }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="220"
+                step="5"
+                class="lw-map-inspector__range"
+                [value]="floorHeightScale()"
+                (input)="onNumInput($event, floorHeightScaleChange)"
+              />
+            </div>
+          </div>
+
+          <!-- GLOBAL FLOOR COLORIZE -->
+          <div class="lw-map-inspector__subsection">
+            <div class="lw-map-inspector__slider-head">
+              <span class="lw-map-inspector__subhead">Colorize Entire Floor</span>
+              <input
+                type="color"
+                class="lw-map-inspector__color-picker"
+                [value]="floorColorHex()"
+                (input)="onStrInput($event, floorColorHexChange)"
+                aria-label="Global Floor Colorize Picker"
+              />
+            </div>
+
+            <div class="lw-map-inspector__swatch-grid">
+              @for (sw of paintSwatches; track sw.hex) {
+                <button
+                  type="button"
+                  class="lw-map-inspector__swatch-btn"
+                  [class.lw-map-inspector__swatch-btn--active]="floorColorHex() === sw.hex"
+                  [title]="sw.label"
+                  (click)="
+                    floorColorHexChange.emit(sw.hex);
+                    floorColorStrengthChange.emit(sw.hex === '#ffffff' ? 0 : (floorColorStrength() || 45))
+                  "
+                >
+                  <span
+                    class="lw-map-inspector__swatch-dot"
+                    [style.background]="sw.hex"
+                  ></span>
+                  <span class="lw-map-inspector__swatch-label">{{ sw.label }}</span>
+                </button>
+              }
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Colorize Strength</span>
+                <strong>{{ floorColorStrength() }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="2"
+                class="lw-map-inspector__range"
+                [value]="floorColorStrength()"
+                (input)="onNumInput($event, floorColorStrengthChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__row">
+              <span class="lw-map-inspector__label">Colorize Blend</span>
+              <select
+                class="lw-map-inspector__select"
+                [value]="floorColorBlendMode()"
+                (change)="onStrInput($event, floorColorBlendModeChange)"
+                aria-label="Global Floor Colorize Blend Mode"
+              >
+                @for (bm of floorBlendModes; track bm.id) {
+                  @if (bm.id !== 'eraser') {
+                    <option [value]="bm.id">{{ bm.label }}</option>
+                  }
+                }
+              </select>
+            </div>
+          </div>
+
+          <!-- INTERACTIVE FLOOR COLOR PAINT BRUSH (PHOTOSHOP BLEND MODES) -->
+          <div class="lw-map-inspector__subsection">
+            <div class="lw-map-inspector__slider-head">
+              <span class="lw-map-inspector__subhead">Floor Color Paint Brush (Blend Layer)</span>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__pill"
+                [class.lw-map-inspector__pill--active]="floorBrushActive()"
+                (click)="floorBrushActiveChange.emit(!floorBrushActive())"
+              >
+                {{ floorBrushActive() ? 'Brush Active' : 'Enable Brush' }}
+              </button>
+            </div>
+
+            <p class="lw-map-inspector__hint">
+              Click and drag on the map floor to paint natural color variation over the stone/earth using Photoshop-style blending modes while keeping full 3D bump & normal relief.
+            </p>
+
+            <div class="lw-map-inspector__row">
+              <span class="lw-map-inspector__label">Blend Mode</span>
+              <select
+                class="lw-map-inspector__select"
+                [value]="floorBrushBlendMode()"
+                (change)="
+                  onStrInput($event, floorBrushBlendModeChange);
+                  floorBrushActiveChange.emit(true)
+                "
+                aria-label="Floor Brush Blending Mode"
+              >
+                @for (bm of floorBlendModes; track bm.id) {
+                  <option [value]="bm.id">{{ bm.label }} — {{ bm.hint }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="lw-map-inspector__pill-group lw-map-inspector__pill-group--wrap">
+              @for (bm of floorBlendModes; track bm.id) {
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="floorBrushBlendMode() === bm.id"
+                  [title]="bm.hint"
+                  (click)="
+                    floorBrushBlendModeChange.emit(bm.id);
+                    floorBrushActiveChange.emit(true)
+                  "
+                >
+                  {{ bm.label }}
+                </button>
+              }
+            </div>
+
+            <div class="lw-map-inspector__slider-head" style="margin-top: 0.25rem">
+              <span class="lw-map-inspector__label">Brush Color</span>
+              <input
+                type="color"
+                class="lw-map-inspector__color-picker"
+                [value]="floorBrushColorHex()"
+                (input)="
+                  onStrInput($event, floorBrushColorHexChange);
+                  floorBrushActiveChange.emit(true)
+                "
+                aria-label="Floor Brush Color Picker"
+              />
+            </div>
+
+            <div class="lw-map-inspector__swatch-grid">
+              @for (sw of floorBrushSwatches; track sw.hex) {
+                <button
+                  type="button"
+                  class="lw-map-inspector__swatch-btn"
+                  [class.lw-map-inspector__swatch-btn--active]="floorBrushColorHex() === sw.hex"
+                  [title]="sw.label"
+                  (click)="
+                    floorBrushColorHexChange.emit(sw.hex);
+                    floorBrushActiveChange.emit(true)
+                  "
+                >
+                  <span
+                    class="lw-map-inspector__swatch-dot"
+                    [style.background]="sw.hex"
+                  ></span>
+                  <span class="lw-map-inspector__swatch-label">{{ sw.label }}</span>
+                </button>
+              }
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Brush Opacity</span>
+                <strong>{{ floorBrushOpacity() }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="100"
+                step="2"
+                class="lw-map-inspector__range"
+                [value]="floorBrushOpacity()"
+                (input)="onNumInput($event, floorBrushOpacityChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Draw Pen Size (Brush Radius)</span>
+                <strong>{{ floorBrushRadius() }}m</strong>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="10"
+                step="0.25"
+                class="lw-map-inspector__range"
+                [value]="floorBrushRadius()"
+                (input)="onNumInput($event, floorBrushRadiusChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Pen End Sharpness (Edge Feathering)</span>
+                <strong>
+                  {{ floorBrushSharpness() }}%
+                  {{
+                    floorBrushSharpness() <= 25
+                      ? '(Soft Feathered)'
+                      : floorBrushSharpness() >= 75
+                        ? '(Crisp Edge)'
+                        : '(Balanced)'
+                  }}
+                </strong>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="2"
+                class="lw-map-inspector__range"
+                [value]="floorBrushSharpness()"
+                (input)="onNumInput($event, floorBrushSharpnessChange)"
+              />
+              <div class="lw-map-inspector__pill-group lw-map-inspector__pill-group--wrap">
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="floorBrushSharpness() === 10"
+                  (click)="floorBrushSharpnessChange.emit(10)"
+                >
+                  Airbrush (10%)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="floorBrushSharpness() === 25"
+                  (click)="floorBrushSharpnessChange.emit(25)"
+                >
+                  Natural Feather (25%)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="floorBrushSharpness() === 55"
+                  (click)="floorBrushSharpnessChange.emit(55)"
+                >
+                  Soft Pen (55%)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  [class.lw-map-inspector__pill--active]="floorBrushSharpness() === 90"
+                  (click)="floorBrushSharpnessChange.emit(90)"
+                >
+                  Hard Edge (90%)
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              ngpButton
+              class="lw-map-inspector__danger-btn"
+              (click)="clearFloorPaint.emit()"
+            >
+              <lw-icon name="trash" [size]="14" />
+              <span>Clear Painted Floor Layer</span>
+            </button>
+          </div>
         </div>
       }
 

@@ -1,4 +1,5 @@
-import { MapSceneGraphState } from '../map-scene-contract';
+import { MapFloorBlendMode, MapSceneGraphState } from '../map-scene-contract';
+import { TerrainMeshBuilder } from '../terrain/terrain-mesh.builder';
 
 export interface Real2dRenderOptions {
   readonly hideGmSecrets: boolean;
@@ -7,9 +8,15 @@ export interface Real2dRenderOptions {
   readonly gridMode?: string;
   readonly floorAlbedoUrl?: string;
   readonly floorTilingScale?: number;
+  readonly floorColorHex?: string;
+  readonly floorColorStrength?: number;
+  readonly floorColorBlendMode?: MapFloorBlendMode;
   readonly ghostX?: number;
   readonly ghostZ?: number;
   readonly ghostLabel?: string;
+  readonly ghostRadiusMeters?: number;
+  readonly ghostSharpness?: number;
+  readonly ghostColorHex?: string;
   readonly wallStartAnchor?: { x: number; z: number } | null;
   readonly celestialMode?: 'sun' | 'moon';
   readonly celestialAzimuthDeg?: number;
@@ -83,6 +90,46 @@ export class Real2dMapRenderer {
           for (let x = 0; x < width; x += tilePx) {
             ctx.drawImage(floorImg, x, y, tilePx + 1, tilePx + 1);
           }
+        }
+        // Global Floor Colorize with Photoshop Blend Mode
+        const cStrength = options.floorColorStrength ?? state.floorColorStrength ?? 0;
+        const cHex = options.floorColorHex ?? state.floorColorHex ?? '#ffffff';
+        const cMode = options.floorColorBlendMode ?? state.floorColorBlendMode ?? 'multiply';
+        if (cStrength > 0 && cHex) {
+          ctx.save();
+          ctx.globalCompositeOperation = (
+            cMode === 'eraser' ? 'multiply' : cMode
+          ) as GlobalCompositeOperation;
+          ctx.globalAlpha = Math.max(0, Math.min(1, cStrength / 100));
+          ctx.fillStyle = cHex;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        }
+        // Render painted floor color dabs with Photoshop Blend Modes & Edge Feathering
+        const dabs = TerrainMeshBuilder.getPaintDabs();
+        for (const dab of dabs) {
+          if (dab.blendMode === 'eraser') continue;
+          const dx = toScreenX(dab.x);
+          const dy = toScreenY(dab.z);
+          const rPx = Math.max(4, dab.radius * scale);
+          const sharpFrac = Math.max(0, Math.min(0.96, dab.sharpness / 100));
+          const innerR = rPx * sharpFrac;
+          const alpha = Math.max(0.02, Math.min(1, dab.opacity / 100));
+          const clean = (dab.colorHex || '#49e892').replace('#', '');
+          const r = parseInt(clean.substring(0, 2), 16) || 73;
+          const g = parseInt(clean.substring(2, 4), 16) || 232;
+          const b = parseInt(clean.substring(4, 6), 16) || 146;
+          const dabGrad = ctx.createRadialGradient(dx, dy, innerR, dx, dy, rPx);
+          dabGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+          dabGrad.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${alpha * 0.5})`);
+          dabGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+          ctx.save();
+          ctx.globalCompositeOperation = dab.blendMode as GlobalCompositeOperation;
+          ctx.fillStyle = dabGrad;
+          ctx.beginPath();
+          ctx.arc(dx, dy, rPx, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
         }
         // Subtle directional sun/moon lighting overlay
         ctx.fillStyle = isMoon ? 'rgba(8, 20, 36, 0.32)' : 'rgba(5, 16, 12, 0.18)';
@@ -295,13 +342,26 @@ export class Real2dMapRenderer {
         ctx.stroke();
       }
 
-      ctx.fillStyle = 'rgba(46, 230, 107, 0.28)';
-      ctx.strokeStyle = '#49e892';
+      const rPx = options.ghostRadiusMeters
+        ? Math.max(8, options.ghostRadiusMeters * scale)
+        : 12;
+      ctx.fillStyle = 'rgba(46, 230, 107, 0.18)';
+      ctx.strokeStyle = options.ghostColorHex || '#49e892';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(gx, gy, 12, 0, Math.PI * 2);
+      ctx.arc(gx, gy, rPx, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      if (options.ghostSharpness !== undefined && options.ghostRadiusMeters) {
+        const innerR = rPx * Math.max(0.08, Math.min(0.95, options.ghostSharpness / 100));
+        ctx.strokeStyle = 'rgba(217, 183, 122, 0.85)';
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(gx, gy, innerR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }

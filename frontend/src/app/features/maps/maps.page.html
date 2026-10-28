@@ -109,11 +109,11 @@
             <button
               type="button"
               class="lw-maps-studio__edge-drawer lw-maps-studio__edge-drawer--left"
-              title="Expand Left Tool Dock"
+              title="Expand Tools Menu"
+              aria-label="Expand Tools Menu"
               (click)="leftDockCollapsed.set(false)"
             >
-              <lw-icon name="chevron_right" />
-              <span>Tools</span>
+              <lw-icon name="double-arrow-right" [size]="20" />
             </button>
           }
 
@@ -196,6 +196,17 @@
             [materials]="materials()"
             [wallDrawMode]="wallDrawMode()"
             [floorTilingScale]="floorTilingScale()"
+            [floorBumpIntensity]="floorBumpIntensity()"
+            [floorHeightScale]="floorHeightScale()"
+            [floorColorHex]="floorColorHex()"
+            [floorColorStrength]="floorColorStrength()"
+            [floorColorBlendMode]="floorColorBlendMode()"
+            [floorBrushActive]="floorBrushActive()"
+            [floorBrushColorHex]="floorBrushColorHex()"
+            [floorBrushBlendMode]="floorBrushBlendMode()"
+            [floorBrushOpacity]="floorBrushOpacity()"
+            [floorBrushRadius]="floorBrushRadius()"
+            [floorBrushSharpness]="floorBrushSharpness()"
             [terrainSculptOp]="terrainSculptOp()"
             [terrainBrushRadius]="terrainBrushRadius()"
             [terrainBrushDelta]="terrainBrushDelta()"
@@ -222,6 +233,18 @@
             (cancelPlacement)="cancelActivePlacement()"
             (resetTerrain)="stage.resetTerrainElevations()"
             (floorTilingChange)="onFloorTilingChange($event)"
+            (floorBumpIntensityChange)="onFloorBumpIntensityChange($event)"
+            (floorHeightScaleChange)="onFloorHeightScaleChange($event)"
+            (floorColorHexChange)="onFloorColorHexChange($event)"
+            (floorColorStrengthChange)="onFloorColorStrengthChange($event)"
+            (floorColorBlendModeChange)="onFloorColorBlendModeChange($event)"
+            (floorBrushActiveChange)="onFloorBrushActiveChange($event)"
+            (floorBrushColorHexChange)="onFloorBrushColorHexChange($event)"
+            (floorBrushBlendModeChange)="onFloorBrushBlendModeChange($event)"
+            (floorBrushOpacityChange)="floorBrushOpacity.set($event)"
+            (floorBrushRadiusChange)="floorBrushRadius.set($event); syncGhostCursorToStage()"
+            (floorBrushSharpnessChange)="floorBrushSharpness.set($event); syncGhostCursorToStage()"
+            (clearFloorPaint)="onClearFloorPaint()"
             (heightSquaresChange)="onInspectorHeightChange($event)"
             (thicknessChange)="onInspectorThicknessChange($event)"
             (positionXChange)="onInspectorPositionChange('x', $event)"

@@ -76,7 +76,12 @@ server {
         add_header Cache-Control "public, max-age=604800";
     }
 
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+    }
+
     location / {
+        add_header Cache-Control "no-cache" always;
         try_files $uri $uri/ /index.html;
     }
 }
