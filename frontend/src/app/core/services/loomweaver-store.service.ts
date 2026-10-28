@@ -1,27 +1,14 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CampaignDashboardVm } from '../models/dashboard.models';
+import { FullscreenDiceOverlayService } from '../../features/dice/engine/fullscreen-dice-overlay.service';
+import { LwAlertifyService } from './lw-alertify.service';
 import {
-  AssetCardVm,
-  CampaignVm,
-  CombatTelemetryVm,
-  EntityCardVm,
-  GraphEdgeVm,
-  LoomCitationVm,
-  NavDestination,
-  QualityProfile,
-  SceneVm,
-  SubscriptionTierVm,
-  ViewerRole,
+  AssetCardVm, CampaignVm, CombatTelemetryVm, EntityCardVm, GraphEdgeVm,
+  LoomCitationVm, NavDestination, QualityProfile, SceneVm, SubscriptionTierVm, ViewerRole,
 } from '../models/loomweaver.models';
 import { buildSeedDashboardForCampaign } from './dashboard-seed.data';
-import {
-  LW_ASSETS,
-  LW_GRAPH_EDGES,
-  LW_SCENES,
-  LW_SUBSCRIPTION_TIERS,
-  LW_TELEMETRY,
-} from './loomweaver-catalog.data';
+import { LW_ASSETS, LW_GRAPH_EDGES, LW_SCENES, LW_SUBSCRIPTION_TIERS, LW_TELEMETRY } from './loomweaver-catalog.data';
 import { LW_CAMPAIGNS, LW_ENTITIES, LW_NAVIGATION } from './loomweaver-seed.data';
 
 const ACTIVE_CAMPAIGN_STORAGE_KEY = 'lw_active_campaign_id_v2';
@@ -34,30 +21,26 @@ export type LwExperienceMode = 'guided' | 'advanced';
 @Injectable({ providedIn: 'root' })
 export class LoomWeaverStoreService {
   private readonly http = inject(HttpClient);
+  private readonly alertify = inject(LwAlertifyService);
+  private readonly fullscreenDice = inject(FullscreenDiceOverlayService);
 
   readonly navigationItems = signal<readonly NavDestination[]>(LW_NAVIGATION);
   readonly campaigns = signal<readonly CampaignVm[]>(LW_CAMPAIGNS);
   readonly activeCampaignId = signal<number>(1);
+  readonly activeUserAccountId = signal<string>('acc-gm-geojason');
+  readonly activeUsername = signal<string>('GeoJason');
   readonly viewerRole = signal<ViewerRole>('gm');
-  /**
-   * Generative AI (The Weave) is strictly Opt-In and OFF (false) by default.
-   */
   readonly weaveEnabled = signal<boolean>(false);
   readonly generativeAiEnabled = computed<boolean>(() => this.weaveEnabled());
   readonly hideAiContent = signal<boolean>(true);
   readonly experienceMode = signal<LwExperienceMode>('advanced');
   readonly loomDrawerOpen = signal<boolean>(false);
-  readonly loomQuery = signal<string>(
-    'What did Kildrid sense beneath the mountain on the road to Cinth?',
-  );
+  readonly loomQuery = signal<string>('What did Kildrid sense beneath the mountain on the road to Cinth?');
   readonly qualityProfile = signal<QualityProfile>('Balanced');
   readonly inspectedEntityKey = signal<string | null>(null);
   readonly backendOnline = signal<boolean>(true);
   readonly quickRollBanner = signal<string>('1d20 Ready');
-
-  readonly campaignDashboard = signal<CampaignDashboardVm>(
-    buildSeedDashboardForCampaign(1, 'gm'),
-  );
+  readonly campaignDashboard = signal<CampaignDashboardVm>(buildSeedDashboardForCampaign(1, 'gm'));
 
   private readonly rawEntities = signal<readonly EntityCardVm[]>(LW_ENTITIES);
   private readonly rawAssets = signal<readonly AssetCardVm[]>(LW_ASSETS);
@@ -71,8 +54,7 @@ export class LoomWeaverStoreService {
     return this.rawSubscriptionTiers().map((tier) => {
       if (weaveOn) return tier;
       return {
-        ...tier,
-        includesWeave: false,
+        ...tier, includesWeave: false,
         summary: tier.summary
           .replace(', The Weave AI draft companion, and Neo4j World Graph', ', and Connected World & Lore Atlas')
           .replace('The Weave AI draft companion', 'Connected World & Lore Studio'),
@@ -92,6 +74,17 @@ export class LoomWeaverStoreService {
     return this.campaigns().find((c) => c.id === id) ?? this.campaigns()[0];
   });
 
+  isUserGmForCampaign(campaign: CampaignVm): boolean {
+    const accId = (this.activeUserAccountId() || '').trim().toLowerCase();
+    const uname = (this.activeUsername() || '').trim().toLowerCase();
+    if (!accId || accId === 'unauthenticated') return false;
+    const dmIds = (campaign.dmAccountIds ?? []).map((x) => x.toLowerCase());
+    const dmNames = (campaign.dmUsernames ?? []).map((x) => x.toLowerCase());
+    return dmIds.includes(accId) || dmNames.includes(uname);
+  }
+
+  readonly isGmForActiveCampaign = computed<boolean>(() => this.isUserGmForCampaign(this.activeCampaign()));
+
   readonly visibleNavigation = computed<readonly NavDestination[]>(() => {
     const weaveOn = this.weaveEnabled();
     return this.navigationItems().filter((item) => !item.requiresWeave || weaveOn);
@@ -106,29 +99,17 @@ export class LoomWeaverStoreService {
           (isGm || e.visibility === 'public' || e.visibility === 'players') &&
           (weaveOn || e.canonStatus !== 'draft'),
       )
-      .map((e) => {
-        if (!weaveOn && e.routeLink.startsWith('/weave')) {
-          return {
-            ...e,
-            routeLink: e.routeLink.replace(/^\/weave/, '/world-lore'),
-          };
-        }
-        return e;
-      });
+      .map((e) => (!weaveOn && e.routeLink.startsWith('/weave') ? { ...e, routeLink: e.routeLink.replace(/^\/weave/, '/world-lore') } : e));
   });
 
   readonly authorizedScenes = computed<readonly SceneVm[]>(() => {
     const isGm = this.viewerRole() === 'gm';
-    return this.rawScenes().filter(
-      (s) => isGm || s.visibility === 'public' || s.visibility === 'players',
-    );
+    return this.rawScenes().filter((s) => isGm || s.visibility === 'public' || s.visibility === 'players');
   });
 
   readonly authorizedGraphEdges = computed<readonly GraphEdgeVm[]>(() => {
     const isGm = this.viewerRole() === 'gm';
-    return this.rawEdges().filter(
-      (edge) => isGm || edge.visibility === 'public' || edge.visibility === 'players',
-    );
+    return this.rawEdges().filter((edge) => isGm || edge.visibility === 'public' || edge.visibility === 'players');
   });
 
   readonly assets = computed<readonly AssetCardVm[]>(() => this.rawAssets());
@@ -136,11 +117,7 @@ export class LoomWeaverStoreService {
   readonly inspectedEntity = computed<EntityCardVm | null>(() => {
     const key = this.inspectedEntityKey();
     if (!key) return null;
-    return (
-      this.authorizedEntities().find(
-        (e) => e.compositeKey === key || e.entityKey === key,
-      ) ?? null
-    );
+    return this.authorizedEntities().find((e) => e.compositeKey === key || e.entityKey === key) ?? null;
   });
 
   readonly inspectedEntityEdges = computed(() => {
@@ -149,10 +126,7 @@ export class LoomWeaverStoreService {
     const entities = this.authorizedEntities();
     const defaultRoute = this.weaveEnabled() ? '/weave' : '/world-lore';
     return this.authorizedGraphEdges()
-      .filter(
-        (edge) =>
-          edge.sourceKey === entity.compositeKey || edge.targetKey === entity.compositeKey,
-      )
+      .filter((edge) => edge.sourceKey === entity.compositeKey || edge.targetKey === entity.compositeKey)
       .map((edge) => {
         const isOutgoing = edge.sourceKey === entity.compositeKey;
         const peerKey = isOutgoing ? edge.targetKey : edge.sourceKey;
@@ -160,10 +134,8 @@ export class LoomWeaverStoreService {
         return {
           relationshipType: edge.relationshipType,
           direction: isOutgoing ? ('outgoing' as const) : ('incoming' as const),
-          peerKey,
-          peerName: peer?.name ?? peerKey,
-          peerType: peer?.entityType ?? 'Entity',
-          peerRoute: peer?.routeLink ?? defaultRoute,
+          peerKey, peerName: peer?.name ?? peerKey,
+          peerType: peer?.entityType ?? 'Entity', peerRoute: peer?.routeLink ?? defaultRoute,
         };
       });
   });
@@ -172,23 +144,22 @@ export class LoomWeaverStoreService {
     const q = this.loomQuery().trim().toLowerCase();
     const pool = this.authorizedEntities();
     const matched = pool.filter(
-      (e) =>
-        !q ||
-        e.name.toLowerCase().includes(q) ||
-        e.summary.toLowerCase().includes(q) ||
-        e.subtitle.toLowerCase().includes(q) ||
-        e.entityType.toLowerCase().includes(q),
+      (e) => !q || e.name.toLowerCase().includes(q) || e.summary.toLowerCase().includes(q) || e.subtitle.toLowerCase().includes(q) || e.entityType.toLowerCase().includes(q),
     );
     const results = matched.length > 0 ? matched.slice(0, 5) : pool.slice(0, 4);
     return results.map((e) => ({
-      compositeKey: e.compositeKey,
-      title: e.name,
-      entityType: e.entityType,
-      excerpt: e.summary,
-      routeLink: e.routeLink,
-      visibility: e.visibility,
+      compositeKey: e.compositeKey, title: e.name, entityType: e.entityType,
+      excerpt: e.summary, routeLink: e.routeLink, visibility: e.visibility,
     }));
   });
+
+  syncUserIdentity(accountId: string, username: string): void {
+    this.activeUserAccountId.set(accountId);
+    this.activeUsername.set(username);
+    const effectiveRole: ViewerRole = this.isGmForActiveCampaign() ? 'gm' : 'players';
+    this.viewerRole.set(effectiveRole);
+    this.refreshCampaignDashboard();
+  }
 
   setCampaign(id: number): void {
     const numericId = Number(id);
@@ -198,6 +169,8 @@ export class LoomWeaverStoreService {
 
     this.activeCampaignId.set(validated.id);
     this.inspectedEntityKey.set(null);
+    const isDmHere = this.isUserGmForCampaign(validated);
+    this.viewerRole.set(isDmHere ? 'gm' : 'players');
 
     try {
       if (typeof localStorage !== 'undefined') {
@@ -209,6 +182,11 @@ export class LoomWeaverStoreService {
   }
 
   setViewerRole(role: ViewerRole): void {
+    if (!this.isGmForActiveCampaign()) {
+      this.viewerRole.set('players');
+      this.refreshCampaignDashboard();
+      return;
+    }
     this.viewerRole.set(role);
     this.refreshCampaignDashboard();
   }
@@ -416,26 +394,50 @@ export class LoomWeaverStoreService {
   }
 
   rollGlobalQuickD20(): void {
+    const who = this.activeUsername() || 'Table Roller';
     this.http
       .post<{ total: number; isNat20: boolean; isNat1: boolean }>(
         `/api/v2/campaigns/${this.activeCampaignId()}/dice/roll`,
-        {
-          sides: 20,
-          count: 1,
-          modifier: 0,
-          rollMode: 'normal',
-          label: 'Core Shell Quick d20',
-          skinId: 'skin-obsidian-gold',
-        },
+        { sides: 20, count: 1, modifier: 0, rollMode: 'normal', label: 'Core Shell Quick d20', skinId: 'skin-obsidian-gold' },
       )
       .subscribe({
         next: (res) => {
           const suffix = res.isNat20 ? ' (NAT 20!)' : res.isNat1 ? ' (NAT 1)' : '';
           this.quickRollBanner.set(`d20: ${res.total}${suffix}`);
+          this.fullscreenDice.triggerFullScreenRoll({
+            label: 'Quick d20 Roll',
+            actorName: who,
+            expression: '1d20',
+            diceValues: [res.total],
+            modifier: 0,
+            total: res.total,
+            isNat20: res.isNat20,
+            isCritFail: res.isNat1,
+          });
+          this.alertify.notifyRoll({
+            whoRolled: who, rollType: 'Quick d20 Roll', formula: '1d20 + 0',
+            naturalDie: res.total, modifier: 0, modifiersBreakdown: '+0 Flat d20',
+            adjustedTotal: res.total, isNat20: res.isNat20, isCritFail: res.isNat1,
+          });
         },
         error: () => {
           const v = Math.floor(Math.random() * 20) + 1;
           this.quickRollBanner.set(`d20: ${v}${v === 20 ? ' (NAT 20!)' : ''}`);
+          this.fullscreenDice.triggerFullScreenRoll({
+            label: 'Quick d20 Roll',
+            actorName: who,
+            expression: '1d20',
+            diceValues: [v],
+            modifier: 0,
+            total: v,
+            isNat20: v === 20,
+            isCritFail: v === 1,
+          });
+          this.alertify.notifyRoll({
+            whoRolled: who, rollType: 'Quick d20 Roll', formula: '1d20 + 0',
+            naturalDie: v, modifier: 0, modifiersBreakdown: '+0 Flat d20',
+            adjustedTotal: v, isNat20: v === 20, isCritFail: v === 1,
+          });
         },
       });
   }

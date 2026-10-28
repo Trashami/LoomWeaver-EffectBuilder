@@ -191,3 +191,100 @@ export function createFloatingResultBadge(
 
   return plane;
 }
+
+export function createFullscreenDieTrajectoryPlan(
+  index: number,
+  totalDice: number,
+  dieType: DicePolyhedronType,
+  targetValue: number,
+  sizeScale: number
+): DiePhysicsTrajectoryPlan {
+  const goldenAngle = index * 2.39996 + (Math.random() - 0.5) * 0.32;
+  const ringRadius = totalDice === 1
+    ? 0.4 + Math.random() * 0.8
+    : 1.65 + Math.sqrt(index + 0.6) * 1.45;
+  const endX = Math.max(-5.6, Math.min(5.2, Math.cos(goldenAngle) * ringRadius * 1.35));
+  const endZ = Math.max(-3.1, Math.min(3.1, Math.sin(goldenAngle) * ringRadius * 0.85));
+  const floorY = 0.88 * sizeScale;
+
+  // Throw from left/bottom-left or right/bottom-right edge across the full screen
+  const fromLeft = index % 2 === 0;
+  const startX = (fromLeft ? -9.2 : 9.2) + (Math.random() - 0.5) * 1.4;
+  const startZ = -3.8 + (index % 3) * 2.1 + (Math.random() - 0.5) * 1.2;
+  const startPos = new Vector3(startX, 4.4 + (index % 3) * 0.55, startZ);
+
+  const bounce1Pos = new Vector3(
+    startPos.x * 0.36 + endX * 0.64 + (Math.random() - 0.5) * 1.35,
+    floorY,
+    startPos.z * 0.36 + endZ * 0.64 + (Math.random() - 0.5) * 1.05
+  );
+
+  const bounce2Pos = new Vector3(
+    bounce1Pos.x * 0.28 + endX * 0.72 + (Math.random() - 0.5) * 0.5,
+    floorY,
+    bounce1Pos.z * 0.28 + endZ * 0.72 + (Math.random() - 0.5) * 0.45
+  );
+
+  const endPos = new Vector3(endX, floorY, endZ);
+
+  return {
+    startPos,
+    bounce1Pos,
+    bounce2Pos,
+    endPos,
+    startQuat: Quaternion.RotationYawPitchRoll(
+      Math.random() * Math.PI * 6,
+      Math.random() * Math.PI * 6,
+      Math.random() * Math.PI * 6
+    ),
+    midQuat1: Quaternion.RotationYawPitchRoll(
+      Math.random() * Math.PI * 8,
+      Math.random() * Math.PI * 8,
+      Math.random() * Math.PI * 8
+    ),
+    midQuat2: Quaternion.RotationYawPitchRoll(
+      Math.random() * Math.PI * 4,
+      Math.random() * Math.PI * 4,
+      Math.random() * Math.PI * 4
+    ),
+    targetQuat: getRotationForTopValue(dieType, targetValue),
+    bounced1: false,
+    bounced2: false
+  };
+}
+
+export function createDieContactShadowDisc(
+  index: number,
+  sizeScale: number,
+  scene: Scene
+): Mesh {
+  const disc = MeshBuilder.CreateGround(
+    `lw-die-shadow-${index}-${Math.round(Math.random() * 1000)}`,
+    { width: 2.35 * sizeScale, height: 2.35 * sizeScale },
+    scene
+  );
+  disc.position.y = 0.02;
+
+  const tex = new DynamicTexture(`lw-die-shadow-tex-${index}`, 128, scene, true);
+  tex.hasAlpha = true;
+  const ctx = tex.getContext() as unknown as CanvasRenderingContext2D;
+  ctx.clearRect(0, 0, 128, 128);
+
+  const grad = ctx.createRadialGradient(64, 64, 8, 64, 64, 60);
+  grad.addColorStop(0, 'rgba(0, 0, 0, 0.72)');
+  grad.addColorStop(0.52, 'rgba(0, 0, 0, 0.36)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  tex.update(false);
+
+  const mat = new StandardMaterial(`lw-die-shadow-mat-${index}`, scene);
+  mat.diffuseTexture = tex;
+  mat.opacityTexture = tex;
+  mat.disableLighting = true;
+  mat.backFaceCulling = false;
+  disc.material = mat;
+
+  return disc;
+}
+

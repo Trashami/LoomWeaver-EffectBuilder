@@ -107,7 +107,7 @@ export class AuthSessionService {
       this.jwtToken.set(storedToken);
       this.currentUserProfile.set(decoded);
       this.activeAccountId.set(decoded.accountId);
-      this.store.setViewerRole(decoded.role);
+      this.store.syncUserIdentity(decoded.accountId, decoded.username);
       setSharedCookie(AUTH_TOKEN_KEY, storedToken);
 
       this.loadAuthenticatedResources();
@@ -299,7 +299,7 @@ export class AuthSessionService {
     if (found) {
       this.currentUserProfile.set(found);
       this.activeAccountId.set(found.accountId);
-      this.store.setViewerRole(found.role);
+      this.store.syncUserIdentity(found.accountId, found.username);
     }
   }
 
@@ -345,7 +345,7 @@ export class AuthSessionService {
     this.jwtToken.set(token);
     this.currentUserProfile.set(profile);
     this.activeAccountId.set(profile.accountId);
-    this.store.setViewerRole(profile.role);
+    this.store.syncUserIdentity(profile.accountId, profile.username);
 
     try {
       const userJson = JSON.stringify(rawUser ?? profile);

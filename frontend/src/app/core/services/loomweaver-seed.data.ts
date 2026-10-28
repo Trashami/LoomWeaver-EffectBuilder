@@ -38,6 +38,9 @@ export const LW_CAMPAIGNS: readonly CampaignVm[] = [
     currentSessionNumber: 14,
     currentLocationName: 'City of Cinth — Artificers Quarter',
     weaveEnabled: false,
+    dmAccountIds: ['acc-gm-geojason', 'acc-gm-trashami'],
+    dmUsernames: ['GeoJason', 'trashami'],
+    dmDisplayName: 'GeoJason',
   },
   {
     id: 2,
@@ -51,6 +54,9 @@ export const LW_CAMPAIGNS: readonly CampaignVm[] = [
     currentSessionNumber: 6,
     currentLocationName: 'Absalom Grand Bazaar',
     weaveEnabled: false,
+    dmAccountIds: ['acc-gm-greg', 'acc-player-dal'],
+    dmUsernames: ['GregMeinert', 'ScottBrogan'],
+    dmDisplayName: 'GregMeinert',
   },
   {
     id: 3,
@@ -64,6 +70,9 @@ export const LW_CAMPAIGNS: readonly CampaignVm[] = [
     currentSessionNumber: 9,
     currentLocationName: 'The Gilded Conservatory',
     weaveEnabled: false,
+    dmAccountIds: ['acc-gm-kenneth', 'acc-player-kycius'],
+    dmUsernames: ['KennethAlexander', 'StickHazen'],
+    dmDisplayName: 'KennethAlexander',
   },
 ];
 

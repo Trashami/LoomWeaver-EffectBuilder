@@ -21,7 +21,7 @@
   } @else {
     <lw-character-sheet-view
       [sheet]="studio.activeSheet()"
-      [partyRoster]="studio.sheets()"
+      [partyRoster]="studio.authorizedSheetsForActiveCampaign()"
       [equipmentDatabase]="studio.catalog.equipmentDatabase()"
       [spellDatabase]="studio.catalog.spellDatabase()"
       [mentionableEntities]="studio.catalog.mentionableEntities()"

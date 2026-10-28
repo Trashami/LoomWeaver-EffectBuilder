@@ -18,7 +18,9 @@ import {
 import { LoomWeaverStoreService } from './core/services/loomweaver-store.service';
 import { WebAudioAmbienceService } from './features/assets/engine/web-audio-ambience.service';
 import { LwAppHeaderBarComponent } from './shared/ui/app-header-bar/app-header-bar.component';
+import { LwAlertifyToastStackComponent } from './shared/ui/alertify-toast-stack/alertify-toast-stack.component';
 import { LwAuthModalComponent } from './shared/ui/auth-modal/auth-modal.component';
+import { LwFullscreenDiceOverlayComponent } from './shared/ui/fullscreen-dice-overlay/fullscreen-dice-overlay.component';
 import { LwIconComponent } from './shared/ui/icon/icon.component';
 import { LwInspectorDrawerComponent } from './shared/ui/inspector-drawer/inspector-drawer.component';
 import { LwLoomLauncherComponent } from './shared/ui/loom-launcher/loom-launcher.component';
@@ -40,7 +42,9 @@ interface StudioPrimaryNavItem {
     RouterLinkActive,
     NgpButton,
     LwAppHeaderBarComponent,
+    LwAlertifyToastStackComponent,
     LwAuthModalComponent,
+    LwFullscreenDiceOverlayComponent,
     LwIconComponent,
     LwInspectorDrawerComponent,
     LwLoomLauncherComponent,

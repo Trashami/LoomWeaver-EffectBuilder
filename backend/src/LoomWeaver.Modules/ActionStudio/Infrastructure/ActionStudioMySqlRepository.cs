@@ -465,8 +465,8 @@ public sealed class ActionStudioMySqlRepository(LoomWeaverMySqlRepository mysql)
     private static List<DmCampaignOptionDto> BuildSeedDmCampaigns() =>
     [
         new(1, "shadow-of-the-mountain", "Shadow of the Mountain", "dnd5e", "D&D 5e (2024 + Icrandor Canon)", 1, "GeoJason", "dm", 2),
-        new(2, "echoes-of-the-starstone", "Echoes of the Starstone", "pf2e", "Pathfinder 2e Remaster", 1, "GeoJason", "dm", 1),
-        new(3, "court-of-velvet-ash", "Court of Velvet Ash", "vtm5e", "Vampire: The Masquerade V5", 1, "GeoJason", "dm", 1),
+        new(2, "echoes-of-the-starstone", "Echoes of the Starstone", "pf2e", "Pathfinder 2e Remaster", 4522, "GregMeinert", "dm", 1),
+        new(3, "court-of-velvet-ash", "Court of Velvet Ash", "vtm5e", "Vampire: The Masquerade V5", 5363, "KennethAlexander", "dm", 1),
         new(103, "edhellain-exiles-scott", "Chronicles of Edhellain (Scott's Campaign)", "dnd5e", "D&D 5e (2024 Homebrew)", 3, "ScottBrogan", "dm", 0),
         new(104, "lost-isles-threads-stick", "Threads of the Lost Isles (Stick's Campaign)", "dnd5e", "D&D 5e (2024 Homebrew)", 4, "StickHazen", "dm", 0),
         new(105, "vandia-nocturne-greg", "Vandia Nocturne (Greg's Campaign)", "dnd5e", "D&D 5e (2024 Homebrew)", 4522, "GregMeinert", "dm", 0)

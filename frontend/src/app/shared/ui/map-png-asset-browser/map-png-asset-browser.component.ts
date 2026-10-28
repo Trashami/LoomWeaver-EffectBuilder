@@ -6,6 +6,7 @@ export type LwRightBrowserTab = 'assets' | 'materials' | 'themes' | 'layers';
 
 export type LwAssetToolRole =
   | 'wall-texture'
+  | 'wall-3d'
   | 'floor-texture'
   | 'door-3d'
   | 'object-3d'

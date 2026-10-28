@@ -10,7 +10,7 @@ import {
 import { LwIconComponent } from '../icon/icon.component';
 import { LwMapMaterialPreset } from '../map-png-asset-browser/map-png-asset-browser.component';
 
-export type LwTerrainSculptOp = 'raise' | 'lower' | 'flatten';
+export type LwTerrainSculptOp = 'raise' | 'lower' | 'flatten' | 'smooth';
 export type LwCelestialBodyMode = 'sun' | 'moon';
 export type LwCustomLightKind = MapLightFixtureKind;
 export type LwObjectPlacementMode = MapObjectPlacementMode;
@@ -95,6 +95,7 @@ export interface LwSelectedSceneNode {
   readonly scaleX?: number;
   readonly scaleY?: number;
   readonly scaleZ?: number;
+  readonly connectionOverlap?: number;
   readonly colorHex?: string;
   readonly surfaceFinish?: MapObjectSurfaceFinish;
   readonly opacity?: number;
@@ -133,8 +134,10 @@ export class LwMapPropertiesInspectorComponent {
   readonly floorBrushSharpness = input<number>(22);
   readonly terrainSculptOp = input<LwTerrainSculptOp>('raise');
   readonly terrainBrushRadius = input<number>(4.5);
-  readonly terrainBrushDelta = input<number>(1.4);
-  readonly terrainGradualRate = input<number>(55);
+  readonly terrainBrushDelta = input<number>(0.5);
+  readonly terrainGradualRate = input<number>(20);
+  readonly terrainFeathering = input<number>(80);
+  readonly terrainPlateauLimit = input<number>(5.5);
 
   readonly doorWallPositionPct = input<number>(50);
   readonly doorWidthMeters = input<number>(2.4);
@@ -195,11 +198,14 @@ export class LwMapPropertiesInspectorComponent {
   readonly surfaceFinishChange = output<MapObjectSurfaceFinish>();
   readonly opacityChange = output<number>();
   readonly elevationChange = output<number>();
+  readonly wallConnectionOverlapChange = output<number>();
   readonly wallDrawModeChange = output<WallDrawMode>();
   readonly terrainSculptOpChange = output<LwTerrainSculptOp>();
   readonly terrainRadiusChange = output<number>();
   readonly terrainDeltaChange = output<number>();
   readonly terrainGradualRateChange = output<number>();
+  readonly terrainFeatheringChange = output<number>();
+  readonly terrainPlateauLimitChange = output<number>();
 
   readonly doorPositionPctChange = output<number>();
   readonly doorWidthChange = output<number>();
@@ -251,7 +257,7 @@ export class LwMapPropertiesInspectorComponent {
       'floor-bump': 'Flooring Bump/Height Setup',
       terrain: 'Raise / Lower Terrain Brush',
       wall: isSelected ? 'Selected 3D Wall Properties' : '3D Wall Line Placement',
-      room: '3D Wall Shape Placement',
+      room: 'Room Shape & Wall Setup',
       door: isSelected ? 'Selected Wall Door Properties' : 'Wall-Cutout Door Placement',
       objects: isSelected ? 'Selected Object Properties' : 'Object Stamp Setup (1×1×1)',
       lighting: isSelected ? 'Selected Scene Light Properties' : 'Scene Light Fixture Setup',

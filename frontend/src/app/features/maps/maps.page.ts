@@ -160,8 +160,15 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
   readonly terrainSculptOp = signal<LwTerrainSculptOp>('raise');
   readonly terrainBrushRadius = signal<number>(4.5);
-  readonly terrainBrushDelta = signal<number>(1.4);
-  readonly terrainGradualRate = signal<number>(55);
+  readonly terrainBrushDelta = signal<number>(0.5);
+  readonly terrainGradualRate = signal<number>(20);
+  readonly terrainFeathering = signal<number>(80);
+  readonly terrainPlateauLimit = signal<number>(5.5);
+
+  private userSelectedWallAsset: LwMapPngAssetItem | null = null;
+  private userSelectedDoorAsset: LwMapPngAssetItem | null = null;
+  private userSelectedObjectAsset: LwMapPngAssetItem | null = null;
+  private userSelectedFloorAsset: LwMapPngAssetItem | null = null;
 
   readonly doorWallPositionPct = signal<number>(50);
   readonly doorWidthMeters = signal<number>(2.4);
@@ -195,7 +202,8 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     const c = a.category.toLowerCase();
     return (
       !a.isFloor &&
-      (n.includes('wall') ||
+      (a.id === 'obj-4f9776736fb571f1' ||
+        n.includes('wall') ||
         n.includes('brick') ||
         n.includes('fence') ||
         n.includes('palisade') ||
@@ -244,11 +252,16 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       return all2d.filter((a) => a.isFloor);
     }
     if (effectiveTool === 'wall' || effectiveTool === 'room') {
-      // Wall Line & Shapes draw procedural geometry first and apply 2D Wall/Masonry textures—never 3D prop objects
+      const walls3d = all3d
+        .filter((a) => a.isWall || a.toolRole === 'wall-3d' || this.isWallAsset(a))
+        .sort((x, y) =>
+          x.id === 'obj-4f9776736fb571f1' ? -1 : y.id === 'obj-4f9776736fb571f1' ? 1 : 0,
+        );
       const walls2d = all2d.filter(
-        (a) => a.isWall || a.toolRole === 'wall-texture' || this.isWallAsset(a) || a.isFloor,
+        (a) => a.isWall || a.toolRole === 'wall-texture' || this.isWallAsset(a),
       );
-      return walls2d.length > 0 ? walls2d : all2d;
+      const combined = [...walls3d, ...walls2d];
+      return combined.length > 0 ? combined : [...all3d, ...all2d];
     }
     if (effectiveTool === 'door') {
       return all3d.filter((a) => a.isDoor || a.toolRole === 'door-3d' || this.isDoorAsset(a));
@@ -487,51 +500,55 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       this.selectedPlacedWallId.set(null);
       this.stage.focusGizmoAt(null);
     }
-    if (dockToolId === 'room' && this.wallDrawMode() === 'line') {
-      this.wallDrawMode.set('room');
+    if (dockToolId === 'room') {
+      if (this.wallDrawMode() === 'line' || this.wallDrawMode() === 'freehand') {
+        this.wallDrawMode.set('room');
+      }
     } else if (dockToolId === 'wall') {
       this.wallDrawMode.set('line');
     }
 
     if (dockToolId === 'floor-bump') {
-      const firstFloor = this.pngApi.bumpHeightAssets2d().find((a) => a.isFloor);
-      if (firstFloor) this.equipAssetOnNode(firstFloor);
+      const floorAsset =
+        this.userSelectedFloorAsset ??
+        this.pngApi.bumpHeightAssets2d().find((a) => a.isFloor);
+      if (floorAsset) this.equipAssetOnNode(floorAsset);
     } else if (dockToolId === 'wall' || dockToolId === 'room') {
-      // Equip 2D Wall/Masonry Bump texture for lightweight procedural wall geometry
-      const firstWallTex =
-        this.pngApi
-          .bumpHeightAssets2d()
-          .find((a) => a.isWall || a.toolRole === 'wall-texture' || this.isWallAsset(a)) ??
-        this.pngApi.bumpHeightAssets2d()[0];
-      if (firstWallTex) this.equipAssetOnNode(firstWallTex);
+      const defaultStoneWall: LwMapPngAssetItem =
+        this.userSelectedWallAsset ??
+        this.pngApi.pngAssets3d().find((a) => a.id === 'obj-4f9776736fb571f1') ??
+        this.pngApi.pngAssets3d().find((a) => this.isWallAsset(a)) ?? {
+          id: 'obj-4f9776736fb571f1',
+          name: 'A Wall Made Of Stone',
+          category: 'Architecture',
+          thumbnailUrl: '/assets/previews-png/obj-4f9776736fb571f1.png',
+          modelUrl: '/assets/object-library/models/obj-4f9776736fb571f1.glb',
+          isFloor: false,
+          isWall: true,
+          toolRole: 'wall-3d',
+        };
+      this.userSelectedWallAsset = defaultStoneWall;
+      this.equipAssetOnNode(defaultStoneWall);
     } else if (dockToolId === 'door') {
-      const firstDoor =
+      const doorAsset =
+        this.userSelectedDoorAsset ??
         this.pngApi.pngAssets3d().find((a) => a.isDoor || this.isDoorAsset(a)) ??
         this.pngApi.pngAssets3d()[0];
-      if (firstDoor) this.equipAssetOnNode(firstDoor);
-    } else if (dockToolId === 'objects') {
-      const curId = this.selectedNode().id;
-      const curAsset = this.pngApi.pngAssets3d().find((a) => a.id === curId);
-      if (!curAsset || this.isWallAsset(curAsset) || this.isDoorAsset(curAsset)) {
-        const firstProp =
-          this.pngApi
-            .pngAssets3d()
-            .find((a) => !a.isFloor && !this.isWallAsset(a) && !this.isDoorAsset(a)) ??
-          this.pngApi.pngAssets3d()[0];
-        if (firstProp) this.equipAssetOnNode(firstProp);
-      } else {
-        this.equipAssetOnNode(curAsset);
+      if (doorAsset) {
+        this.userSelectedDoorAsset = doorAsset;
+        this.equipAssetOnNode(doorAsset);
       }
-      // Object stamp tool always defaults to 1x1x1 grid square and flush On the Floor
-      this.selectedNode.update((cur) => ({
-        ...cur,
-        placementMode: 'floor',
-        elevationY: 0,
-        scale: 1.0,
-        scaleX: 1.0,
-        scaleY: 1.0,
-        scaleZ: 1.0,
-      }));
+    } else if (dockToolId === 'objects') {
+      const objAsset =
+        this.userSelectedObjectAsset ??
+        this.pngApi
+          .pngAssets3d()
+          .find((a) => !a.isFloor && !this.isWallAsset(a) && !this.isDoorAsset(a)) ??
+        this.pngApi.pngAssets3d()[0];
+      if (objAsset) {
+        this.userSelectedObjectAsset = objAsset;
+        this.equipAssetOnNode(objAsset);
+      }
     }
 
     this.syncSurfaceLock();
@@ -541,8 +558,21 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
   private equipAssetOnNode(asset: LwMapPngAssetItem): void {
     this.selectedPngAssetId.set(asset.id);
-    const isWall = Boolean(asset.isWall || asset.toolRole === 'wall-texture' || this.isWallAsset(asset));
-    const isDoor = Boolean(asset.isDoor || asset.toolRole === 'door-3d' || this.isDoorAsset(asset));
+    const activeTool = this.activeDockToolId();
+    const isWall = Boolean(
+      activeTool === 'wall' ||
+        activeTool === 'room' ||
+        asset.isWall ||
+        asset.toolRole === 'wall-texture' ||
+        asset.toolRole === 'wall-3d' ||
+        this.isWallAsset(asset),
+    );
+    const isDoor = Boolean(
+      activeTool === 'door' ||
+        asset.isDoor ||
+        asset.toolRole === 'door-3d' ||
+        this.isDoorAsset(asset),
+    );
     const defaultGrid = asset.defaultScaleGrid ?? [1, 1, 1];
     const hasPlacedSelection = this.selectedPlacedId() !== null;
     this.selectedNode.update((cur) => ({
@@ -550,20 +580,29 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       id: asset.id,
       name: asset.name,
       kind: isDoor ? 'door' : isWall ? 'wall' : 'prop',
-      subtitle: asset.modelUrl
-        ? `3D Asset · ${asset.category}`
-        : asset.isFloor
-          ? 'Seamless 2D Bump/Height Flooring'
-          : isWall
-            ? `Wall Masonry Texture · ${asset.category}`
+      subtitle: isWall
+        ? asset.modelUrl
+          ? `3D Wall Stamp · ${asset.category}`
+          : `Wall Masonry Texture · ${asset.category}`
+        : asset.modelUrl
+          ? `3D Asset · ${asset.category}`
+          : asset.isFloor
+            ? 'Seamless 2D Bump/Height Flooring'
             : `2D Floor Stamp · ${asset.category}`,
       thumbnailUrl: asset.thumbnailUrl,
-      modelUrl: isWall ? undefined : asset.modelUrl || undefined,
+      modelUrl: asset.modelUrl || undefined,
       albedoUrl: asset.albedoUrl,
       normalUrl: asset.normalUrl,
       isFloor: asset.isFloor,
       placementMode: hasPlacedSelection ? cur.placementMode : (asset.defaultPlacement ?? 'floor'),
-      elevationY: hasPlacedSelection ? cur.elevationY : 0,
+      elevationY: hasPlacedSelection
+        ? cur.elevationY
+        : isWall
+          ? cur.kind === 'wall'
+            ? cur.elevationY
+            : -0.06
+          : 0,
+      connectionOverlap: cur.connectionOverlap ?? 15,
       scale: hasPlacedSelection ? cur.scale : 1.0,
       scaleX: hasPlacedSelection ? cur.scaleX : defaultGrid[0],
       scaleY: hasPlacedSelection ? cur.scaleY : defaultGrid[1],
@@ -573,6 +612,20 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onSelectPngAsset(asset: LwMapPngAssetItem): void {
+    const activeTool = this.activeDockToolId();
+    const placedKind = this.selectedPlacedKind();
+    const placedId = this.selectedPlacedId();
+
+    if (asset.isFloor) {
+      this.userSelectedFloorAsset = asset;
+    } else if (activeTool === 'wall' || activeTool === 'room' || placedKind === 'wall') {
+      this.userSelectedWallAsset = asset;
+    } else if (activeTool === 'door' || placedKind === 'door') {
+      this.userSelectedDoorAsset = asset;
+    } else {
+      this.userSelectedObjectAsset = asset;
+    }
+
     this.equipAssetOnNode(asset);
 
     if (asset.isFloor && asset.albedoUrl && asset.normalUrl) {
@@ -580,9 +633,7 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // If a placed Wall, Door, or Object is currently selected, live-swap its 3D asset!
-    const placedId = this.selectedPlacedId();
-    const placedKind = this.selectedPlacedKind();
+    // If a placed Wall, Door, or Object is currently selected, live-swap its 3D asset AND update the active tool ghost!
     if (placedId && placedKind === 'wall') {
       this.commitSceneUpdate((cur) => ({
         ...cur,
@@ -600,7 +651,8 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
             : w,
         ),
       }));
-      this.pngPipelineBanner.set(`Updated Wall Texture/Model -> ${asset.name}`);
+      this.pngPipelineBanner.set(`Updated Wall Stamp -> ${asset.name}`);
+      this.syncGhostCursorToStage();
       return;
     }
     if (placedId && placedKind === 'door') {
@@ -622,28 +674,38 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         })),
       }));
       this.pngPipelineBanner.set(`Updated Door 3D Model -> ${asset.name}`);
+      this.syncGhostCursorToStage();
       return;
     }
     if (placedId && placedKind === 'object') {
-      const isDecal = Boolean(asset.albedoUrl && !asset.modelUrl && !asset.isFloor);
-      this.commitSceneUpdate((cur) => ({
-        ...cur,
-        revision: cur.revision + 1,
-        stamps: cur.stamps.map((s) =>
-          s.id === placedId
-            ? {
-                ...s,
-                label: asset.name,
-                category: isDecal ? 'DecalStamp' : 'Prop',
-                modelUrl: asset.modelUrl || undefined,
-                albedoUrl: isDecal ? asset.albedoUrl : undefined,
-                normalUrl: isDecal ? asset.normalUrl : undefined,
-                thumbnailUrl: asset.thumbnailUrl,
-              }
-            : s,
-        ),
-      }));
-      this.pngPipelineBanner.set(`Updated Object Model -> ${asset.name}`);
+      if (activeTool === 'select') {
+        const isDecal = Boolean(asset.albedoUrl && !asset.modelUrl && !asset.isFloor);
+        this.commitSceneUpdate((cur) => ({
+          ...cur,
+          revision: cur.revision + 1,
+          stamps: cur.stamps.map((s) =>
+            s.id === placedId
+              ? {
+                  ...s,
+                  label: asset.name,
+                  category: isDecal ? 'DecalStamp' : 'Prop',
+                  modelUrl: asset.modelUrl || undefined,
+                  albedoUrl: isDecal ? asset.albedoUrl : undefined,
+                  normalUrl: isDecal ? asset.normalUrl : undefined,
+                  thumbnailUrl: asset.thumbnailUrl,
+                }
+              : s,
+          ),
+        }));
+        this.pngPipelineBanner.set(`Updated Selected Object -> ${asset.name}`);
+      } else {
+        // In Objects stamp tool: selecting a new object in the modal prepares the cursor to stamp the new object
+        this.selectedPlacedId.set(null);
+        this.selectedPlacedKind.set(null);
+        this.stage.focusGizmoAt(null);
+        this.pngPipelineBanner.set(`Equipped Object Stamp -> ${asset.name}`);
+      }
+      this.syncGhostCursorToStage();
       return;
     }
 
@@ -841,10 +903,14 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         heightMeters: tool === 'door' ? this.doorHeightMeters() : node.heightSquares * 1.5,
         thicknessMeters: 0.45 * node.thickness,
         wallDrawMode: this.wallDrawMode(),
+        wallStampScale: node.scale || 1.0,
+        wallOffsetY: node.elevationY ?? -0.06,
+        wallRotationOffsetDeg: node.rotationDeg || 0,
         freehandPoints: this.freehandWallPoints(),
         colorHex: isFloorPaint ? this.floorBrushColorHex() : (node.colorHex ?? '#ffffff'),
         surfaceFinish: node.surfaceFinish ?? 'standard',
         brushSharpness: this.floorBrushSharpness(),
+        terrainFeathering: this.terrainFeathering(),
       },
       this.wallStartAnchor(),
     );
@@ -878,10 +944,18 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
 
     if (tool === 'terrain') {
       const rateFactor = this.terrainGradualRate() / 100;
-      const stepDelta = Math.max(0.06, this.terrainBrushDelta() * rateFactor * 0.22);
+      const stepDelta = Math.max(0.025, this.terrainBrushDelta() * rateFactor * 0.14);
       const expandedRadius =
-        this.terrainBrushRadius() * (1 + Math.min(1.6, holdTicks * 0.04 * rateFactor));
-      this.stage.sculptTerrainAt(x, z, expandedRadius, stepDelta, this.terrainSculptOp());
+        this.terrainBrushRadius() * (1 + Math.min(1.1, holdTicks * 0.025 * rateFactor));
+      this.stage.sculptTerrainAt(
+        x,
+        z,
+        expandedRadius,
+        stepDelta,
+        this.terrainSculptOp(),
+        this.terrainFeathering(),
+        this.terrainPlateauLimit(),
+      );
       return;
     }
 
@@ -972,18 +1046,23 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       const pts = this.freehandWallPoints();
       if (pts.length >= 2) {
         const node = this.selectedNode();
+        const wallId = `wall-${this.sceneGraph().revision + 1}`;
         const newWall: MapWallSegmentNode = {
-          id: `wall-${this.sceneGraph().revision + 1}`,
+          id: wallId,
           name: node.name,
           drawMode: 'freehand',
           material: 'Crypt Ashlar Stone',
-          modelUrl: undefined,
+          modelUrl: node.modelUrl,
           albedoUrl: node.albedoUrl,
           normalUrl: node.normalUrl,
           thumbnailUrl: node.thumbnailUrl,
           colorHex: node.colorHex ?? '#ffffff',
           heightMeters: node.heightSquares * 1.5,
           thicknessMeters: 0.45 * node.thickness,
+          offsetY: node.elevationY ?? -0.06,
+          stampScale: node.scale || 1.0,
+          connectionOverlap: node.connectionOverlap ?? 15,
+          rotationOffsetDeg: node.rotationDeg || 0,
           perspective: 'auto',
           projection: 'inward',
           hasCornerPosts: false,
@@ -998,6 +1077,8 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
           revision: cur.revision + 1,
           walls: [...(cur.walls ?? []), newWall],
         }));
+        this.selectedPlacedId.set(wallId);
+        this.selectedPlacedKind.set('wall');
         this.syncGhostCursorToStage();
       } else {
         this.freehandWallPoints.set([]);
@@ -1025,14 +1106,18 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
           id: wall.id,
           name: wall.name,
           kind: 'wall',
-          subtitle: `Wall · ${Math.round(wall.heightMeters / 0.3048)} ft`,
+          subtitle: `3D Wall Stamp · ${Math.round(wall.heightMeters / 0.3048)} ft`,
           thumbnailUrl: wall.thumbnailUrl || cur.thumbnailUrl,
-          modelUrl: undefined,
+          modelUrl: wall.modelUrl,
           albedoUrl: wall.albedoUrl,
           normalUrl: wall.normalUrl,
           colorHex: wall.colorHex ?? '#ffffff',
           heightSquares: Math.max(1, Math.round(wall.heightMeters / 1.5)),
           thickness: Math.round((wall.thicknessMeters / 0.45) * 100) / 100,
+          elevationY: wall.offsetY ?? -0.06,
+          scale: wall.stampScale ?? 1.0,
+          connectionOverlap: wall.connectionOverlap ?? 15,
+          rotationDeg: wall.rotationOffsetDeg ?? 0,
           gridX: p0[0],
           gridZ: p0[1],
         }));
@@ -1182,13 +1267,14 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       if (this.wallDrawMode() === 'freehand') {
         return;
       }
-      const snappedPt = TerrainMeshBuilder.snapWorldCoordinates(
+      const anchor = this.wallStartAnchor();
+      const snappedPt = WallMeshBuilder.snapWallCursorPoint(
+        this.sceneGraph().walls,
         x,
         z,
+        anchor,
         this.snapEnabled(),
-        'wall',
       );
-      const anchor = this.wallStartAnchor();
       if (!anchor) {
         this.wallStartAnchor.set({ x: snappedPt.x, z: snappedPt.z });
         this.syncGhostCursorToStage();
@@ -1212,13 +1298,17 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
         name: node.name,
         drawMode: this.wallDrawMode(),
         material: 'Crypt Ashlar Stone',
-        modelUrl: undefined,
+        modelUrl: node.modelUrl,
         albedoUrl: node.albedoUrl,
         normalUrl: node.normalUrl,
         thumbnailUrl: node.thumbnailUrl,
         colorHex: node.colorHex ?? '#ffffff',
         heightMeters: node.heightSquares * 1.5,
         thicknessMeters: 0.45 * node.thickness,
+        offsetY: node.elevationY ?? -0.06,
+        stampScale: node.scale || 1.0,
+        connectionOverlap: node.connectionOverlap ?? 15,
+        rotationOffsetDeg: node.rotationDeg || 0,
         perspective: 'auto',
         projection: 'inward',
         hasCornerPosts: false,
@@ -1228,11 +1318,22 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       };
       this.wallStartAnchor.set(null);
       this.recordHistoryBeforeEdit(`Draw Wall (${this.wallDrawMode()})`);
-      this.commitSceneUpdate((cur) => ({
-        ...cur,
-        revision: cur.revision + 1,
-        walls: [...(cur.walls ?? []), newWall],
-      }));
+      let placedWallId = newWall.id;
+      this.commitSceneUpdate((cur) => {
+        const merged = WallMeshBuilder.mergeSharedWallsOnPlacement(
+          cur.walls ?? [],
+          newWall,
+          this.snapEnabled(),
+        );
+        placedWallId = merged.primaryWallId;
+        return {
+          ...cur,
+          revision: cur.revision + 1,
+          walls: merged.walls,
+        };
+      });
+      this.selectedPlacedId.set(placedWallId);
+      this.selectedPlacedKind.set('wall');
       this.syncGhostCursorToStage();
       return;
     }
@@ -1575,9 +1676,39 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
     this.updateTargetStamp((s) => (axis === 'x' ? { ...s, x: value } : { ...s, z: value }));
   }
 
+  private updateTargetWall(
+    updater: (w: MapWallSegmentNode) => MapWallSegmentNode,
+  ): void {
+    const targetWallId =
+      this.selectedPlacedKind() === 'wall' ? this.selectedPlacedId() : null;
+    this.commitSceneUpdate((cur) => ({
+      ...cur,
+      revision: cur.revision + 1,
+      walls: (cur.walls ?? []).map((w, idx, arr) =>
+        (targetWallId ? w.id === targetWallId : idx === arr.length - 1)
+          ? updater(w)
+          : w,
+      ),
+    }));
+  }
+
+  onWallConnectionOverlapChange(overlap: number): void {
+    this.selectedNode.update((cur) => ({ ...cur, connectionOverlap: overlap }));
+    this.syncGhostCursorToStage();
+    this.updateTargetWall((w) => ({ ...w, connectionOverlap: overlap }));
+  }
+
   onInspectorElevationChange(elevationY: number): void {
     this.selectedNode.update((cur) => ({ ...cur, elevationY }));
     this.syncGhostCursorToStage();
+    if (
+      this.selectedPlacedKind() === 'wall' ||
+      this.activeDockToolId() === 'wall' ||
+      this.activeDockToolId() === 'room'
+    ) {
+      this.updateTargetWall((w) => ({ ...w, offsetY: elevationY }));
+      return;
+    }
     this.updateTargetStamp((s) => ({ ...s, offsetY: elevationY }));
   }
 
@@ -1588,38 +1719,26 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
       subtitle: `3D Wall · ${heightSquares * 5} ft`,
     }));
     this.syncGhostCursorToStage();
-    const targetWallId =
-      this.selectedPlacedKind() === 'wall' ? this.selectedPlacedId() : null;
-    this.commitSceneUpdate((cur) => ({
-      ...cur,
-      revision: cur.revision + 1,
-      walls: (cur.walls ?? []).map((w, idx, arr) =>
-        (targetWallId ? w.id === targetWallId : idx === arr.length - 1)
-          ? { ...w, heightMeters: heightSquares * 1.5 }
-          : w,
-      ),
-    }));
+    this.updateTargetWall((w) => ({ ...w, heightMeters: heightSquares * 1.5 }));
   }
 
   onInspectorThicknessChange(thickness: number): void {
     this.selectedNode.update((cur) => ({ ...cur, thickness }));
     this.syncGhostCursorToStage();
-    const targetWallId =
-      this.selectedPlacedKind() === 'wall' ? this.selectedPlacedId() : null;
-    this.commitSceneUpdate((cur) => ({
-      ...cur,
-      revision: cur.revision + 1,
-      walls: (cur.walls ?? []).map((w, idx, arr) =>
-        (targetWallId ? w.id === targetWallId : idx === arr.length - 1)
-          ? { ...w, thicknessMeters: 0.45 * thickness }
-          : w,
-      ),
-    }));
+    this.updateTargetWall((w) => ({ ...w, thicknessMeters: 0.45 * thickness }));
   }
 
   onInspectorRotationChange(rotationDeg: number): void {
     this.selectedNode.update((cur) => ({ ...cur, rotationDeg }));
     this.syncGhostCursorToStage();
+    if (
+      this.selectedPlacedKind() === 'wall' ||
+      this.activeDockToolId() === 'wall' ||
+      this.activeDockToolId() === 'room'
+    ) {
+      this.updateTargetWall((w) => ({ ...w, rotationOffsetDeg: rotationDeg }));
+      return;
+    }
     const rad = (rotationDeg * Math.PI) / 180;
     this.updateTargetStamp((s) => ({ ...s, rotationY: rad }));
   }
@@ -1632,6 +1751,14 @@ export class MapsPageComponent implements AfterViewInit, OnDestroy {
   onInspectorScaleChange(scale: number): void {
     this.selectedNode.update((cur) => ({ ...cur, scale }));
     this.syncGhostCursorToStage();
+    if (
+      this.selectedPlacedKind() === 'wall' ||
+      this.activeDockToolId() === 'wall' ||
+      this.activeDockToolId() === 'room'
+    ) {
+      this.updateTargetWall((w) => ({ ...w, stampScale: scale }));
+      return;
+    }
     this.updateTargetStamp((s) => ({ ...s, scale }));
   }
 

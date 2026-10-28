@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
   effect,
   inject,
@@ -9,7 +8,6 @@ import {
   model,
   output,
   signal,
-  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -107,7 +105,6 @@ export class LwCharacterSheetViewComponent {
   readonly noteAdded = output<string>();
   readonly richNoteAdded = output<CharacterRichNoteVm>();
 
-  readonly miniDiceCanvas = viewChild<ElementRef<HTMLCanvasElement>>('miniDiceCanvas');
   readonly mainSheetTab = signal<DndSheetMainTab>('ACTIONS');
   readonly actionSubFilter = signal<DndActionFilter>('ALL');
   readonly hpDeltaInput = signal<number>(5);
@@ -163,12 +160,6 @@ export class LwCharacterSheetViewComponent {
       const s = this.sheet();
       if (s?.characterKey) {
         this.interactive.fetchLiveState(s.characterKey);
-      }
-    });
-    effect(() => {
-      const canvasRef = this.miniDiceCanvas();
-      if (canvasRef?.nativeElement) {
-        this.interactive.mountMiniDiceCanvas(canvasRef.nativeElement);
       }
     });
   }
@@ -293,45 +284,58 @@ export class LwCharacterSheetViewComponent {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
       category: 'ability', itemId: `rule-ab-${ab.code}`, itemName: `${ab.label} Check`,
       actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: ab.modifier,
+      modifiersBreakdown: `${ab.code} ${this.formatMod(ab.modifier)}`,
     });
   }
 
   rollSaveOnly(sv: SavingThrowVm): void {
+    const abMod = this.sheet().abilities.find((a) => a.code === sv.code)?.modifier ?? 0;
+    const profPart = sv.proficient ? `, Prof +${this.sheet().proficiencyBonus}` : '';
     this.interactive.executeSheetRollAndAction(this.sheet(), {
       category: 'save', itemId: `rule-save-${sv.code}`, itemName: `${sv.code} Saving Throw`,
       actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: sv.bonus,
+      modifiersBreakdown: `${sv.code} ${this.formatMod(abMod)}${profPart}`,
     });
   }
 
   rollSkillOnly(sk: CharacterSkillVm): void {
+    const abMod = this.sheet().abilities.find((a) => a.code === sk.abilityCode)?.modifier ?? 0;
+    const profPart = sk.proficient ? `, Prof +${this.sheet().proficiencyBonus}` : '';
     this.interactive.executeSheetRollAndAction(this.sheet(), {
       category: 'skill', itemId: `rule-skill-${sk.id}`, itemName: `${sk.label} (${sk.abilityCode})`,
       actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: sk.bonus,
+      modifiersBreakdown: `${sk.abilityCode} ${this.formatMod(abMod)}${profPart}`,
     });
   }
 
   rollInitiativeOnly(): void {
     const s = this.sheet();
     this.interactive.executeSheetRollAndAction(s, {
-      category: 'initiative', itemId: 'init-roll', itemName: 'Initiative',
+      category: 'initiative', itemId: 'init-roll', itemName: 'Initiative Roll',
       actionSlotCost: 'none', diceSides: 20, diceCount: 1, modifier: s.initiativeBonus,
+      modifiersBreakdown: `DEX ${this.formatMod(s.initiativeBonus)}`,
     });
   }
 
   rollActionHitOnly(row: CharacterSheetActionRowVm): void {
+    const base = this.primaryAbilityMod() + this.sheet().proficiencyBonus;
+    const itemBonus = row.attackBonus - base;
+    const itemPart = itemBonus > 0 ? `, Gear +${itemBonus}` : '';
     this.interactive.executeSheetRollAndAction(this.sheet(), {
       category: row.filterCategory === 'ATTACK' ? 'attack' : 'feature',
-      itemId: row.id, itemName: `${row.name} (Attack / Check)`,
+      itemId: row.id, itemName: `${row.name} · Attack Roll`,
       actionSlotCost: row.actionSlotCost, diceSides: 20, diceCount: 1, modifier: row.attackBonus,
+      modifiersBreakdown: `${this.primaryAbilityCode()} ${this.formatMod(this.primaryAbilityMod())}, Prof +${this.sheet().proficiencyBonus}${itemPart}`,
       spellSlotLevel: row.spellSlotLevel, limitedUseId: row.limitedUseId, maxLimitedUses: row.limitedUseMax,
     });
   }
 
   rollActionDamageOnly(row: CharacterSheetActionRowVm): void {
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'damage', itemId: `${row.id}-dmg`, itemName: `${row.name} (${row.damageType} Damage)`,
+      category: 'damage', itemId: `${row.id}-dmg`, itemName: `${row.name} · ${row.damageType} Damage`,
       actionSlotCost: 'none', diceSides: row.damageDiceSides, diceCount: row.damageDiceCount,
       modifier: row.damageBonus, damageType: row.damageType,
+      modifiersBreakdown: row.damageBonus !== 0 ? `${this.primaryAbilityCode()} ${this.formatMod(row.damageBonus)}` : 'Weapon / Spell Dice',
     });
   }
 
@@ -340,8 +344,9 @@ export class LwCharacterSheetViewComponent {
     const costStr = (sp.actionCost ?? '1 Action').toLowerCase();
     const cost: 'action' | 'bonus' | 'reaction' = costStr.includes('bonus') ? 'bonus' : costStr.includes('reaction') ? 'reaction' : 'action';
     this.interactive.executeSheetRollAndAction(this.sheet(), {
-      category: 'spell-attack', itemId: sp.id, itemName: sp.name, actionSlotCost: cost,
+      category: 'spell-attack', itemId: sp.id, itemName: `${sp.name} · Spell Cast`, actionSlotCost: cost,
       diceSides: 20, diceCount: 1, modifier: this.spellAttackBonus(),
+      modifiersBreakdown: `${this.primaryAbilityCode()} ${this.formatMod(this.primaryAbilityMod())}, Prof +${this.sheet().proficiencyBonus}`,
       damageDiceCount: isCantrip ? 2 : (sp.level ?? 1) + 1, damageDiceSides: 8, damageBonus: 0,
       damageType: `${sp.school} Force`, spellSlotLevel: isCantrip ? undefined : (sp.level ?? 1), maxSpellSlots: slotMax,
     });

@@ -690,7 +690,9 @@ export class TerrainMeshBuilder {
     worldZ: number,
     radius: number,
     deltaY: number,
-    mode: 'raise' | 'lower' | 'flatten',
+    mode: 'raise' | 'lower' | 'flatten' | 'smooth',
+    featheringPct = 80,
+    plateauLimit = 6.0,
   ): void {
     const ground = scene.getMeshByName('lw-terrain-ground') as Mesh | null;
     if (!ground) return;
@@ -703,21 +705,49 @@ export class TerrainMeshBuilder {
 
     const r = Math.max(1.2, radius);
     const signedDelta = mode === 'lower' ? -Math.abs(deltaY) : Math.abs(deltaY);
+    const featherFrac = Math.max(0.05, Math.min(1.0, featheringPct / 100));
+    const innerCoreR = r * (1.0 - featherFrac * 0.92);
+    const maxCap = Math.max(0.5, Math.min(8.5, plateauLimit));
+
+    // Precompute average elevation inside brush for 'smooth' mode
+    let smoothTargetY = 0;
+    if (mode === 'smooth') {
+      let sumY = 0;
+      let count = 0;
+      for (let i = 0; i < positions.length; i += 3) {
+        const dist = Math.hypot(positions[i] - worldX, positions[i + 2] - worldZ);
+        if (dist <= r) {
+          sumY += positions[i + 1];
+          count++;
+        }
+      }
+      smoothTargetY = count > 0 ? sumY / count : 0;
+    }
 
     for (let i = 0; i < positions.length; i += 3) {
       const vx = positions[i];
       const vz = positions[i + 2];
       const dist = Math.hypot(vx - worldX, vz - worldZ);
       if (dist <= r) {
-        const falloff = 0.5 * (1 + Math.cos((Math.PI * dist) / r));
+        let falloff = 1.0;
+        if (dist > innerCoreR) {
+          const t = Math.min(1, (dist - innerCoreR) / Math.max(0.05, r - innerCoreR));
+          falloff = 0.5 * (1 + Math.cos(Math.PI * t));
+        }
         const vIdx = i / 3;
         if (mode === 'flatten') {
-          positions[i + 1] = positions[i + 1] * (1 - falloff * 0.65);
+          positions[i + 1] = positions[i + 1] * (1 - falloff * 0.55);
           this.customElevations[vIdx] = positions[i + 1];
+        } else if (mode === 'smooth') {
+          const blend = falloff * 0.38;
+          const nextY = positions[i + 1] * (1 - blend) + smoothTargetY * blend;
+          this.customElevations[vIdx] += nextY - positions[i + 1];
+          positions[i + 1] = nextY;
         } else {
-          const step = signedDelta * falloff * 0.45;
-          positions[i + 1] = Math.max(-4.5, Math.min(8.5, positions[i + 1] + step));
-          this.customElevations[vIdx] += step;
+          const step = signedDelta * falloff * 0.28;
+          const nextY = Math.max(-maxCap, Math.min(maxCap, positions[i + 1] + step));
+          this.customElevations[vIdx] += nextY - positions[i + 1];
+          positions[i + 1] = nextY;
         }
       }
     }

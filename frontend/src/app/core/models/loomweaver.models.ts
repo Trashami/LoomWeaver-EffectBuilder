@@ -16,6 +16,9 @@ export interface CampaignVm {
   readonly currentSessionNumber: number;
   readonly currentLocationName: string;
   readonly weaveEnabled: boolean;
+  readonly dmAccountIds?: readonly string[];
+  readonly dmUsernames?: readonly string[];
+  readonly dmDisplayName?: string;
 }
 
 export interface EntityCardVm {

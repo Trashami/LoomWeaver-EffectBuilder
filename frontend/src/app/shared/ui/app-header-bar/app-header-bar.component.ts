@@ -31,6 +31,7 @@ export class LwAppHeaderBarComponent {
   readonly activeCampaign = input<CampaignVm | null>(null);
   readonly activeCampaignId = input<number>(0);
   readonly viewerRole = input<ViewerRole>('gm');
+  readonly isCampaignGm = input<boolean>(true);
   readonly audioPlaying = input<boolean>(false);
   readonly quickRollBanner = input<string>('1d20 Ready');
   readonly loomOpen = input<boolean>(false);

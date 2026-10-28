@@ -4,6 +4,7 @@ import {
   Scene,
   StandardMaterial,
   Texture,
+  Vector3,
 } from '@babylonjs/core';
 import { MapWallSegmentNode, WallDrawMode, WallOpeningNode } from '../map-scene-contract';
 import { GlbModelCache } from '../rendering/glb-model-cache';
@@ -18,6 +19,23 @@ export interface WallDoorAttachmentHit {
   readonly angleY: number;
   readonly wallHeight: number;
   readonly wallThickness: number;
+}
+
+export interface SnappedWallCursorResult {
+  readonly x: number;
+  readonly z: number;
+  readonly snappedToCorner: boolean;
+  readonly connectedWallId?: string;
+  readonly previewAngleY: number;
+}
+
+interface RawWallEdge {
+  readonly wallId: string;
+  readonly ax: number;
+  readonly az: number;
+  readonly bx: number;
+  readonly bz: number;
+  readonly angleY: number;
 }
 
 export class WallMeshBuilder {
@@ -54,6 +72,286 @@ export class WallMeshBuilder {
       this.ghostMat = mat;
     }
     return this.ghostMat;
+  }
+
+  private static extractWallEdges(walls: readonly MapWallSegmentNode[] | undefined): RawWallEdge[] {
+    if (!walls || walls.length === 0) return [];
+    const edges: RawWallEdge[] = [];
+    for (const w of walls) {
+      const pts = w.points;
+      if (pts.length < 2) continue;
+      const closed = w.drawMode !== 'line' && w.drawMode !== 'freehand';
+      const segCount = closed ? pts.length : pts.length - 1;
+      for (let i = 0; i < segCount; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % pts.length];
+        const dx = b[0] - a[0];
+        const dz = b[1] - a[1];
+        if (Math.hypot(dx, dz) < 0.05) continue;
+        edges.push({
+          wallId: w.id,
+          ax: a[0],
+          az: a[1],
+          bx: b[0],
+          bz: b[1],
+          angleY: -Math.atan2(dz, dx),
+        });
+      }
+    }
+    return edges;
+  }
+
+  /**
+   * Snaps the wall cursor to:
+   * 1. Existing wall endpoints/corners (magnetic corner snap for seamless 90° or collinear connections)
+   * 2. The 1.5m (5 ft) floor grid intersection when `snapToGrid` is active
+   * 3. Orthogonal 90° grid/wall angles when drawing a line from an anchor with `snapToGrid` active
+   */
+  static snapWallCursorPoint(
+    walls: readonly MapWallSegmentNode[] | undefined,
+    rawX: number,
+    rawZ: number,
+    anchor: { x: number; z: number } | null,
+    snapToGrid: boolean,
+  ): SnappedWallCursorResult {
+    const edges = this.extractWallEdges(walls);
+    const cornerSnapRadius = snapToGrid ? 1.15 : 0.65;
+
+    // 1. Check magnetic snap to any existing wall vertex/corner
+    let bestCornerDist = cornerSnapRadius;
+    let bestCorner: { x: number; z: number; wallId: string; edgeAngleY: number; dx: number; dz: number } | null =
+      null;
+
+    for (const e of edges) {
+      const dA = Math.hypot(rawX - e.ax, rawZ - e.az);
+      if (dA < bestCornerDist) {
+        bestCornerDist = dA;
+        bestCorner = {
+          x: e.ax,
+          z: e.az,
+          wallId: e.wallId,
+          edgeAngleY: e.angleY,
+          dx: e.bx - e.ax,
+          dz: e.bz - e.az,
+        };
+      }
+      const dB = Math.hypot(rawX - e.bx, rawZ - e.bz);
+      if (dB < bestCornerDist) {
+        bestCornerDist = dB;
+        bestCorner = {
+          x: e.bx,
+          z: e.bz,
+          wallId: e.wallId,
+          edgeAngleY: e.angleY,
+          dx: e.bx - e.ax,
+          dz: e.bz - e.az,
+        };
+      }
+    }
+
+    if (bestCorner && (!anchor || Math.hypot(bestCorner.x - anchor.x, bestCorner.z - anchor.z) > 0.25)) {
+      // Determine natural 90-degree perpendicular orientation based on which side of the corner the cursor is on
+      const len = Math.max(0.01, Math.hypot(bestCorner.dx, bestCorner.dz));
+      const ux = bestCorner.dx / len;
+      const uz = bestCorner.dz / len;
+      // Perpendicular normal vectors (-uz, ux) and (uz, -ux)
+      const relX = rawX - bestCorner.x;
+      const relZ = rawZ - bestCorner.z;
+      const perpDot = relX * -uz + relZ * ux;
+      const perpAngleY =
+        perpDot >= 0 ? bestCorner.edgeAngleY + Math.PI / 2 : bestCorner.edgeAngleY - Math.PI / 2;
+
+      return {
+        x: Math.round(bestCorner.x * 100) / 100,
+        z: Math.round(bestCorner.z * 100) / 100,
+        snappedToCorner: true,
+        connectedWallId: bestCorner.wallId,
+        previewAngleY: perpAngleY,
+      };
+    }
+
+    // 2. Grid snap when Snap is On
+    const baseSnap = TerrainMeshBuilder.snapWorldCoordinates(rawX, rawZ, snapToGrid, 'wall');
+    let sx = baseSnap.x;
+    let sz = baseSnap.z;
+    let previewAngleY = 0;
+
+    // 3. When drawing from an anchor with Snap On, snap near-90° angles cleanly to orthogonal grid/wall directions
+    if (anchor && snapToGrid) {
+      const dx = sx - anchor.x;
+      const dz = sz - anchor.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist >= 0.5) {
+        // Check if anchor sits on an existing wall corner; if so, favor 0° / 90° / 180° / 270° relative to that wall
+        const anchorEdge = edges.find(
+          (e) =>
+            Math.hypot(anchor.x - e.ax, anchor.z - e.az) < 0.25 ||
+            Math.hypot(anchor.x - e.bx, anchor.z - e.bz) < 0.25,
+        );
+        const rawAngle = Math.atan2(dz, dx);
+        const stepRad = Math.PI / 2;
+        const baseRefAngle = anchorEdge ? -anchorEdge.angleY : 0;
+        const relAngle = rawAngle - baseRefAngle;
+        const nearestOrtho = Math.round(relAngle / stepRad) * stepRad + baseRefAngle;
+        const angleDiff = Math.abs(
+          Math.atan2(Math.sin(rawAngle - nearestOrtho), Math.cos(rawAngle - nearestOrtho)),
+        );
+
+        // Snap within ~22 degrees to exact 90-degree orthogonal corner alignment
+        if (angleDiff <= 0.38) {
+          const stepMeters = TerrainMeshBuilder.getCellStepMeters();
+          const snappedLen = Math.max(stepMeters, Math.round(dist / stepMeters) * stepMeters);
+          sx = Math.round((anchor.x + Math.cos(nearestOrtho) * snappedLen) * 100) / 100;
+          sz = Math.round((anchor.z + Math.sin(nearestOrtho) * snappedLen) * 100) / 100;
+        }
+        previewAngleY = -Math.atan2(sz - anchor.z, sx - anchor.x);
+      }
+    }
+
+    return {
+      x: sx,
+      z: sz,
+      snappedToCorner: false,
+      previewAngleY,
+    };
+  }
+
+  /**
+   * Deduplicates shared walls between adjacent rooms/walls and seamlessly merges/extends
+   * colinear overlapping or touching wall segments into one single continuous wall span.
+   */
+  static mergeSharedWallsOnPlacement(
+    existingWalls: readonly MapWallSegmentNode[],
+    newWall: MapWallSegmentNode,
+    snapToGrid = true,
+  ): { walls: MapWallSegmentNode[]; primaryWallId: string } {
+    if (!snapToGrid || newWall.drawMode === 'freehand' || newWall.points.length < 2) {
+      return {
+        walls: [...existingWalls, newWall],
+        primaryWallId: newWall.id,
+      };
+    }
+
+    // Break any polygon/room or line into individual straight 2-point wall segments
+    // so shared walls between two rooms can be independently merged or extended without gaps
+    const newPts = newWall.points;
+    const isClosed = newWall.drawMode !== 'line';
+    const segCount = isClosed ? newPts.length : newPts.length - 1;
+    const candidateEdges: [readonly [number, number], readonly [number, number]][] = [];
+    for (let i = 0; i < segCount; i++) {
+      const a = newPts[i];
+      const b = newPts[(i + 1) % newPts.length];
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) >= 0.25) {
+        candidateEdges.push([a, b]);
+      }
+    }
+
+    // Expand any existing closed room into its constituent edges if a new wall shares an edge with it,
+    // or merge directly with existing 2-point wall segments
+    const workingWalls: MapWallSegmentNode[] = [];
+    for (const w of existingWalls) {
+      if (w.drawMode !== 'line' && w.drawMode !== 'freehand' && w.points.length > 2) {
+        const wPts = w.points;
+        for (let i = 0; i < wPts.length; i++) {
+          const a = wPts[i];
+          const b = wPts[(i + 1) % wPts.length];
+          workingWalls.push({
+            ...w,
+            id: i === 0 ? w.id : `${w.id}-edge-${i}`,
+            drawMode: 'line',
+            points: [a, b],
+            openings: i === 0 ? w.openings : [],
+          });
+        }
+      } else {
+        workingWalls.push({ ...w });
+      }
+    }
+
+    let primaryWallId = newWall.id;
+    let edgeIdx = 0;
+
+    for (const [na, nb] of candidateEdges) {
+      const ndx = nb[0] - na[0];
+      const ndz = nb[1] - na[1];
+      const nLen = Math.hypot(ndx, ndz);
+      if (nLen < 0.25) continue;
+      const ux = ndx / nLen;
+      const uz = ndz / nLen;
+
+      let mergedIntoExisting = false;
+
+      for (let wIdx = 0; wIdx < workingWalls.length; wIdx++) {
+        const ew = workingWalls[wIdx];
+        if (ew.points.length !== 2) continue;
+        const [ea, eb] = ew.points;
+        const edx = eb[0] - ea[0];
+        const edz = eb[1] - ea[1];
+        const eLen = Math.hypot(edx, edz);
+        if (eLen < 0.25) continue;
+
+        // Check parallel/colinear alignment (dot product near ±1)
+        const dot = (ux * edx + uz * edz) / eLen;
+        if (Math.abs(dot) < 0.992) continue;
+
+        // Check perpendicular distance between lines
+        const perpDist = Math.abs((ea[0] - na[0]) * -uz + (ea[1] - na[1]) * ux);
+        if (perpDist > 0.28) continue;
+
+        // Project both segments onto 1D axis starting at `na` along `(ux, uz)`
+        const tN0 = 0;
+        const tN1 = nLen;
+        const tEA = (ea[0] - na[0]) * ux + (ea[1] - na[1]) * uz;
+        const tEB = (eb[0] - na[0]) * ux + (eb[1] - na[1]) * uz;
+        const tE0 = Math.min(tEA, tEB);
+        const tE1 = Math.max(tEA, tEB);
+
+        // Check if intervals overlap or touch at endpoints (within 0.22m tolerance)
+        const overlapStart = Math.max(tN0, tE0);
+        const overlapEnd = Math.min(tN1, tE1);
+        const touchesOrOverlaps = overlapEnd >= overlapStart - 0.22;
+
+        if (touchesOrOverlaps) {
+          const unionStart = Math.min(tN0, tE0);
+          const unionEnd = Math.max(tN1, tE1);
+          const mergedA: readonly [number, number] = [
+            Math.round((na[0] + ux * unionStart) * 100) / 100,
+            Math.round((na[1] + uz * unionStart) * 100) / 100,
+          ];
+          const mergedB: readonly [number, number] = [
+            Math.round((na[0] + ux * unionEnd) * 100) / 100,
+            Math.round((na[1] + uz * unionEnd) * 100) / 100,
+          ];
+
+          workingWalls[wIdx] = {
+            ...ew,
+            points: [mergedA, mergedB],
+          };
+          primaryWallId = ew.id;
+          mergedIntoExisting = true;
+          break;
+        }
+      }
+
+      if (!mergedIntoExisting) {
+        const segId = edgeIdx === 0 ? newWall.id : `${newWall.id}-edge-${edgeIdx}`;
+        if (edgeIdx === 0) {
+          primaryWallId = segId;
+        }
+        workingWalls.push({
+          ...newWall,
+          id: segId,
+          drawMode: 'line',
+          points: [na, nb],
+        });
+        edgeIdx++;
+      }
+    }
+
+    return {
+      walls: workingWalls,
+      primaryWallId,
+    };
   }
 
   static buildShapePoints(
@@ -271,9 +569,11 @@ export class WallMeshBuilder {
   }
 
   /**
-   * High-performance procedural 3D wall geometry builder:
-   * Draws clean extruded box geometry per straight wall span first, then applies
-   * the selected 2D wall bump/albedo texture & tint (zero heavy 3D GLB cloning along walls).
+   * Builds 3D walls:
+   * - If `wall.modelUrl` is set (defaulting to "A Wall Made Of Stone" `/assets/object-library/models/obj-4f9776736fb571f1.glb`),
+   *   seamlessly tiles the 3D stone wall stamp along each straight span with configurable Connection Overlap,
+   *   Move Up/Down (`offsetY`), Stamp Scale (`stampScale`), and Rotation Offset (`rotationOffsetDeg`).
+   * - Falls back to procedural textured box geometry while the 3D model is loading or if a 2D wall texture is used.
    */
   static rebuildWallMeshes(
     scene: Scene,
@@ -308,6 +608,14 @@ export class WallMeshBuilder {
         false,
       );
       const mat = this.createTexturedWallMaterial(scene, `lw-wall-mat-${wall.id}`, wall);
+      const wallTpl = wall.modelUrl
+        ? GlbModelCache.getOrLoadTemplate(scene, wall.modelUrl, onGlbLoaded)
+        : null;
+
+      const overlapFrac = Math.max(-0.2, Math.min(0.5, (wall.connectionOverlap ?? 15) / 100));
+      const offsetY = wall.offsetY ?? -0.06;
+      const stampScale = Math.max(0.4, Math.min(3.0, wall.stampScale ?? 1.0));
+      const rotOffsetRad = ((wall.rotationOffsetDeg ?? 0) * Math.PI) / 180;
 
       const segCount = closed ? pts.length : pts.length - 1;
       const segLengths: number[] = [];
@@ -364,28 +672,20 @@ export class WallMeshBuilder {
         }
 
         const angleY = -Math.atan2(dz, dx);
+        const ux = dx / totalLen;
+        const uz = dz / totalLen;
 
         for (let sIdx = 0; sIdx < solidSpans.length; sIdx++) {
           const [s0, s1] = solidSpans[sIdx];
-          const spanLen = (s1 - s0) * totalLen;
-          const tMid = (s0 + s1) * 0.5;
-          const bx = a[0] + dx * tMid;
-          const bz = a[1] + dz * tMid;
-
-          const yStart = TerrainMeshBuilder.sampleElevationAt(
-            scene,
-            a[0] + dx * s0,
-            a[1] + dz * s0,
-          );
-          const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
-          const yEnd = TerrainMeshBuilder.sampleElevationAt(
-            scene,
-            a[0] + dx * s1,
-            a[1] + dz * s1,
-          );
-          const minGroundY = Math.min(yStart, yMid, yEnd) - 0.55;
-          const maxGroundY = Math.max(yStart, yMid, yEnd);
-          const effectiveHeight = maxGroundY + height - minGroundY;
+          const rawSpanLen = (s1 - s0) * totalLen;
+          // Extend ends at wall corners so 90-degree connections interlock flush with zero outside notch
+          const startCornerExt =
+            s0 <= 0.01 ? wall.thicknessMeters * (0.48 + overlapFrac * 0.65) : 0;
+          const endCornerExt =
+            s1 >= 0.99 ? wall.thicknessMeters * (0.48 + overlapFrac * 0.65) : 0;
+          const spanStartX = a[0] + dx * s0 - ux * startCornerExt;
+          const spanStartZ = a[1] + dz * s0 - uz * startCornerExt;
+          const extendedSpanLen = rawSpanLen + startCornerExt + endCornerExt;
 
           const wallMeta = {
             lwNodeName: `lw-wall-${wall.id}`,
@@ -393,21 +693,79 @@ export class WallMeshBuilder {
             lwEntityId: wall.id,
           };
 
-          const segMesh = MeshBuilder.CreateBox(
-            `lw-wall-${wall.id}-seg-${i}-${sIdx}`,
-            {
-              width: spanLen + wall.thicknessMeters * 0.4,
-              height: effectiveHeight,
-              depth: wall.thicknessMeters,
-            },
-            scene,
-          );
-          segMesh.position.set(bx, minGroundY + effectiveHeight / 2, bz);
-          segMesh.rotation.y = angleY;
-          segMesh.material = mat;
-          segMesh.receiveShadows = true;
-          segMesh.metadata = wallMeta;
-          meshCount++;
+          if (wallTpl) {
+            const baseStampLen = 3.0 * stampScale;
+            const stepLen = Math.max(1.2, baseStampLen * (1 - overlapFrac * 0.45));
+            const stampCount = Math.min(
+              18,
+              Math.max(1, Math.round(extendedSpanLen / stepLen)),
+            );
+            const subStep = extendedSpanLen / stampCount;
+            const pieceWidth = subStep * (1 + Math.max(0, overlapFrac * 0.75));
+            const pieceDepth = wall.thicknessMeters * stampScale * (1 + Math.max(0, overlapFrac * 0.35));
+
+            for (let k = 0; k < stampCount; k++) {
+              const distAlong = (k + 0.5) * subStep;
+              const px = spanStartX + ux * distAlong;
+              const pz = spanStartZ + uz * distAlong;
+              const py0 = TerrainMeshBuilder.sampleElevationAt(
+                scene,
+                px - ux * (subStep * 0.4),
+                pz - uz * (subStep * 0.4),
+              );
+              const pyMid = TerrainMeshBuilder.sampleElevationAt(scene, px, pz);
+              const py1 = TerrainMeshBuilder.sampleElevationAt(
+                scene,
+                px + ux * (subStep * 0.4),
+                pz + uz * (subStep * 0.4),
+              );
+              const minGroundY = Math.min(py0, pyMid, py1);
+              const maxGroundY = Math.max(py0, pyMid, py1);
+              const terrainDrop = maxGroundY - minGroundY;
+              const pieceHeight = height * stampScale + terrainDrop;
+
+              const inst = GlbModelCache.instantiateClone(
+                scene,
+                wallTpl,
+                `lw-wall-node-${wall.id}-${i}-${sIdx}-${k}`,
+                pieceWidth,
+                pieceHeight,
+                pieceDepth,
+                false,
+                false,
+                wallMeta,
+                wall.colorHex ? { colorHex: wall.colorHex } : undefined,
+              );
+              inst.position.set(px, minGroundY + offsetY, pz);
+              inst.rotation.y = angleY + rotOffsetRad;
+              meshCount++;
+            }
+          } else {
+            const bx = spanStartX + ux * (extendedSpanLen * 0.5);
+            const bz = spanStartZ + uz * (extendedSpanLen * 0.5);
+            const yStart = TerrainMeshBuilder.sampleElevationAt(scene, a[0] + dx * s0, a[1] + dz * s0);
+            const yMid = TerrainMeshBuilder.sampleElevationAt(scene, bx, bz);
+            const yEnd = TerrainMeshBuilder.sampleElevationAt(scene, a[0] + dx * s1, a[1] + dz * s1);
+            const minGroundY = Math.min(yStart, yMid, yEnd) - 0.35;
+            const maxGroundY = Math.max(yStart, yMid, yEnd);
+            const effectiveHeight = (maxGroundY + height - minGroundY) * stampScale;
+
+            const segMesh = MeshBuilder.CreateBox(
+              `lw-wall-${wall.id}-seg-${i}-${sIdx}`,
+              {
+                width: extendedSpanLen,
+                height: effectiveHeight,
+                depth: wall.thicknessMeters * stampScale,
+              },
+              scene,
+            );
+            segMesh.position.set(bx, minGroundY + effectiveHeight / 2 + offsetY, bz);
+            segMesh.rotation.y = angleY + rotOffsetRad;
+            segMesh.material = mat;
+            segMesh.receiveShadows = true;
+            segMesh.metadata = wallMeta;
+            meshCount++;
+          }
         }
 
         // Render lintel above each door cutout and place the independently selectable 3D Door asset
@@ -432,7 +790,7 @@ export class WallMeshBuilder {
               },
               scene,
             );
-            lintel.position.set(doorX, groundY + doorH + lintelH / 2, doorZ);
+            lintel.position.set(doorX, groundY + doorH + lintelH / 2 + offsetY, doorZ);
             lintel.rotation.y = angleY;
             lintel.material = mat;
             lintel.metadata = {
@@ -489,6 +847,78 @@ export class WallMeshBuilder {
     return meshCount;
   }
 
+  /**
+   * Renders the single-stamp hover ghost before the 1st click of the Wall tool,
+   * anchored at the snapped grid/corner vertex `(gx, gz)` and rotated by `previewAngleY`
+   * so the user sees the exact 90-degree corner snap or grid alignment before clicking.
+   */
+  static renderHoverWallStampPreview(
+    scene: Scene,
+    gx: number,
+    gz: number,
+    previewAngleY: number,
+    modelUrl: string | undefined,
+    heightMeters: number,
+    thicknessMeters: number,
+    offsetY = -0.06,
+    stampScale = 1.0,
+    rotationOffsetDeg = 0,
+  ): void {
+    const groundY = TerrainMeshBuilder.sampleElevationAt(scene, gx, gz);
+    const step = TerrainMeshBuilder.getCellStepMeters() * 0.24;
+    const pts = [
+      new Vector3(gx - step, groundY + 0.08, gz - step),
+      new Vector3(gx + step, groundY + 0.08, gz - step),
+      new Vector3(gx + step, groundY + 0.08, gz + step),
+      new Vector3(gx - step, groundY + 0.08, gz + step),
+      new Vector3(gx - step, groundY + 0.08, gz - step),
+    ];
+    const anchorBox = MeshBuilder.CreateLines('lw-ghost-wall-anchor', { points: pts }, scene);
+    anchorBox.color = Color3.FromHexString('#49e892');
+    anchorBox.isPickable = false;
+
+    const totalRotY = previewAngleY + ((rotationOffsetDeg ?? 0) * Math.PI) / 180;
+    const segLen = 3.0 * stampScale;
+    const ux = Math.cos(-totalRotY);
+    const uz = Math.sin(-totalRotY);
+    const midX = gx + ux * (segLen * 0.5);
+    const midZ = gz + uz * (segLen * 0.5);
+    const midY = TerrainMeshBuilder.sampleElevationAt(scene, midX, midZ);
+
+    if (modelUrl) {
+      const tpl = GlbModelCache.getOrLoadTemplate(scene, modelUrl);
+      if (tpl) {
+        const inst = GlbModelCache.instantiateClone(
+          scene,
+          tpl,
+          'lw-ghost-wall-hover-stamp',
+          segLen,
+          heightMeters * stampScale,
+          thicknessMeters * stampScale,
+          false,
+          true,
+        );
+        inst.position.set(midX, midY + offsetY, midZ);
+        inst.rotation.y = totalRotY;
+        return;
+      }
+    }
+
+    const box = MeshBuilder.CreateBox(
+      'lw-ghost-wall-hover-box',
+      {
+        width: segLen,
+        height: heightMeters * stampScale,
+        depth: thicknessMeters * stampScale,
+      },
+      scene,
+    );
+    box.position.set(midX, midY + (heightMeters * stampScale) / 2 + offsetY, midZ);
+    box.rotation.y = totalRotY;
+    box.material = this.getSharedGhostWallMat(scene);
+    box.isPickable = false;
+  }
+
   static renderGhostWallPreview(
     scene: Scene,
     drawMode: WallDrawMode,
@@ -540,7 +970,7 @@ export class WallMeshBuilder {
 
       const mesh = MeshBuilder.CreateBox(
         `lw-ghost-wall-seg-${i}`,
-        { width: totalLen + thicknessMeters * 0.35, height: effectiveH, depth: thicknessMeters },
+        { width: totalLen + thicknessMeters * 0.48, height: effectiveH, depth: thicknessMeters },
         scene,
       );
       mesh.position.set(bx, minGroundY + effectiveH / 2, bz);

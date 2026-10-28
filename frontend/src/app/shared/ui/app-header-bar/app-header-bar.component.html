@@ -68,7 +68,7 @@
           }
         </select>
         <span class="lw-campaign-tile__sub">
-          Campaign · {{ activeCampaign()?.currentSessionNumber ?? 0 }} sessions · High Fantasy
+          {{ isCampaignGm() ? 'DM / GM Campaign' : 'Joined as Player (DM: ' + (activeCampaign()?.dmDisplayName || 'GM') + ')' }} · {{ activeCampaign()?.currentSessionNumber ?? 0 }} sessions
         </span>
       </div>
     </div>
@@ -121,10 +121,11 @@
       ngpButton
       type="button"
       class="lw-topbar__rect-btn lw-topbar__rect-btn--gold"
-      (click)="viewerRoleToggled.emit()"
-      title="Switch between GM View and Player View"
+      [disabled]="!isCampaignGm()"
+      (click)="isCampaignGm() && viewerRoleToggled.emit()"
+      [title]="isCampaignGm() ? 'Switch between GM View and Player View for your campaign' : 'You are a Player in this campaign (Player View enforced)'"
     >
-      <span>{{ viewerRole() === 'gm' ? 'GM View' : 'Player View' }}</span>
+      <span>{{ isCampaignGm() ? (viewerRole() === 'gm' ? 'GM View' : 'Player View (Preview)') : 'Player View' }}</span>
     </button>
 
     <button

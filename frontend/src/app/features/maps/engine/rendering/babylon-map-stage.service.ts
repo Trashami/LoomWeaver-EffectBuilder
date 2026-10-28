@@ -66,10 +66,14 @@ export interface GhostAssetConfig {
   readonly heightMeters: number;
   readonly thicknessMeters: number;
   readonly wallDrawMode: WallDrawMode;
+  readonly wallStampScale?: number;
+  readonly wallOffsetY?: number;
+  readonly wallRotationOffsetDeg?: number;
   readonly freehandPoints?: readonly (readonly [number, number])[];
   readonly colorHex?: string;
   readonly surfaceFinish?: MapObjectSurfaceFinish;
   readonly brushSharpness?: number;
+  readonly terrainFeathering?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +91,9 @@ export class BabylonMapStageService {
   private pointerDownClientX = 0;
   private pointerDownClientY = 0;
   private isLeftPointerDown = false;
+  private isCameraOrbiting = false;
+  private isSpaceKeyHeld = false;
+  private lastWallHoverAngleY = 0;
   private lastFpsUpdateMs = 0;
   private holdTimer: ReturnType<typeof setInterval> | null = null;
   private holdTicks = 0;
@@ -164,6 +171,38 @@ export class BabylonMapStageService {
         { passive: false, signal: this.wheelAbortController.signal },
       );
 
+      // Prevent browser context menu on right-click so right-click hold & drag always orbits/pans camera smoothly
+      canvas.addEventListener(
+        'contextmenu',
+        (evt: MouseEvent) => {
+          evt.preventDefault();
+        },
+        { signal: this.wheelAbortController.signal },
+      );
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener(
+          'keydown',
+          (evt: KeyboardEvent) => {
+            if (evt.code === 'Space' && !this.isSpaceKeyHeld) {
+              this.isSpaceKeyHeld = true;
+              this.applyCameraPointerButtons();
+            }
+          },
+          { signal: this.wheelAbortController.signal },
+        );
+        window.addEventListener(
+          'keyup',
+          (evt: KeyboardEvent) => {
+            if (evt.code === 'Space') {
+              this.isSpaceKeyHeld = false;
+              this.applyCameraPointerButtons();
+            }
+          },
+          { signal: this.wheelAbortController.signal },
+        );
+      }
+
       if (typeof ResizeObserver !== 'undefined') {
         this.resizeObserver = new ResizeObserver(() => {
           this.engine?.resize();
@@ -178,6 +217,18 @@ export class BabylonMapStageService {
         if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
           this.pointerDownClientX = evt.clientX;
           this.pointerDownClientY = evt.clientY;
+          const isTempCameraOverride =
+            evt.button === 1 || evt.button === 2 || evt.altKey || this.isSpaceKeyHeld;
+
+          if (isTempCameraOverride) {
+            this.isCameraOrbiting = true;
+            this.isLeftPointerDown = false;
+            this.stopHoldTimer();
+            this.applyCameraPointerButtons(true);
+            this.clearGhostMeshes();
+            return;
+          }
+
           if (evt.button === 0) {
             this.isLeftPointerDown = true;
             this.holdTicks = 0;
@@ -192,17 +243,25 @@ export class BabylonMapStageService {
 
         if (pointerInfo.type === PointerEventTypes.POINTERUP) {
           const wasLeftDown = this.isLeftPointerDown;
+          const wasCameraOrbiting = this.isCameraOrbiting;
           this.isLeftPointerDown = false;
+          this.isCameraOrbiting = false;
           this.stopHoldTimer();
+          this.applyCameraPointerButtons(false);
 
-          if (evt.button !== 0 || !wasLeftDown) {
+          const groundPt = this.pickGroundCoordinates();
+          if (groundPt) {
+            this.hoverCoords.set(groundPt);
+            this.updateGhostMeshAt(groundPt.x, groundPt.z);
+          }
+
+          if (wasCameraOrbiting || evt.button !== 0 || !wasLeftDown) {
             return;
           }
           const dragDist = Math.hypot(
             evt.clientX - this.pointerDownClientX,
             evt.clientY - this.pointerDownClientY,
           );
-          const groundPt = this.pickGroundCoordinates();
           if (this.surfaceLockEnabled && onSurfaceRelease && groundPt) {
             onSurfaceRelease(groundPt.x, groundPt.z);
           }
@@ -218,6 +277,22 @@ export class BabylonMapStageService {
         }
 
         if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
+          if (this.isCameraOrbiting) {
+            return;
+          }
+
+          if (this.isLeftPointerDown && !this.surfaceLockEnabled) {
+            const dragDist = Math.hypot(
+              evt.clientX - this.pointerDownClientX,
+              evt.clientY - this.pointerDownClientY,
+            );
+            if (dragDist > 7) {
+              // Temporarily hide placement ghost while holding & dragging mouse to adjust camera
+              this.clearGhostMeshes();
+              return;
+            }
+          }
+
           const groundPt = this.pickGroundCoordinates();
           if (!groundPt) return;
 
@@ -288,34 +363,48 @@ export class BabylonMapStageService {
   private pickGroundCoordinates(): { x: number; z: number } | null {
     if (!this.scene) return null;
     const snapKind = this.resolveActiveSnapKind();
+    let rawX: number | null = null;
+    let rawZ: number | null = null;
+
     const pick = this.scene.pick(
       this.scene.pointerX,
       this.scene.pointerY,
       (m) => m.name === 'lw-terrain-ground',
     );
     if (pick?.hit && pick.pickedPoint) {
-      return TerrainMeshBuilder.snapWorldCoordinates(
-        pick.pickedPoint.x,
-        pick.pickedPoint.z,
-        this.snapToGrid,
-        snapKind,
+      rawX = pick.pickedPoint.x;
+      rawZ = pick.pickedPoint.z;
+    } else {
+      const ray = this.scene.createPickingRay(
+        this.scene.pointerX,
+        this.scene.pointerY,
+        null,
+        this.camera,
       );
-    }
-    const ray = this.scene.createPickingRay(
-      this.scene.pointerX,
-      this.scene.pointerY,
-      null,
-      this.camera,
-    );
-    if (Math.abs(ray.direction.y) > 0.0001) {
-      const t = -ray.origin.y / ray.direction.y;
-      if (t > 0) {
-        const hitX = ray.origin.x + ray.direction.x * t;
-        const hitZ = ray.origin.z + ray.direction.z * t;
-        return TerrainMeshBuilder.snapWorldCoordinates(hitX, hitZ, this.snapToGrid, snapKind);
+      if (Math.abs(ray.direction.y) > 0.0001) {
+        const t = -ray.origin.y / ray.direction.y;
+        if (t > 0) {
+          rawX = ray.origin.x + ray.direction.x * t;
+          rawZ = ray.origin.z + ray.direction.z * t;
+        }
       }
     }
-    return null;
+
+    if (rawX === null || rawZ === null) return null;
+
+    if (snapKind === 'wall') {
+      const snappedWall = WallMeshBuilder.snapWallCursorPoint(
+        this.lastState?.walls,
+        rawX,
+        rawZ,
+        this.wallStartAnchor,
+        this.snapToGrid,
+      );
+      this.lastWallHoverAngleY = snappedWall.previewAngleY;
+      return { x: snappedWall.x, z: snappedWall.z };
+    }
+
+    return TerrainMeshBuilder.snapWorldCoordinates(rawX, rawZ, this.snapToGrid, snapKind);
   }
 
   private pickSceneEntityMeta(): PickedSceneEntityMeta | undefined {
@@ -350,13 +439,15 @@ export class BabylonMapStageService {
     this.applyCameraPointerButtons();
   }
 
-  private applyCameraPointerButtons(): void {
+  private applyCameraPointerButtons(forceAllButtons = false): void {
     if (!this.camera) return;
     const pointers = this.camera.inputs.attached['pointers'] as
       | ArcRotateCameraPointersInput
       | undefined;
     if (pointers) {
-      pointers.buttons = this.surfaceLockEnabled ? [1, 2] : [0, 1, 2];
+      const allowLeftButtonOrbit =
+        forceAllButtons || this.isSpaceKeyHeld || !this.surfaceLockEnabled;
+      pointers.buttons = allowLeftButtonOrbit ? [0, 1, 2] : [1, 2];
     }
   }
 
@@ -367,7 +458,7 @@ export class BabylonMapStageService {
   setGhostConfig(config: GhostAssetConfig, wallAnchor: { x: number; z: number } | null): void {
     this.ghostConfig = config;
     this.wallStartAnchor = wallAnchor;
-    if (this.scene && config.modelUrl && config.kind !== 'wall') {
+    if (this.scene && config.modelUrl) {
       GlbModelCache.getOrLoadTemplate(this.scene, config.modelUrl, () => {
         const h = this.hoverCoords();
         this.updateGhostMeshAt(h.x, h.z);
@@ -391,11 +482,12 @@ export class BabylonMapStageService {
     if (!this.scene) return;
     this.clearGhostMeshes();
 
-    if (!this.ghostConfig.enabled) return;
+    if (!this.ghostConfig.enabled || this.isCameraOrbiting) return;
 
     const groundY = TerrainMeshBuilder.sampleElevationAt(this.scene, gx, gz);
 
-    // Wall Line & Shapes Ghost: never spawns a 3D prop object; shows grid-snapped wall or corner post
+    // Wall Line & Room Ghost: shows snapped 3D stone wall stamp on hover before 1st click,
+    // and snapped wall/room span preview while drawing from start anchor to cursor
     if (this.ghostConfig.kind === 'wall') {
       if (
         this.wallStartAnchor ||
@@ -417,18 +509,18 @@ export class BabylonMapStageService {
           this.snapToGrid,
         );
       } else {
-        // Show a clean grid-snapped corner anchor ring on the floor before the first click
-        const step = TerrainMeshBuilder.getCellStepMeters() * 0.25;
-        const pts = [
-          new Vector3(gx - step, groundY + 0.08, gz - step),
-          new Vector3(gx + step, groundY + 0.08, gz - step),
-          new Vector3(gx + step, groundY + 0.08, gz + step),
-          new Vector3(gx - step, groundY + 0.08, gz + step),
-          new Vector3(gx - step, groundY + 0.08, gz - step),
-        ];
-        const anchorBox = MeshBuilder.CreateLines('lw-ghost-wall-anchor', { points: pts }, this.scene);
-        anchorBox.color = Color3.FromHexString('#49e892');
-        anchorBox.isPickable = false;
+        WallMeshBuilder.renderHoverWallStampPreview(
+          this.scene,
+          gx,
+          gz,
+          this.lastWallHoverAngleY,
+          this.ghostConfig.modelUrl,
+          this.ghostConfig.heightMeters,
+          this.ghostConfig.thicknessMeters,
+          this.ghostConfig.wallOffsetY ?? -0.06,
+          this.ghostConfig.wallStampScale ?? 1.0,
+          this.ghostConfig.wallRotationOffsetDeg ?? 0,
+        );
       }
       return;
     }
@@ -460,10 +552,16 @@ export class BabylonMapStageService {
       );
       ring.isPickable = false;
 
-      // For Floor Paint Brush, also render the inner sharpness/feather core ring
-      if (this.ghostConfig.kind === 'floor-paint') {
-        const sharpFrac = Math.max(0.08, Math.min(0.95, (this.ghostConfig.brushSharpness ?? 25) / 100));
-        const innerR = radius * sharpFrac;
+      // For Terrain Raise/Lower or Floor Paint Brush, also render the inner feathering core ring
+      if (this.ghostConfig.kind === 'floor-paint' || this.ghostConfig.kind === 'terrain') {
+        const coreFrac =
+          this.ghostConfig.kind === 'floor-paint'
+            ? Math.max(0.08, Math.min(0.95, (this.ghostConfig.brushSharpness ?? 25) / 100))
+            : Math.max(
+                0.08,
+                Math.min(0.95, 1.0 - ((this.ghostConfig.terrainFeathering ?? 80) / 100) * 0.92),
+              );
+        const innerR = radius * coreFrac;
         const innerPts: Vector3[] = [];
         for (let i = 0; i <= 36; i++) {
           const angle = (i / 36) * Math.PI * 2;
@@ -619,10 +717,21 @@ export class BabylonMapStageService {
     worldZ: number,
     radius: number,
     deltaY: number,
-    mode: 'raise' | 'lower' | 'flatten',
+    mode: 'raise' | 'lower' | 'flatten' | 'smooth',
+    featheringPct = 80,
+    plateauLimit = 6.0,
   ): void {
     if (!this.scene) return;
-    TerrainMeshBuilder.sculptElevationAt(this.scene, worldX, worldZ, radius, deltaY, mode);
+    TerrainMeshBuilder.sculptElevationAt(
+      this.scene,
+      worldX,
+      worldZ,
+      radius,
+      deltaY,
+      mode,
+      featheringPct,
+      plateauLimit,
+    );
     if (this.lastState) {
       WallMeshBuilder.rebuildWallMeshes(this.scene, this.lastState.walls, this.hideGmSecrets);
       WaterSplineBuilder.rebuildWaterSplines(this.scene, this.lastState.waterSplines);

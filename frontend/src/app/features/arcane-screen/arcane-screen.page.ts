@@ -20,6 +20,7 @@ import {
   LwIconComponent,
 } from '../../shared/ui/public-api';
 import { WebAudioAmbienceService } from '../assets/engine/web-audio-ambience.service';
+import { FullscreenDiceOverlayService } from '../dice/engine/fullscreen-dice-overlay.service';
 import { BabylonEffectStageService } from '../effects/engine/babylon-effect-stage.service';
 import { VttTokenVm } from '../effects/engine/effect-timeline.contract';
 import {
@@ -56,6 +57,7 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
   readonly battle = inject(VttBattleStateService);
   readonly stage = inject(BabylonEffectStageService);
   readonly audio = inject(WebAudioAmbienceService);
+  readonly fullscreenDice = inject(FullscreenDiceOverlayService);
   private readonly router = inject(Router);
 
   readonly gridEnabled = signal<boolean>(true);
@@ -304,6 +306,17 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
     this.dmToolReadout.set(
       `Quick DC ${dc} (${label}): Rolled ${d20} + 4 = ${total} -> ${total >= dc ? 'SUCCESS' : 'FAILURE'}`,
     );
+    this.fullscreenDice.triggerFullScreenRoll({
+      label: `DC ${dc} ${label} Check`,
+      actorName: this.vtt.selectedAttacker().name,
+      expression: '1d20 + 4',
+      diceValues: [d20],
+      modifier: 4,
+      total,
+      outcomeBadge: total >= dc ? 'SUCCESS' : 'FAILURE',
+      isNat20: d20 === 20,
+      isCritFail: d20 === 1,
+    });
   }
 
   rollSelectedDice(): void {
@@ -319,6 +332,16 @@ export class ArcaneScreenPageComponent implements AfterViewInit, OnDestroy {
       sum += r;
     }
     this.dmToolReadout.set(`Rolled ${f}: [${rolls.join(', ')}] = ${sum}`);
+    this.fullscreenDice.triggerFullScreenRoll({
+      label: 'Battlefield Roll',
+      actorName: this.vtt.selectedAttacker().name,
+      expression: f,
+      diceValues: rolls,
+      modifier: 0,
+      total: sum,
+      isNat20: sides === 20 && rolls.includes(20),
+      isCritFail: sides === 20 && rolls.includes(1),
+    });
   }
 
   submitChat(): void {

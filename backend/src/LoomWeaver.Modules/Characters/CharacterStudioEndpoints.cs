@@ -1,6 +1,7 @@
 using LoomWeaver.Domain;
 using LoomWeaver.GameSystems;
 using LoomWeaver.Modules.Adventures;
+using LoomWeaver.Modules.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -16,13 +17,29 @@ public static class CharacterStudioEndpoints
     {
         group.MapCharacterSheetLiveTelemetryEndpoints();
 
-        group.MapGet("/campaigns/{campaignId:int}/character-studio", (int campaignId) =>
+        group.MapGet("/campaigns/{campaignId:int}/character-studio", (
+            int campaignId,
+            string? role,
+            HttpContext httpContext) =>
         {
-            var list = Sheets
-                .Where(s => s.CampaignId == campaignId || campaignId == 1)
+            var access = CampaignAccessResolver.Resolve(httpContext, campaignId, role);
+            var campaignSheets = Sheets
+                .Where(s => s.CampaignId == campaignId || s.CampaignId == 1)
                 .Select(s => Engine.RecalculateSheet(s))
                 .ToList();
-            return Results.Ok(list);
+
+            if (access.IsEffectiveGm)
+            {
+                return Results.Ok(campaignSheets);
+            }
+
+            var targetSlug = access.BoundCharacterKey.Replace("pc-", "char-", StringComparison.OrdinalIgnoreCase);
+            var playerSheet = campaignSheets.FirstOrDefault(s =>
+                s.CharacterKey.Equals(targetSlug, StringComparison.OrdinalIgnoreCase) ||
+                s.Name.Contains(access.BoundCharacterKey.Replace("pc-", ""), StringComparison.OrdinalIgnoreCase))
+                ?? campaignSheets.FirstOrDefault();
+
+            return Results.Ok(playerSheet is not null ? new List<CharacterSheetDto> { playerSheet } : new List<CharacterSheetDto>());
         });
 
         group.MapPost("/campaigns/{campaignId:int}/character-studio/create", (

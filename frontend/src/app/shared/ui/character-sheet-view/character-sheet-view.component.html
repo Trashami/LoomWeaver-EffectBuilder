@@ -4,7 +4,7 @@
         <span class="lw-dnd-avatar-btn__edit"><lw-icon name="edit" [size]="11" /></span>       </button>
       <div class="lw-dnd-identity-copy">         <div class="lw-dnd-identity-row">
           <h1 class="lw-dnd-char-name">{{ sheet().name }}</h1>           @if (partyRoster().length > 1) {
-            <div class="lw-dnd-party-pills">               @for (member of partyRoster(); track member.characterKey) {
+            <div class="lw-dnd-party-pills" title="DM Campaign Party Roster">               @for (member of partyRoster(); track member.characterKey) {
                 <button type="button" class="lw-dnd-party-pill" [class.is-active]="member.characterKey === sheet().characterKey" (click)="characterSelected.emit(member.characterKey)">                   {{ member.name.split(' ')[0] }}
                 </button>               }
             </div>           }
@@ -43,11 +43,6 @@
         <span class="lw-live-readout-pill lw-live-readout-pill--outcome" title="Reads live from active VTT Encounter combat resolution">           <lw-icon name="shield" [size]="12" /> Outcome: <strong>{{ interactive.liveOutcomeLabel() }}</strong>
         </span>       </div>
     </div>   </header>
-  @if (interactive.rollToastBanner(); as banner) {     <div class="lw-dnd-roll-banner">
-      <div class="lw-dnd-roll-banner__left"><lw-icon name="casino" [size]="15" /><span>{{ banner }}</span></div>       <div class="lw-dnd-roll-banner__right">
-        <a routerLink="/arcane-screen" class="lw-dnd-roll-banner__link">VTT Combat</a>         <a routerLink="/dice" class="lw-dnd-roll-banner__link">3D Dice</a>
-        <button type="button" class="lw-dnd-roll-banner__close" (click)="interactive.rollToastBanner.set(null)"><lw-icon name="close" [size]="13" /></button>       </div>
-    </div>   }
   <!-- COMPACT TOP STAT STRIP: 6 ABILITY CARDS + PROFICIENCY + SPEED + HEROIC INSPIRATION + LIVE HP -->   <section class="lw-dnd-stat-strip">
     <div class="lw-dnd-abilities-row">       @for (ab of sheet().abilities; track ab.code) {
         <div class="lw-dnd-ability-shield" role="button" tabindex="0" (click)="inspectAbility(ab)" title="Click card to inspect {{ ab.label }} rules & character breakdown">           <span class="lw-dnd-ability-shield__label">{{ ab.label }}</span>
@@ -312,15 +307,7 @@
             }           </div>
         }       </aside>
     }   </div>
-  <!-- FLOATING 3D BABYLON.JS DICE ROLL TRAY & RESULT POPOVER -->   <div class="lw-dnd-dice-tray" [class.is-open]="interactive.diceTrayOpen()">
-    <div class="lw-dnd-dice-tray__header">       <span><lw-icon name="casino" [size]="14" /> 3D DICE ENGINE</span>
-      <button type="button" class="lw-dnd-drawer-close" (click)="interactive.diceTrayOpen.set(false)"><lw-icon name="close" [size]="14" /></button>     </div>
-    <canvas #miniDiceCanvas class="lw-dnd-dice-tray__canvas"></canvas>     @if (interactive.lastRollResult(); as res) {
-      <div class="lw-dnd-dice-tray__result" [class.is-crit]="res.isNat20" [class.is-fail]="res.isCritFail">         <div class="lw-dnd-dice-tray__meta">
-          <strong>{{ res.itemName }}</strong>           <span>{{ res.formula }} · Natural {{ res.naturalDie }}</span>
-        </div>         <div class="lw-dnd-dice-tray__total">{{ res.total }}</div>
-      </div>     }
-  </div>   <!-- LARGE STYLIZED ITEM BROWSER MODAL -->
+  <!-- LARGE STYLIZED ITEM BROWSER MODAL -->
   @if (itemBrowserModalOpen()) {     <div class="lw-dnd-modal-backdrop" (click)="itemBrowserModalOpen.set(false)">
       <div class="lw-item-catalog-modal" (click)="$event.stopPropagation()">         <header class="lw-item-catalog-modal__head">
           <div>             <span class="lw-dnd-rules-drawer__eyebrow">CHARACTER INVENTORY &amp; EQUIPMENT</span>

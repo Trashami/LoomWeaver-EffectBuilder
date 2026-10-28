@@ -1,0 +1,61 @@
+<div
+  class="lw-fs-dice-overlay"
+  [class.lw-fs-dice-overlay--rolling]="overlay.overlayPhase() === 'rolling'"
+  [class.lw-fs-dice-overlay--settled]="overlay.overlayPhase() === 'settled'"
+  [class.lw-fs-dice-overlay--fading]="overlay.overlayPhase() === 'fading'"
+  [attr.aria-hidden]="overlay.overlayPhase() === 'hidden'"
+  (click)="onBackdropClick()"
+>
+  <canvas #fullscreenDiceCanvas class="lw-fs-dice-overlay__canvas"></canvas>
+
+  @if (overlay.activeRollSummary(); as summary) {
+    @if (overlay.overlayPhase() === 'settled' || overlay.overlayPhase() === 'fading') {
+      <aside
+        class="lw-fs-dice-overlay__Dock"
+        role="status"
+        aria-live="polite"
+        (click)="$event.stopPropagation()"
+      >
+        <div
+          class="lw-fs-dice-overlay__card"
+          [class.lw-fs-dice-overlay__card--crit]="summary.isNat20"
+          [class.lw-fs-dice-overlay__card--fail]="summary.isCritFail"
+        >
+          <div class="lw-fs-dice-overlay__meta">
+            @if (summary.actorName) {
+              <span class="lw-fs-dice-overlay__actor">{{ summary.actorName }}</span>
+              <span class="lw-fs-dice-overlay__dot">·</span>
+            }
+            <span class="lw-fs-dice-overlay__label">{{ summary.label }}</span>
+            <span class="lw-fs-dice-overlay__expr">({{ summary.expression }})</span>
+            @if (summary.outcomeBadge) {
+              <span
+                class="lw-fs-dice-overlay__badge"
+                [class.lw-fs-dice-overlay__badge--crit]="summary.isNat20"
+                [class.lw-fs-dice-overlay__badge--fail]="summary.isCritFail"
+              >
+                {{ summary.outcomeBadge }}
+              </span>
+            }
+          </div>
+
+          <div class="lw-fs-dice-overlay__equation">
+            <span class="lw-fs-dice-overlay__terms">{{ summary.breakdownTerms }}</span>
+            <div class="lw-fs-dice-overlay__total-group">
+              <span class="lw-fs-dice-overlay__equals">=</span>
+              <strong class="lw-fs-dice-overlay__total">{{ summary.total }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="lw-fs-dice-overlay__clear-btn"
+          (click)="overlay.clearResultsNow()"
+        >
+          Clear Results
+        </button>
+      </aside>
+    }
+  }
+</div>

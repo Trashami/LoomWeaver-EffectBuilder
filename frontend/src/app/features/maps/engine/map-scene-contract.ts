@@ -158,6 +158,10 @@ export interface MapWallSegmentNode {
   readonly thumbnailUrl?: string;
   readonly thicknessMeters: number;
   readonly heightMeters: number;
+  readonly offsetY?: number;
+  readonly stampScale?: number;
+  readonly connectionOverlap?: number;
+  readonly rotationOffsetDeg?: number;
   readonly perspective: CutawayPerspectiveMode;
   readonly projection: CutawayProjectionMode;
   readonly hasCornerPosts: boolean;

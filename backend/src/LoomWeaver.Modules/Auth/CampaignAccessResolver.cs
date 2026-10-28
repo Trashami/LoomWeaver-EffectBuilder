@@ -36,34 +36,79 @@ public static class CampaignAccessResolver
             );
         }
 
-        var isPlayerAccount = string.Equals(user.Role, "player", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(user.Role, "players", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(user.Email, "player@loom-weaver.com", StringComparison.OrdinalIgnoreCase);
+        // Per-Campaign GM vs. Player resolution:
+        // A user can be DM/GM in their own campaign and a Player in another DM's campaign.
+        var isCampaignGm = IsUserGmForCampaign(user, campaignId);
 
-        var isAccountGm = !isPlayerAccount;
-
-        // A player account can NEVER escalate to GM via query parameters or request body.
-        // An authenticated GM can down-scope to "players" when using the "Player View" preview toggle.
+        // A player in a campaign can NEVER escalate to GM via query parameters or request body.
+        // The campaign's DM/GM can down-scope to "players" when using the "Player View" preview toggle.
         var wantsPlayerPreview = string.Equals(requestedPreviewRole, "players", StringComparison.OrdinalIgnoreCase) ||
                                  string.Equals(requestedPreviewRole, "player", StringComparison.OrdinalIgnoreCase);
 
-        var isEffectiveGm = isAccountGm && !wantsPlayerPreview;
+        var isEffectiveGm = isCampaignGm && !wantsPlayerPreview;
         var effectiveViewerRole = isEffectiveGm ? "gm" : "players";
 
-        var boundChar = !string.IsNullOrWhiteSpace(user.BoundCharacter) && user.BoundCharacter != "GM"
-            ? NormalizeCharacterKey(user.BoundCharacter)
-            : (isPlayerAccount ? "pc-dal" : "all-party");
+        var boundChar = isEffectiveGm
+            ? "all-party"
+            : ResolvePlayerCharacterForUser(user);
 
         return new ResolvedCampaignAccess(
             user.Id,
             user.Email,
             user.Username,
-            isAccountGm ? "gm" : "players",
+            isCampaignGm ? "gm" : "players",
             effectiveViewerRole,
-            isAccountGm,
+            isCampaignGm,
             isEffectiveGm,
             boundChar
         );
+    }
+
+    public static bool IsUserGmForCampaign(StoredUserRecord user, int campaignId)
+    {
+        var uname = (user.Username ?? string.Empty).Trim();
+        var accId = (user.AccountId ?? string.Empty).Trim();
+
+        return campaignId switch
+        {
+            1 => user.Id is 1 or 2 ||
+                 uname.Equals("GeoJason", StringComparison.OrdinalIgnoreCase) ||
+                 uname.Equals("trashami", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-gm-geojason", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-gm-trashami", StringComparison.OrdinalIgnoreCase),
+            2 => user.Id is 4522 or 3 ||
+                 uname.Equals("GregMeinert", StringComparison.OrdinalIgnoreCase) ||
+                 uname.Equals("ScottBrogan", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-gm-greg", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-player-dal", StringComparison.OrdinalIgnoreCase),
+            3 => user.Id is 5363 or 4 ||
+                 uname.Equals("KennethAlexander", StringComparison.OrdinalIgnoreCase) ||
+                 uname.Equals("StickHazen", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-gm-kenneth", StringComparison.OrdinalIgnoreCase) ||
+                 accId.Equals("acc-player-kycius", StringComparison.OrdinalIgnoreCase),
+            103 => user.Id == 3 || uname.Equals("ScottBrogan", StringComparison.OrdinalIgnoreCase),
+            104 => user.Id == 4 || uname.Equals("StickHazen", StringComparison.OrdinalIgnoreCase),
+            105 => user.Id == 4522 || uname.Equals("GregMeinert", StringComparison.OrdinalIgnoreCase),
+            _ => string.Equals(user.Role, "gm", StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    public static string ResolvePlayerCharacterForUser(StoredUserRecord user)
+    {
+        if (!string.IsNullOrWhiteSpace(user.BoundCharacter) &&
+            !user.BoundCharacter.Equals("GM", StringComparison.OrdinalIgnoreCase) &&
+            !user.BoundCharacter.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            return NormalizeCharacterKey(user.BoundCharacter);
+        }
+
+        if (user.Username.Equals("GeoJason", StringComparison.OrdinalIgnoreCase) ||
+            user.AccountId.Equals("acc-gm-geojason", StringComparison.OrdinalIgnoreCase))
+        {
+            return "pc-ciaran";
+        }
+
+        return "pc-dal";
     }
 
     private static string NormalizeCharacterKey(string raw)
@@ -71,6 +116,7 @@ public static class CampaignAccessResolver
         var clean = raw.Trim();
         if (clean.StartsWith("pc-", StringComparison.OrdinalIgnoreCase)) return clean.ToLowerInvariant();
         if (clean.StartsWith("Dal", StringComparison.OrdinalIgnoreCase)) return "pc-dal";
+        if (clean.StartsWith("Ciar", StringComparison.OrdinalIgnoreCase)) return "pc-ciaran";
         if (clean.StartsWith("Fivi", StringComparison.OrdinalIgnoreCase)) return "pc-fivi";
         if (clean.StartsWith("Kildrid", StringComparison.OrdinalIgnoreCase)) return "pc-kildrid";
         if (clean.StartsWith("Kycius", StringComparison.OrdinalIgnoreCase)) return "pc-kycius";

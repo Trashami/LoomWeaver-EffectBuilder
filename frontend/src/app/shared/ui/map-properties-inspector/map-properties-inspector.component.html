@@ -404,8 +404,8 @@
       @if (effectiveMode() === 'terrain') {
         <div class="lw-map-inspector__section">
           <div class="lw-map-inspector__row">
-            <span class="lw-map-inspector__label">Sculpt Operation</span>
-            <div class="lw-map-inspector__pill-group">
+            <span class="lw-map-inspector__label">Sculpt Mode</span>
+            <div class="lw-map-inspector__pill-group lw-map-inspector__pill-group--wrap">
               <button
                 type="button"
                 ngpButton
@@ -428,6 +428,15 @@
                 type="button"
                 ngpButton
                 class="lw-map-inspector__pill"
+                [class.lw-map-inspector__pill--active]="terrainSculptOp() === 'smooth'"
+                (click)="terrainSculptOpChange.emit('smooth')"
+              >
+                Smooth
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__pill"
                 [class.lw-map-inspector__pill--active]="terrainSculptOp() === 'flatten'"
                 (click)="terrainSculptOpChange.emit('flatten')"
               >
@@ -438,7 +447,7 @@
 
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Outline Circle Radius</span>
+              <span>Brush Radius</span>
               <strong>{{ terrainBrushRadius().toFixed(1) }}m</strong>
             </div>
             <input
@@ -454,28 +463,66 @@
 
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Max Sculpt Height Step</span>
-              <strong>{{ terrainBrushDelta().toFixed(1) }}m</strong>
+              <span>Edge Feathering (Slope Falloff)</span>
+              <strong>
+                {{ terrainFeathering() }}%
+                {{
+                  terrainFeathering() <= 30
+                    ? '(Steep Cliff)'
+                    : terrainFeathering() >= 75
+                      ? '(Soft Hill)'
+                      : '(Balanced)'
+                }}
+              </strong>
             </div>
             <input
               type="range"
-              min="0.2"
-              max="3.5"
-              step="0.1"
+              min="0"
+              max="100"
+              step="5"
               class="lw-map-inspector__range"
-              [value]="terrainBrushDelta()"
-              (input)="onNumInput($event, terrainDeltaChange)"
+              [value]="terrainFeathering()"
+              (input)="onNumInput($event, terrainFeatheringChange)"
             />
+            <div class="lw-map-inspector__pill-group lw-map-inspector__pill-group--wrap">
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__pill"
+                [class.lw-map-inspector__pill--active]="terrainFeathering() === 20"
+                (click)="terrainFeatheringChange.emit(20)"
+              >
+                Steep Mesa (20%)
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__pill"
+                [class.lw-map-inspector__pill--active]="terrainFeathering() === 60"
+                (click)="terrainFeatheringChange.emit(60)"
+              >
+                Medium (60%)
+              </button>
+              <button
+                type="button"
+                ngpButton
+                class="lw-map-inspector__pill"
+                [class.lw-map-inspector__pill--active]="terrainFeathering() === 85"
+                (click)="terrainFeatheringChange.emit(85)"
+              >
+                Soft Feather (85%)
+              </button>
+            </div>
           </div>
 
           <div class="lw-map-inspector__slider-block">
             <div class="lw-map-inspector__slider-head">
-              <span>Gradual Hold &amp; Drag Speed</span>
+              <span>Hold &amp; Drag Speed</span>
               <strong>{{ terrainGradualRate() }}%</strong>
             </div>
             <input
               type="range"
-              min="10"
+              min="5"
               max="100"
               step="5"
               class="lw-map-inspector__range"
@@ -484,9 +531,37 @@
             />
           </div>
 
-          <p class="lw-map-inspector__hint">
-            Left-click and drag across the terrain or hold on one spot to gradually sculpt and expand. Right-drag orbits the camera.
-          </p>
+          <div class="lw-map-inspector__slider-block">
+            <div class="lw-map-inspector__slider-head">
+              <span>Sculpt Step Strength</span>
+              <strong>{{ terrainBrushDelta().toFixed(2) }}m</strong>
+            </div>
+            <input
+              type="range"
+              min="0.1"
+              max="2.5"
+              step="0.05"
+              class="lw-map-inspector__range"
+              [value]="terrainBrushDelta()"
+              (input)="onNumInput($event, terrainDeltaChange)"
+            />
+          </div>
+
+          <div class="lw-map-inspector__slider-block">
+            <div class="lw-map-inspector__slider-head">
+              <span>Max Elevation Cap</span>
+              <strong>{{ terrainPlateauLimit().toFixed(1) }}m</strong>
+            </div>
+            <input
+              type="range"
+              min="1.5"
+              max="8.5"
+              step="0.5"
+              class="lw-map-inspector__range"
+              [value]="terrainPlateauLimit()"
+              (input)="onNumInput($event, terrainPlateauLimitChange)"
+            />
+          </div>
 
           <button
             type="button"
@@ -499,12 +574,12 @@
         </div>
       }
 
-      <!-- 3. WALL LINE & SHAPES TOOLS -->
+      <!-- 3. WALL LINE & ROOM TOOLS -->
       @if (effectiveMode() === 'wall' || effectiveMode() === 'room') {
         <div class="lw-map-inspector__section">
           <div class="lw-map-inspector__row">
             <label class="lw-map-inspector__label" for="lw-wall-shape-select">
-              Wall / Chamber Shape
+              Room / Wall Mode
             </label>
             <select
               id="lw-wall-shape-select"
@@ -512,16 +587,16 @@
               [value]="wallDrawMode()"
               (change)="onWallModeSelect($event)"
             >
-              <option value="line">Custom Straight Line (Grid-Snapped)</option>
+              <option value="room">Square / Rectangle Room (Default)</option>
+              <option value="line">Custom Straight Wall Line (Grid-Snapped)</option>
               <option value="freehand">Freehand Draw on Map (Grid-Snapped)</option>
-              <option value="room">Rectangle / Square Chamber</option>
+              <option value="l_shape">L-Shape Corridor Room</option>
+              <option value="t_shape">T-Junction Hall</option>
+              <option value="cross">Cruciform / Cross Sanctuary</option>
               <option value="circle">Circular Tower / Rotunda</option>
               <option value="octagon">Octagonal Ritual Chamber</option>
               <option value="hexagon">Hexagonal Vault</option>
               <option value="triangle">Triangular Bastion</option>
-              <option value="l_shape">L-Shape Corridor Wing</option>
-              <option value="t_shape">T-Junction Hall</option>
-              <option value="cross">Cruciform / Cross Sanctuary</option>
             </select>
           </div>
 
@@ -541,20 +616,157 @@
             </select>
           </div>
 
-          <div class="lw-map-inspector__slider-block">
-            <div class="lw-map-inspector__slider-head">
-              <span>Wall Thickness</span>
-              <strong>{{ node.thickness.toFixed(2) }}x</strong>
+          <!-- Seamless Connection Overlap & Stamp Transform Controls -->
+          <div class="lw-map-inspector__group-box">
+            <span class="lw-map-inspector__subhead">Seamless Stamp &amp; Floor Blending</span>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Connection Overlap (Corner &amp; Seam Join)</span>
+                <strong>{{ (node.connectionOverlap ?? 15) >= 0 ? '+' : '' }}{{ node.connectionOverlap ?? 15 }}%</strong>
+              </div>
+              <input
+                type="range"
+                min="-20"
+                max="50"
+                step="5"
+                class="lw-map-inspector__range"
+                [value]="node.connectionOverlap ?? 15"
+                (input)="onNumInput($event, wallConnectionOverlapChange)"
+              />
             </div>
-            <input
-              type="range"
-              min="0.5"
-              max="2.5"
-              step="0.05"
-              class="lw-map-inspector__range"
-              [value]="node.thickness"
-              (input)="onNumInput($event, thicknessChange)"
-            />
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Move Up / Down (Floor Blend Offset)</span>
+                <strong>{{ node.elevationY >= 0 ? '+' : '' }}{{ node.elevationY.toFixed(2) }}m</strong>
+              </div>
+              <input
+                type="range"
+                min="-2.0"
+                max="2.0"
+                step="0.02"
+                class="lw-map-inspector__range"
+                [value]="node.elevationY"
+                (input)="onNumInput($event, elevationChange)"
+              />
+              <div class="lw-map-inspector__pill-group lw-map-inspector__pill-group--wrap">
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="elevationChange.emit(-0.25)"
+                >
+                  Sink Base (-0.25m)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="elevationChange.emit(-0.06)"
+                >
+                  Natural Blend (-0.06m)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="elevationChange.emit(0)"
+                >
+                  Flush (0m)
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="elevationChange.emit(0.4)"
+                >
+                  Raise (+0.4m)
+                </button>
+              </div>
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Wall Stamp Scale</span>
+                <strong>{{ (node.scale || 1).toFixed(2) }}x</strong>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2.5"
+                step="0.05"
+                class="lw-map-inspector__range"
+                [value]="node.scale || 1"
+                (input)="onNumInput($event, scaleChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Wall Thickness</span>
+                <strong>{{ node.thickness.toFixed(2) }}x</strong>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2.5"
+                step="0.05"
+                class="lw-map-inspector__range"
+                [value]="node.thickness"
+                (input)="onNumInput($event, thicknessChange)"
+              />
+            </div>
+
+            <div class="lw-map-inspector__slider-block">
+              <div class="lw-map-inspector__slider-head">
+                <span>Rotate Wall Stamp</span>
+                <strong>{{ node.rotationDeg }}°</strong>
+              </div>
+              <input
+                type="range"
+                min="-180"
+                max="180"
+                step="5"
+                class="lw-map-inspector__range"
+                [value]="node.rotationDeg"
+                (input)="onNumInput($event, rotationChange)"
+              />
+              <div class="lw-map-inspector__pill-group">
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="rotationChange.emit(-90)"
+                >
+                  -90°
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="rotationChange.emit(0)"
+                >
+                  0°
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="rotationChange.emit(90)"
+                >
+                  +90°
+                </button>
+                <button
+                  type="button"
+                  ngpButton
+                  class="lw-map-inspector__pill"
+                  (click)="rotationChange.emit(180)"
+                >
+                  180°
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Wall Custom Paint / Tint -->
@@ -604,7 +816,7 @@
             </button>
           } @else {
             <p class="lw-map-inspector__hint">
-              Draws lightweight grid-snapped 3D wall geometry first and applies your selected wall texture in real time.
+              Snaps to grid and existing wall corners for seamless 90° connections. Adjacent rooms automatically share or extend common walls without gaps.
             </p>
           }
         </div>

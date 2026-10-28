@@ -26,6 +26,11 @@ import {
 import { SEED_ENCOUNTER_DETAILS } from '../../encounters/services/encounter-studio.seed';
 import { SEED_ADDITIONAL_ENCOUNTERS } from '../../encounters/services/encounter-studio-roster.seed';
 import {
+  FullscreenDiceOverlayService,
+  type FullscreenDieEntry,
+} from '../../dice/engine/fullscreen-dice-overlay.service';
+import type { DicePolyhedronType } from '../../dice/engine/models';
+import {
   SEED_ACTION_RULES,
   SEED_CREATURES,
   SEED_EFFECT_PRESETS,
@@ -37,6 +42,7 @@ import {
 export class VttCombatService {
   private readonly http = inject(HttpClient);
   private readonly store = inject(LoomWeaverStoreService);
+  private readonly fullscreenDice = inject(FullscreenDiceOverlayService);
 
   readonly activeRound = signal<number>(2);
   readonly activeTurnIndex = signal<number>(0);
@@ -303,13 +309,41 @@ export class VttCombatService {
     const hit = inRange && (isCrit || (d20 !== 1 && totalRoll >= target.armorClass));
 
     let dmg = 0;
+    const dmgEntries: FullscreenDieEntry[] = [];
     if (hit) {
       const dice = isCrit ? rule.damageDiceCount * 2 : rule.damageDiceCount;
+      const dmgDieType = (`d${rule.damageDiceSides}` as DicePolyhedronType) || 'd8';
       for (let i = 0; i < dice; i++) {
-        dmg += Math.floor(Math.random() * rule.damageDiceSides) + 1;
+        const r = Math.floor(Math.random() * rule.damageDiceSides) + 1;
+        dmg += r;
+        dmgEntries.push({ dieType: dmgDieType, value: r });
       }
       dmg += rule.damageBonus;
     }
+
+    const allEntries: FullscreenDieEntry[] = [{ dieType: 'd20', value: d20 }, ...dmgEntries];
+    const badgeText = !inRange
+      ? 'OUT OF RANGE'
+      : isCrit
+        ? `CRITICAL HIT · ${dmg} DMG`
+        : d20 === 1
+          ? 'CRITICAL FAIL'
+          : hit
+            ? `HIT (AC ${target.armorClass}) · ${dmg} DMG`
+            : `MISS (AC ${target.armorClass})`;
+
+    this.fullscreenDice.triggerFullScreenRoll({
+      label: `${rule.name} vs ${target.name}`,
+      actorName: attacker.name,
+      expression: `1d20+${rule.attackBonus}`,
+      diceValues: [d20],
+      diceEntries: allEntries,
+      modifier: rule.attackBonus,
+      total: totalRoll,
+      outcomeBadge: badgeText,
+      isNat20: isCrit,
+      isCritFail: d20 === 1,
+    });
 
     const nextHp = Math.max(0, target.currentHp - dmg);
     const slotKey =

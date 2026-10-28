@@ -68,9 +68,29 @@ export class CharacterStudioService {
   });
 
   readonly hasUserCharacters = computed<boolean>(() => this.userOwnedSheets().length > 0);
+
+  /**
+   * Per-Campaign GM vs. Player Character Sheet Isolation:
+   * - If the signed-in user is the DM/GM of the active campaign AND in GM View, they can view all character sheets in the campaign.
+   * - If the signed-in user is a Player in the active campaign (or previewing Player View), they can ONLY view their own character sheet for the selected campaign.
+   */
+  readonly authorizedSheetsForActiveCampaign = computed<readonly CharacterSheetVm[]>(() => {
+    const campaignId = this.store.activeCampaignId();
+    const isEffectiveCampaignGm = this.store.isGmForActiveCampaign() && this.store.viewerRole() === 'gm';
+    const all = this.sheets();
+    if (isEffectiveCampaignGm) {
+      const inCamp = all.filter((s) => s.campaignId === campaignId || s.campaignId === 1);
+      return inCamp.length > 0 ? inCamp : all;
+    }
+    const owned = this.userOwnedSheets();
+    const campaignSpecificOwned = owned.find((s) => s.campaignId === campaignId);
+    const chosen = campaignSpecificOwned ?? owned[0] ?? all[0];
+    return chosen ? [chosen] : [];
+  });
+
   readonly activeSheet = computed<CharacterSheetVm>(() => {
-    const list = this.sheets();
-    const found = list.find((s) => s.characterKey === this.selectedCharacterKey()) ?? list[0];
+    const authorized = this.authorizedSheetsForActiveCampaign();
+    const found = authorized.find((s) => s.characterKey === this.selectedCharacterKey()) ?? authorized[0] ?? this.sheets()[0];
     return this.recalculate(found, this.activeSystem());
   });
 
@@ -79,18 +99,22 @@ export class CharacterStudioService {
   constructor() {
     effect(() => {
       const profile = this.auth.activeProfile();
+      const authorized = this.authorizedSheetsForActiveCampaign();
       const owned = this.userOwnedSheets();
       if (profile.accountId !== this.lastInitializedAccountId) {
         this.lastInitializedAccountId = profile.accountId;
-        this.selectedCharacterKey.set(owned.length > 0 ? owned[0].characterKey : 'char-dal');
-        this.viewMode.set(owned.length > 0 ? 'viewer' : 'roster');
+        this.selectedCharacterKey.set(owned[0]?.characterKey ?? authorized[0]?.characterKey ?? 'char-dal');
+        this.viewMode.set('viewer');
+      } else if (authorized.length > 0 && !authorized.some((s) => s.characterKey === this.selectedCharacterKey())) {
+        this.selectedCharacterKey.set(authorized[0].characterKey);
       }
     }, { allowSignalWrites: true });
   }
 
   syncDefaultViewForSignedInUser(requestedMode?: string | null, focusKey?: string | null): void {
+    const authorized = this.authorizedSheetsForActiveCampaign();
     if (focusKey) {
-      const exists = this.sheets().find((s) => s.characterKey === focusKey);
+      const exists = authorized.find((s) => s.characterKey === focusKey);
       if (exists) this.selectedCharacterKey.set(exists.characterKey);
     }
     if (requestedMode === 'creator' || requestedMode === 'create') {
@@ -98,13 +122,18 @@ export class CharacterStudioService {
       return;
     }
     const owned = this.userOwnedSheets();
-    if (!focusKey) this.selectedCharacterKey.set(owned.length > 0 ? owned[0].characterKey : 'char-dal');
+    if (!focusKey || !authorized.some((s) => s.characterKey === this.selectedCharacterKey())) {
+      this.selectedCharacterKey.set(owned[0]?.characterKey ?? authorized[0]?.characterKey ?? 'char-dal');
+    }
     this.viewMode.set('viewer');
   }
 
   selectCharacter(characterKey: string, openViewer = false): void {
-    this.selectedCharacterKey.set(characterKey);
-    this.store.inspectEntity(`1:Character:${characterKey}`);
+    const authorized = this.authorizedSheetsForActiveCampaign();
+    const allowed = authorized.find((s) => s.characterKey === characterKey);
+    if (!allowed) return;
+    this.selectedCharacterKey.set(allowed.characterKey);
+    this.store.inspectEntity(`${allowed.campaignId}:Character:${allowed.characterKey}`);
     if (openViewer) this.viewMode.set('viewer');
   }
 
@@ -205,11 +234,12 @@ export class CharacterStudioService {
     ];
     const resolvedEquipment = draft.equipmentItems?.length ? [...draft.equipmentItems] : [...wizardDefaultEquipment(slug)];
 
+    const targetCampaignId = existingSheet?.campaignId ?? this.store.activeCampaignId();
     const baseSheet: CharacterSheetVm = {
-      compositeKey: `1:Character:${charKey}`, characterKey: charKey,
+      compositeKey: `${targetCampaignId}:Character:${charKey}`, characterKey: charKey,
       ownerAccountId: existingSheet?.ownerAccountId ?? profile.accountId,
       ownerUsername: existingSheet?.ownerUsername ?? profile.username,
-      campaignId: 1, name: cleanName, roleBadge: 'Player Character',
+      campaignId: targetCampaignId, name: cleanName, roleBadge: 'Player Character',
       portraitUrl: draft.portraitUrl || subrace?.portraitUrl || ancestry.portraitUrl,
       pronouns: draft.pronouns || 'He/Him', alignment: draft.alignment || 'Neutral Good',
       quote: draft.quote || bg.defaultQuote, ancestryOrClan: ancestry.name,

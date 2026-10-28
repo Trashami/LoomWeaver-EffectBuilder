@@ -305,3 +305,137 @@ export interface CharacterCreatorDraftVm {
   readonly flaw?: string;
   readonly abilities: Readonly<Record<AbilityScoreVm['code'], number>>;
 }
+
+export interface CampaignAdjustedRuleVm {
+  readonly id: string;
+  readonly categoryLabel: string;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly castingOrActionTime: string;
+  readonly rangeOrArea: string;
+  readonly componentsOrSlot: string;
+  readonly durationLabel: string;
+  readonly sourceLabel: string;
+  readonly damageOrBonusBadge: string;
+  readonly standardRuleText: string;
+  readonly campaignAdjustedRuleTitle: string;
+  readonly campaignAdjustedRuleText: string;
+  readonly campaignClauseFormula?: string;
+  readonly tags: readonly string[];
+  readonly rollConfig?: {
+    readonly category: 'ability' | 'save' | 'skill' | 'initiative' | 'attack' | 'damage' | 'spell-attack' | 'feature' | 'combat-action';
+    readonly actionSlotCost: 'none' | 'action' | 'bonus' | 'reaction' | 'movement';
+    readonly diceSides: number;
+    readonly diceCount: number;
+    readonly modifier: number;
+    readonly damageDiceCount?: number;
+    readonly damageDiceSides?: number;
+    readonly damageBonus?: number;
+    readonly damageType?: string;
+    readonly spellSlotLevel?: number;
+    readonly limitedUseId?: string;
+  };
+}
+
+export interface CharacterSheetActionRowVm {
+  readonly id: string;
+  readonly name: string;
+  readonly subtitle: string;
+  readonly filterCategory: 'ATTACK' | 'ACTION' | 'BONUS ACTION' | 'REACTION' | 'OTHER' | 'LIMITED USE';
+  readonly actionSlotCost: 'none' | 'action' | 'bonus' | 'reaction';
+  readonly rangeLabel: string;
+  readonly hitOrDcLabel: string;
+  readonly attackBonus: number;
+  readonly damageFormula: string;
+  readonly damageDiceCount: number;
+  readonly damageDiceSides: number;
+  readonly damageBonus: number;
+  readonly damageType: string;
+  readonly notes: string;
+  readonly description: string;
+  readonly campaignRuleNote: string;
+  readonly spellSlotLevel?: number;
+  readonly limitedUseId?: string;
+  readonly limitedUseMax?: number;
+  readonly resetOn?: 'Short Rest' | 'Long Rest';
+}
+
+export interface CharacterCombatTelemetryVm {
+  readonly characterKey: string;
+  readonly characterName: string;
+  readonly totalSessionRolls: number;
+  readonly nat20Count: number;
+  readonly critFailCount: number;
+  readonly rollsByNumber: Readonly<Record<number, number>>;
+  readonly landedStrikes: number;
+  readonly missedStrikes: number;
+  readonly attacksInterrupted: number;
+  readonly attacksReducedDamage: number;
+  readonly totalDamageDealt: number;
+  readonly totalDamageReducedOrMitigated: number;
+  readonly peakSingleHit: number;
+  readonly spellsCastCount: number;
+  readonly abilitiesUsedCount: number;
+}
+
+export interface CharacterSheetRollLogVm {
+  readonly id: string;
+  readonly characterKey: string;
+  readonly characterName: string;
+  readonly category: string;
+  readonly itemName: string;
+  readonly formula: string;
+  readonly rawRolls: readonly number[];
+  readonly naturalDie: number;
+  readonly modifier: number;
+  readonly total: number;
+  readonly isNat20: boolean;
+  readonly isCritFail: boolean;
+  readonly hit: boolean | null;
+  readonly damageDealt: number;
+  readonly damageReduced: number;
+  readonly wasInterrupted: boolean;
+  readonly wasDamageReduced: boolean;
+  readonly actionSlotConsumed: string;
+  readonly trackedInSession: boolean;
+  readonly trackedInEncounter: boolean;
+  readonly summaryMessage: string;
+  readonly sha256Digest: string;
+  readonly timestampLabel: string;
+}
+
+export interface CharacterTurnEconomyState {
+  readonly actionUsed: boolean;
+  readonly bonusUsed: boolean;
+  readonly reactionUsed: boolean;
+  readonly movementUsedFeet: number;
+  readonly heroicInspiration: boolean;
+  readonly shortRestSpent: boolean;
+  readonly longRestSpent: boolean;
+  readonly rollMode: 'normal' | 'advantage' | 'disadvantage';
+  readonly tempHp: number;
+  readonly spellSlotsUsed: Readonly<Record<number, number>>;
+  readonly limitedUsesSpent: Readonly<Record<string, number>>;
+}
+
+export const STANDARD_COMBAT_ACTIONS: readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly cost: 'action' | 'bonus' | 'reaction';
+  readonly summary: string;
+  readonly campaignAdjustment: string;
+}[] = [
+  { id: 'ca-attack', name: 'Attack', cost: 'action', summary: 'Make one melee or ranged weapon attack (or two with Extra Attack at Level 5+ martial classes).', campaignAdjustment: 'In Shadow of the Mountain, Weapon Mastery properties (Vex, Topple, Push, Cleave, Nick) trigger automatically on landed strikes.' },
+  { id: 'ca-dash', name: 'Dash', cost: 'action', summary: 'Gain extra movement for the current turn equal to your Speed after applying modifiers.', campaignAdjustment: 'Rogues (Cunning Action) and Monks (Step of the Wind) may Dash as a Bonus Action.' },
+  { id: 'ca-disengage', name: 'Disengage', cost: 'action', summary: 'Your movement does not provoke Opportunity Attacks for the rest of the current turn.', campaignAdjustment: 'Swashbucklers and Speedy feat bearers automatically avoid Opportunity Attacks from targets they strike.' },
+  { id: 'ca-dodge', name: 'Dodge', cost: 'action', summary: 'Attack rolls against you have Disadvantage if you can see the attacker, and you make DEX saves with Advantage.', campaignAdjustment: 'Stacks with Cinth Artificer cover wards (+2 AC behind brass barricades).' },
+  { id: 'ca-grapple', name: 'Grapple', cost: 'action', summary: 'Target makes a STR or DEX saving throw (DC = 8 + STR mod + Prof. Bonus) or has the Grappled condition (Speed 0).', campaignAdjustment: 'Kycius Quiet Maw modification allows Dolly to harmlessly pocket Grappled Small/Medium foes on a failed save.' },
+  { id: 'ca-help', name: 'Help', cost: 'action', summary: 'Grant an ally Advantage on their next ability check or attack roll against a creature within 5 ft.', campaignAdjustment: 'Familiars (such as Kycius fire drake Laksis) can take the Help action on their initiative count.' },
+  { id: 'ca-hide', name: 'Hide', cost: 'action', summary: 'Make a DC 15 DEX (Stealth) check while Heavily Obscured or behind Cover to gain the Invisible condition.', campaignAdjustment: 'VTT 2.5D Line-of-Sight & Gradual Lighting automatically validates whether your token is in shadow.' },
+  { id: 'ca-magic', name: 'Magic', cost: 'action', summary: 'Cast a spell that has a casting time of 1 Action or activate a magical item/feature.', campaignAdjustment: 'Consumes 1 Action and the required Spell Slot level; subject to Counterspell reaction within 60 ft.' },
+  { id: 'ca-ready', name: 'Ready', cost: 'action', summary: 'Prepare a specific action triggered by a perceivable circumstance before your next turn (uses Reaction when triggered).', campaignAdjustment: 'Holding a spell requires Concentration until the trigger fires.' },
+  { id: 'ca-search', name: 'Search', cost: 'action', summary: 'Make a WIS (Perception, Insight, Medicine, or Survival) check to discern concealed hazards or motives.', campaignAdjustment: 'Kildrid Stone-Sense grants automatic Advantage when searching subterranean stonework or dwarven runes.' },
+  { id: 'ca-shove', name: 'Shove', cost: 'action', summary: 'Target makes a STR or DEX save (DC = 8 + STR mod + Prof. Bonus) or is pushed 5 ft or knocked Prone.', campaignAdjustment: 'Pushing a target into VTT elevation drop-offs or traps triggers immediate hazard damage.' },
+  { id: 'ca-study', name: 'Study', cost: 'action', summary: 'Make an INT (Arcana, History, Investigation, Nature, or Religion) check to recall lore or analyze a foe.', campaignAdjustment: 'Reveals creature resistances and unlocks a Deep Link citation in The Loom.' },
+  { id: 'ca-utilize', name: 'Utilize', cost: 'action', summary: 'Use a non-magical object, Cinth Artificer mechanism, healer kit, or lever.', campaignAdjustment: 'Drinking a Potion of Healing is a Bonus Action in this campaign; administering it to an ally is 1 Action.' },
+];

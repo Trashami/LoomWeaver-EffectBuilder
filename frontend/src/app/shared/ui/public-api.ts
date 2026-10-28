@@ -62,3 +62,5 @@ export * from './lore-library/lore-library.component';
 export * from './world-history/world-history.component';
 export * from './weave-relationships-graph/weave-relationships-graph.component';
 export * from './world-map-editor/world-map-editor.component';
+export * from './fullscreen-dice-overlay/fullscreen-dice-overlay.component';
+

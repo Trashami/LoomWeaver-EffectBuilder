@@ -46,6 +46,9 @@
       <button ngpButton type="button" class="lw-vtt-tool-btn" [class.active]="battle.openDmDrawer() === 'scene-roster'" (click)="battle.toggleDmDrawer('scene-roster')">
         <span>Roster & Traps</span>
       </button>
+      <button ngpButton type="button" class="lw-vtt-tool-btn" (click)="rollSelectedDice()">
+        <span>Roll {{ selectedDiceFormula() }}</span>
+      </button>
       <lw-button variant="gold" size="sm" (pressed)="nextTurn()">Next Turn</lw-button>
       <a class="lw-vtt-tool-btn" routerLink="/encounters">Build Encounters</a>
       <button ngpButton type="button" class="lw-vtt-tool-btn lw-vtt-tool-btn--panel" (click)="battle.rightPanelCollapsed.set(!battle.rightPanelCollapsed())">
