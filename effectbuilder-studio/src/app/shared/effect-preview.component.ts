@@ -169,7 +169,7 @@ export class EffectPreviewComponent implements AfterViewInit, OnDestroy, OnChang
       if (isPanGesture || e.shiftKey) {
         this.native.panScreenPixels(prevX, prevY, curX, curY);
       } else {
-        this.native.inspect(dx * 0.0065, -dy * 0.005, 1);
+        this.native.inspect(-dx * 0.0065, dy * 0.005, 1);
       }
       prevX = curX;
       prevY = curY;

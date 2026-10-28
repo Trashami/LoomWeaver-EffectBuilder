@@ -460,12 +460,39 @@ export class BabylonEffectRuntime {
         indices: number[] = [];
       for (const q of f.particles) {
         if (q.alpha < 0.0001) continue;
-        const center = worldPoint(q),
-          c = Math.cos(q.rotation),
-          s = Math.sin(q.rotation),
-          xAxis = right.scale(c).add(up.scale(s)),
-          yAxis = up.scale(c).subtract(right.scale(s)),
-          base = positions.length / 3,
+        const center = worldPoint(q);
+        let xAxis: Vector3;
+        let yAxis: Vector3;
+        if (
+          q.dirX !== undefined &&
+          q.dirY !== undefined &&
+          q.dirZ !== undefined &&
+          q.stretch > 1.04
+        ) {
+          // Project 3D world velocity vector onto camera (right, up) basis so stretched sprites
+          // align naturally along their 3D trajectory in perspective view instead of a 2D pinwheel
+          const worldVel = new Vector3(q.dirX, q.dirY, q.dirZ);
+          const projR = Vector3.Dot(worldVel, right);
+          const projU = Vector3.Dot(worldVel, up);
+          const projLen = Math.hypot(projR, projU);
+          if (projLen > 0.001) {
+            const nr = projR / projLen;
+            const nu = projU / projLen;
+            yAxis = right.scale(nr).add(up.scale(nu));
+            xAxis = right.scale(nu).subtract(up.scale(nr));
+          } else {
+            const c = Math.cos(q.rotation),
+              s = Math.sin(q.rotation);
+            xAxis = right.scale(c).add(up.scale(s));
+            yAxis = up.scale(c).subtract(right.scale(s));
+          }
+        } else {
+          const c = Math.cos(q.rotation),
+            s = Math.sin(q.rotation);
+          xAxis = right.scale(c).add(up.scale(s));
+          yAxis = up.scale(c).subtract(right.scale(s));
+        }
+        const base = positions.length / 3,
           tint = color(q.color);
         for (const [x, y] of [
           [-1, -1],
@@ -588,13 +615,19 @@ export class BabylonEffectRuntime {
           if (field.family === 'cinematic' && (field.mode === 0 || field.mode === 1)) {
             // Add vertical 3D volume plane along cone/beam axis so cones & beams have 3D height
             pushQuad(center.add(new Vector3(0, 0.18, 0)), worldAxisX, Vector3.Up(), 1, 0.55, 0.72);
+          } else if (field.family === 'cinematic' && field.mode === 3) {
+            // Nova / Pyroclasm 3D Volumetric Hemisphere: add crossed vertical 3D blast planes + camera volume
+            const liftCenter = center.add(new Vector3(0, (field.width / unit) * 0.16, 0));
+            pushQuad(liftCenter, worldAxisX, Vector3.Up(), 0.85, 0.58, 0.68);
+            pushQuad(liftCenter, worldAxisZ, Vector3.Up(), 0.85, 0.58, 0.68);
           }
         } else {
           // 3D Volumetric Fire/Arcane Sphere/Impact:
-          // 1) Camera-aligned core plane
-          pushQuad(center, right, up, 1, 1, 0.92);
-          // 2) Horizontal 3D cross plane through the volume
-          pushQuad(center, worldAxisX, worldAxisZ, 0.92, 0.92, 0.75);
+          // 1) Crossed vertical 3D world planes
+          pushQuad(center, worldAxisX, Vector3.Up(), 0.88, 0.82, 0.72);
+          pushQuad(center, worldAxisZ, Vector3.Up(), 0.88, 0.82, 0.72);
+          // 2) Horizontal 3D shock/scorch plane through the volume
+          pushQuad(center, worldAxisX, worldAxisZ, 0.96, 0.96, 0.78);
         }
         this.geometry(mesh, fp, fu, fc, fi);
       });

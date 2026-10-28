@@ -113,6 +113,39 @@
 @for (control of whipControls; track control.key) { <label class="range"><span>{{ control.label }} <b>{{ l.whip[control.key] }}</b></span><input [attr.aria-label]="control.label" type="range" [min]="control.min" [max]="control.max" [step]="control.step" [ngModel]="l.whip[control.key]" (ngModelChange)="whip(control.key,+$event)" /></label> }
 <p class="help">Thorn count and size apply to Thorn vine. Color, thickness, blending and opacity customize every whip style. The whip always starts at the caster.</p>
 } @else if (!l.missile && !l.mageHand) { <label class="field">Emitter / attach to<select [ngModel]="l.anchor" (ngModelChange)="updateLayer({anchor:$event})"><option value="caster">Caster</option><option value="path">Travel path / midpoint</option><option value="target">Target</option></select></label> }
+<div class="section-title">TRAPCODE PARTICULAR / 3D SPRITE ENGINE</div>
+<label class="check"><input type="checkbox" [ngModel]="particularSettings(l).enabled" (ngModelChange)="particular('enabled', $event)" /> Enable 3D Particular Sprite Engine</label>
+@if (particularSettings(l).enabled) {
+<p class="help">Adobe After Effects Trapcode Particular-style 3D emitter volume, animated GPU sprites, size/opacity/color over life curves, 3D turbulence field, thermal buoyancy, ground bounce, and Aux trail sub-particles.</p>
+<label class="field">Particle sprite type<select aria-label="Particular sprite type" [ngModel]="particularSettings(l).spriteType" (ngModelChange)="particular('spriteType', $event)">@for (sp of particularSpriteTypes; track sp.id) { <option [value]="sp.id">{{ sp.name }}</option> }</select></label>
+<label class="field">3D emitter volume<select aria-label="Particular emitter shape" [ngModel]="particularSettings(l).emitterType" (ngModelChange)="particular('emitterType', $event)">@for (em of particularEmitterTypes; track em.id) { <option [value]="em.id">{{ em.name }}</option> }</select></label>
+<label class="field">Size over life curve<select aria-label="Particular size over life" [ngModel]="particularSettings(l).sizeOverLife" (ngModelChange)="particular('sizeOverLife', $event)">@for (sc of particularSizeCurves; track sc.id) { <option [value]="sc.id">{{ sc.name }}</option> }</select></label>
+<label class="field">Opacity over life curve<select aria-label="Particular opacity over life" [ngModel]="particularSettings(l).opacityOverLife" (ngModelChange)="particular('opacityOverLife', $event)">@for (oc of particularOpacityCurves; track oc.id) { <option [value]="oc.id">{{ oc.name }}</option> }</select></label>
+<label class="field">Color over life gradient<select aria-label="Particular color over life" [ngModel]="particularSettings(l).colorOverLife" (ngModelChange)="particular('colorOverLife', $event)">@for (cg of particularColorGradients; track cg.id) { <option [value]="cg.id">{{ cg.name }}</option> }</select></label>
+<label class="check"><input type="checkbox" [ngModel]="particularSettings(l).orientToMotion" (ngModelChange)="particular('orientToMotion', $event)" /> Orient sprites along 3D velocity vector</label>
+@for (control of particularParticleControls; track control.key) {
+<label class="range"><span>{{ control.label }} <b>{{ particularSettings(l)[control.key] }}</b></span><input [attr.aria-label]="control.label" type="range" [min]="control.min" [max]="control.max" [step]="control.step" [ngModel]="particularSettings(l)[control.key]" (ngModelChange)="particular(control.key, +$event)" /></label>
+}
+<details>
+<summary>Emitter Volume &amp; 3D Velocity</summary>
+@for (control of particularEmitterControls; track control.key) {
+<label class="range"><span>{{ control.label }} <b>{{ particularSettings(l)[control.key] }}</b></span><input [attr.aria-label]="control.label" type="range" [min]="control.min" [max]="control.max" [step]="control.step" [ngModel]="particularSettings(l)[control.key]" (ngModelChange)="particular(control.key, +$event)" /></label>
+}
+</details>
+<details>
+<summary>Physics, Buoyancy &amp; 3D Turbulence Field</summary>
+@for (control of particularPhysicsControls; track control.key) {
+<label class="range"><span>{{ control.label }} <b>{{ particularSettings(l)[control.key] }}</b></span><input [attr.aria-label]="control.label" type="range" [min]="control.min" [max]="control.max" [step]="control.step" [ngModel]="particularSettings(l)[control.key]" (ngModelChange)="particular(control.key, +$event)" /></label>
+}
+</details>
+<details>
+<summary>Aux Trail System (Sub-Particles)</summary>
+<label class="field">Aux trail sprite<select aria-label="Aux trail sprite" [ngModel]="particularSettings(l).auxSpriteType" (ngModelChange)="particular('auxSpriteType', $event)">@for (sp of particularSpriteTypes; track sp.id) { <option [value]="sp.id">{{ sp.name }}</option> }</select></label>
+@for (control of particularAuxControls; track control.key) {
+<label class="range"><span>{{ control.label }} <b>{{ particularSettings(l)[control.key] }}</b></span><input [attr.aria-label]="control.label" type="range" [min]="control.min" [max]="control.max" [step]="control.step" [ngModel]="particularSettings(l)[control.key]" (ngModelChange)="particular(control.key, +$event)" /></label>
+}
+</details>
+}
 <div class="section-title">SURFACE LIGHTING</div>
 <label><input type="checkbox" [ngModel]="lightSettings(l).enabled" (ngModelChange)="light('enabled',$event)" /> Cast light on the map</label>
 <label><input type="checkbox" [ngModel]="lightSettings(l).followColor" (ngModelChange)="light('followColor',$event)" /> Match effect color</label>

@@ -3,7 +3,9 @@ import {
   EffectLayer,
   VARIANTS,
   defaultProjectileCoreForVariant,
+  defaultParticularForLayer,
 } from '../effect-definition';
+import { evaluateParticularSprites } from '../particular-settings';
 import { materialFrame, materialParticle, projectileMaterialPoint } from '../arcane-motion';
 import {
   clippedFireball,
@@ -30,6 +32,9 @@ export interface NativeParticle extends NativePoint {
   stretch: number;
   tile: number;
   color: string;
+  dirX?: number;
+  dirY?: number;
+  dirZ?: number;
 }
 export interface NativeRibbon {
   points: NativePoint[];
@@ -157,15 +162,51 @@ export function evaluateNativeLayer(
     if (role !== 'projectile' || flight < 1) {
       field(
         anchor,
-        size * 5.6,
-        size * 5.6,
+        size * 4.4,
+        size * 4.4,
         'fire',
         role === 'caster' ? 0 : role === 'projectile' ? 1 : 2,
-        role === 'impact' ? size * 1.15 : role === 'projectile' ? hAt(Math.min(1, flight)) : 24 * scale,
+        role === 'impact' ? 14 * scale : role === 'projectile' ? hAt(Math.min(1, flight)) : 20 * scale,
         0,
         role === 'projectile' ? flight : p
       );
     }
+
+    if (role === 'impact' && p < 0.85) {
+      // True 3D Expanding & Rising Molten Detonation Core Sphere (no flat X/Y card!)
+      const blastEnv = Math.sin(Math.pow(p / 0.85, 0.45) * Math.PI);
+      const coreRise = (18 + Math.pow(p, 0.72) * 58) * scale;
+      out.projectiles.push({
+        head: point(anchor, coreRise),
+        prev: point(anchor, Math.max(4 * scale, coreRise - 12 * scale)),
+        radius: Math.max(10 * scale, size * (0.28 + blastEnv * 0.56)),
+        element: 'fire',
+        shape: 'sphere',
+        coreScale: 1.18,
+        coronaSize: 1.55,
+        spinSpeed: 2.6,
+        orbitCount: 3,
+        clock: f.clock,
+        progress: p,
+        color: l.color,
+        secondaryColor: l.secondaryColor,
+      });
+
+      // 3D Rising Thermal Convection Spiral Ribbons + Expanding Ground Blast Wave
+      for (let sIdx = 0; sIdx < 2; sIdx++) {
+        const spiralPts: NativePoint[] = Array.from({ length: 28 }, (_, j) => {
+          const u = j / 27;
+          const ang = u * TAU * 1.65 + f.clock * 3.2 + sIdx * Math.PI;
+          const rad = size * (0.22 + (1 - u * 0.35) * p * 0.85);
+          return point(
+            { x: anchor.x + Math.cos(ang) * rad, y: anchor.y + Math.sin(ang) * rad },
+            (6 + u * (28 + p * 74)) * scale
+          );
+        });
+        ribbon(spiralPts, size * 0.16 * (1 - p * 0.5), sIdx === 0 ? l.secondaryColor : l.color, true);
+      }
+    }
+
     if (role === 'projectile' && flight < 1) {
       const uNow = Math.min(1, flight);
       const uPrev = Math.max(0, uNow - 0.04);
@@ -190,46 +231,95 @@ export function evaluateNativeLayer(
       }).reverse();
       ribbon(pts, size * 0.9, l.color, true);
     }
-    const count = Math.min(100, l.count),
+
+    // 3D Trapcode Particular Pyrotechnic Sprite Evaluation (Flame Tongues + Aux Ember Trails)
+    if (role !== 'projectile') {
+      const partSettings =
+        l.particular ?? defaultParticularForLayer(role === 'caster' ? 'aura' : 'burst', 'fire', l.color);
+      const partSprites = evaluateParticularSprites(
+        partSettings,
+        anchor,
+        16 * scale,
+        p,
+        f.clock,
+        l.count,
+        scale,
+        l.motion.seed,
+        l.color,
+        l.secondaryColor,
+        angle
+      );
+      for (const sp of partSprites) {
+        out.particles.push(sp);
+      }
+    }
+
+    // 3D Buoyant Mushroom Smoke Plume & Ballistic Ground-Bouncing Embers
+    const count = Math.min(80, l.count),
       smokeLife = (role === 'projectile' ? 1050 : 2000) * (m?.trail ?? 1),
-      smoke = l.fireMaterial?.smoke ?? l.fireHit?.smoke ?? 0.7;
+      smoke = l.fireMaterial?.smoke ?? l.fireHit?.smoke ?? 0.75,
+      turb = l.fireMaterial?.turbulence ?? l.fireHit?.turbulence ?? 0.9;
     for (let i = 0; i < count; i++) {
       const a = seeded(i, l.motion.seed),
         b = seeded(i + 97, l.motion.seed),
-        theta = a * TAU,
+        cSeed = seeded(i + 211, l.motion.seed),
+        theta = a * TAU + (b - 0.5) * turb * 0.8,
         age =
           role === 'projectile'
             ? (p * l.duration - (i / Math.max(1, count - 1)) * l.duration * FIREBALL_FLIGHT_FRACTION) / smokeLife
-            : p - a * 0.16;
-      if (age < 0 || age > 1) continue;
+            : (p - a * 0.22) / 0.82;
+      if (age <= 0 || age >= 1) continue;
       const uSample = i / Math.max(1, count - 1);
-      const origin = role === 'projectile' ? sample(uSample) : anchor,
-        r = size * (role === 'caster' ? 0.4 + b * 0.5 : 0.15 + age * (0.8 + b * 1.4));
-      const baseH = role === 'projectile' ? hAt(uSample) : 20 * scale;
+      const origin = role === 'projectile' ? sample(uSample) : anchor;
+      // Mushroom plume: narrows slightly at stem, then billows outward at cap height
+      const plumeHeight =
+        role === 'projectile'
+          ? hAt(uSample) + age * 28 * scale
+          : (14 + Math.pow(age, 0.78) * (55 + cSeed * 65)) * scale;
+      const capSpread = age > 0.35 ? 1 + (age - 0.35) * 1.45 : 0.65 + age;
+      const r = size * (role === 'caster' ? 0.35 + b * 0.45 : (0.18 + age * (0.55 + b * 0.95)) * capSpread);
       const q = {
-        x: origin.x + Math.cos(theta + f.clock * (role === 'caster' ? 1 : 0)) * r,
-        y: origin.y + Math.sin(theta + f.clock * (role === 'caster' ? 1 : 0)) * r,
+        x: origin.x + Math.cos(theta + f.clock * (role === 'caster' ? 1.2 : 0.35)) * r,
+        y: origin.y + Math.sin(theta + f.clock * (role === 'caster' ? 1.2 : 0.35)) * r,
       };
-      particle(
-        q,
-        size * (0.45 + age * 1.35),
-        Math.min(1, age * 8) * (1 - age) ** 1.6 * smoke * 0.45,
-        0,
-        baseH + age * size * 0.9 * scale,
-        theta,
-        1,
-        l.fireMaterial?.smokeColor ?? l.fireHit?.smokeColor ?? '#4a4149'
-      );
-      const d = (1 - Math.exp(-age * 5)) * size * (1 + b * 2.5);
-      particle(
-        { x: origin.x + Math.cos(theta) * d, y: origin.y + Math.sin(theta) * d },
-        (1 + b * 2.4) * scale,
-        (1 - age) ** 2 * (l.fireMaterial?.embers ?? l.fireHit?.embers ?? 1),
-        2,
-        baseH * 0.85 + Math.sin(age * Math.PI) * size * 0.7 * scale,
-        theta,
-        2 + b
-      );
+      // Volumetric Lit Smoke Plume Sprite (Tile 0) rising in 3D
+      out.particles.push({
+        ...point(q, plumeHeight),
+        size: size * (0.32 + age * 0.88) * (0.75 + cSeed * 0.5),
+        alpha: Math.min(1, age * 7) * Math.pow(1 - age, 1.45) * smoke * 0.52,
+        tile: 0,
+        rotation: theta + f.clock * (i % 2 ? 0.8 : -0.8),
+        stretch: 1.08,
+        color: l.fireMaterial?.smokeColor ?? l.fireHit?.smokeColor ?? '#4a4149',
+      });
+
+      // Ballistic 3D Ember Spark (Tile 2) aligned with true 3D trajectory vector
+      const vHoriz = size * (0.9 + b * 2.1);
+      const d = (1 - Math.exp(-age * 3.8)) * vHoriz;
+      const launchZ = (35 + cSeed * 75) * scale;
+      const gravZ = 115 * scale;
+      let emberH = 12 * scale + launchZ * age - 0.5 * gravZ * age * age;
+      let vz = launchZ - gravZ * age;
+      if (emberH < 3 * scale) {
+        emberH = 3 * scale + Math.abs(emberH - 3 * scale) * 0.45;
+        vz = Math.abs(vz) * 0.45;
+      }
+      const vx = Math.cos(theta) * vHoriz * Math.exp(-age * 3.8);
+      const vy = Math.sin(theta) * vHoriz * Math.exp(-age * 3.8);
+      out.particles.push({
+        x: origin.x + Math.cos(theta) * d,
+        y: origin.y + Math.sin(theta) * d,
+        height: emberH,
+        size: (1.6 + b * 2.8) * scale,
+        alpha: Math.pow(1 - age, 1.65) * (l.fireMaterial?.embers ?? l.fireHit?.embers ?? 1.2),
+        tile: 2,
+        rotation: theta,
+        stretch: 2.1 + b * 1.4,
+        color: i % 2 === 0 ? l.secondaryColor : l.color,
+        dirX: vx,
+        dirY: vz,
+        dirZ: vy,
+      });
     }
     return out;
   }
@@ -336,10 +426,56 @@ export function evaluateNativeLayer(
         c.style === 'column' ? width * 0.5 : 12 * scale
       );
       if (c.style === 'column') out.fields[out.fields.length - 1].vertical = true;
+      if (c.style === 'nova' && p < 0.78) {
+        const blastEnv = Math.sin(Math.pow(p / 0.78, 0.48) * Math.PI);
+        const elemMap: Record<string, NativeProjectile3D['element']> = {
+          fire: 'fire',
+          ice: 'ice',
+          force: 'eldritch',
+          radiant: 'radiant',
+          lightning: 'lightning',
+          acid: 'acid',
+          shadow: 'shadow',
+          gas: 'acid',
+        };
+        out.projectiles.push({
+          head: point(f.anchor, (16 + p * 34) * scale),
+          prev: point(f.anchor, (8 + p * 20) * scale),
+          radius: Math.max(8 * scale, width * (0.14 + blastEnv * 0.24)),
+          element: elemMap[c.element] ?? 'arcane',
+          shape: c.element === 'ice' ? 'prism' : c.element === 'radiant' ? 'star' : 'sphere',
+          coreScale: 1.05,
+          coronaSize: 1.35,
+          spinSpeed: 2.4,
+          orbitCount: 2,
+          clock: f.clock,
+          progress: p,
+          color: l.color,
+          secondaryColor: l.secondaryColor,
+        });
+      }
     }
   }
 
-  if (!l.cinematic && evaluateExtendedLayer(l, f, out, from, to, scale, targets, offset)) return out;
+  if (!l.cinematic && evaluateExtendedLayer(l, f, out, from, to, scale, targets, offset)) {
+    if (l.particular?.enabled) {
+      const partSprites = evaluateParticularSprites(
+        l.particular,
+        f.anchor,
+        14 * scale,
+        p,
+        f.clock,
+        l.count,
+        scale,
+        l.motion.seed,
+        l.color,
+        l.secondaryColor,
+        angle
+      );
+      for (const sp of partSprites) out.particles.push(sp);
+    }
+    return out;
+  }
 
   const path = !l.cinematic && (l.kind === 'beam' || l.kind === 'lightning' || l.kind === 'tether');
   if (path) {
@@ -646,16 +782,34 @@ export function evaluateNativeLayer(
     }
   }
 
+  if (l.particular?.enabled) {
+    const partSprites = evaluateParticularSprites(
+      l.particular,
+      f.anchor,
+      14 * scale,
+      p,
+      f.clock,
+      l.count,
+      scale,
+      l.motion.seed,
+      l.color,
+      l.secondaryColor,
+      angle
+    );
+    for (const sp of partSprites) out.particles.push(sp);
+  }
+
   const count = Math.min(100, Math.max(4, l.count));
   for (let i = 0; i < count; i++) {
     const mist = l.kind === 'cloud' || l.variant === 'mist' || l.variant === 'smoke',
       q = materialParticle(l, f, i, count, from, to, scale, targets, mist),
       a = seeded(i + 901, l.motion.seed),
+      b = seeded(i + 1423, l.motion.seed),
       age = ((f.clock * Math.max(0.05, l.motion.speed)) / (l.motion.lifetime + 0.2) + a) % 1;
     let at: FxPoint = ['beam', 'lightning', 'tether', 'projectile', 'whip'].includes(l.kind) ? offset(q) : q,
       sz = q.size,
       alpha = q.alpha,
-      height = (8 + age * (l.kind === 'cloud' ? extent : 20)) * scale;
+      height = (8 + age * (l.kind === 'cloud' ? extent : l.kind === 'burst' ? 28 + b * 42 : 20)) * scale;
     if (l.cinematic?.style === 'cone') {
       const c = l.cinematic,
         u = (age + 0.1) % 1,
@@ -671,16 +825,34 @@ export function evaluateNativeLayer(
     }
     const flame = l.variant === 'fire' || l.variant === 'flame' || l.cinematic?.element === 'fire',
       ice = l.variant === 'shards' || l.cinematic?.element === 'ice';
-    particle(
-      at,
-      flame ? Math.max(sz, 6 * scale) : sz,
-      alpha,
-      mist ? 0 : flame ? 4 : ice ? 5 : l.variant === 'embers' || l.kind === 'lightning' ? 2 : 1,
-      height,
-      q.rotation,
-      q.stretch,
-      i % 3 === 0 ? l.secondaryColor : l.color
-    );
+    const tile = mist
+      ? 0
+      : flame
+        ? 4
+        : ice
+          ? 5
+          : l.variant === 'embers'
+            ? 2
+            : l.kind === 'lightning'
+              ? 7
+              : i % 4 === 0
+                ? 6
+                : 1;
+    const vx = at.x - f.anchor.x;
+    const vy = at.y - f.anchor.y;
+    const vz = height - 6 * scale;
+    out.particles.push({
+      ...point(at, height),
+      size: Math.max(0.1, flame ? Math.max(sz, 6 * scale) : sz),
+      alpha: Math.max(0, alpha),
+      tile,
+      rotation: q.rotation,
+      stretch: flame && l.kind === 'burst' ? Math.min(2.1, q.stretch * 0.55) : q.stretch,
+      color: i % 3 === 0 ? l.secondaryColor : l.color,
+      dirX: vx,
+      dirY: vz,
+      dirZ: vy,
+    });
   }
   return out;
 }

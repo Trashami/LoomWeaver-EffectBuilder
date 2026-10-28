@@ -5,11 +5,12 @@ import { webcrypto } from 'node:crypto';
 import ts from 'typescript';
 function load(file, imports={}) { const exports={}; const source=fs.readFileSync(new URL('../src/app/'+file+'.ts',import.meta.url),'utf8');const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(code,{exports,structuredClone,crypto:webcrypto,require:id=>{if(!imports[id])throw new Error(id);return imports[id];}});return exports; }
 const curves=load('shared/animation/animation-curves'),lightSettings=load('effects/spell-light-settings'),extCore=load('effects/core-effect-extensions'),projCore=load('effects/projectile-core'),skyEffects=load('effects/sky-effects',{'./projectile-core':projCore});
-const model=load('effects/effect-definition',{'./spell-light-settings':lightSettings,'../shared/animation/animation-curves':curves,'./core-effect-extensions':extCore,'./projectile-core':projCore,'./sky-effects':skyEffects});
 const math=load('shared/timeline/timeline-math'),whip=load('effects/whip-path'),missile=load('effects/missile-path'),fire=load('effects/fireball-motion'),hand=load('effects/mage-hand-path');
+const particular=load('effects/particular-settings',{'./fireball-motion':fire});
+const model=load('effects/effect-definition',{'./spell-light-settings':lightSettings,'../shared/animation/animation-curves':curves,'./core-effect-extensions':extCore,'./projectile-core':projCore,'./sky-effects':skyEffects,'./particular-settings':particular});
 const motion=load('effects/arcane-motion',{'./effect-definition':model,'../shared/animation/animation-curves':curves,'./whip-path':whip,'./missile-path':missile,'./fireball-motion':fire});
 const extEval=load('effects/babylon/extended-frame-eval',{'../effect-definition':model,'../arcane-motion':motion,'../fireball-motion':fire});
-const frame=load('effects/babylon/native-frame',{'../effect-definition':model,'../arcane-motion':motion,'../fireball-motion':fire,'../missile-path':missile,'../mage-hand-path':hand,'../../shared/animation/animation-curves':curves,'./extended-frame-eval':extEval});
+const frame=load('effects/babylon/native-frame',{'../effect-definition':model,'../particular-settings':particular,'../arcane-motion':motion,'../fireball-motion':fire,'../missile-path':missile,'../mage-hand-path':hand,'../../shared/animation/animation-curves':curves,'./extended-frame-eval':extEval});
 const lighting=load('effects/spell-lights',{'./spell-light-settings':lightSettings,'./arcane-motion':motion,'../shared/animation/animation-curves':curves,'./fireball-motion':fire,'./missile-path':missile,'./mage-hand-path':hand});
 const a={x:100,y:180},b={x:580,y:180},targets=[b,{x:500,y:50},{x:500,y:320}];
 function finite(v){if(typeof v==='number')assert.ok(Number.isFinite(v));else if(Array.isArray(v))v.forEach(finite);else if(v&&typeof v==='object')Object.values(v).forEach(finite);}

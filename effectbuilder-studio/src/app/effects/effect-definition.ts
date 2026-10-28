@@ -24,6 +24,26 @@ import {
   parseSkyBeam,
   parseSkyLightning,
 } from './sky-effects';
+import {
+  ParticularSettings,
+  ParticularSpriteType,
+  ParticularEmitterType,
+  ParticularSizeCurve,
+  ParticularOpacityCurve,
+  ParticularColorGradient,
+  PARTICULAR_DEFAULTS,
+  PARTICULAR_SPRITE_TYPES,
+  PARTICULAR_EMITTER_TYPES,
+  PARTICULAR_SIZE_CURVES,
+  PARTICULAR_OPACITY_CURVES,
+  PARTICULAR_COLOR_GRADIENTS,
+  PARTICULAR_EMITTER_CONTROLS,
+  PARTICULAR_PARTICLE_CONTROLS,
+  PARTICULAR_PHYSICS_CONTROLS,
+  PARTICULAR_AUX_CONTROLS,
+  defaultParticularForLayer,
+  parseParticular,
+} from './particular-settings';
 export {
   ProjectileCoreSettings,
   ProjectileElement,
@@ -46,6 +66,24 @@ export {
   parseSkyProjectile,
   parseSkyBeam,
   parseSkyLightning,
+  ParticularSettings,
+  ParticularSpriteType,
+  ParticularEmitterType,
+  ParticularSizeCurve,
+  ParticularOpacityCurve,
+  ParticularColorGradient,
+  PARTICULAR_DEFAULTS,
+  PARTICULAR_SPRITE_TYPES,
+  PARTICULAR_EMITTER_TYPES,
+  PARTICULAR_SIZE_CURVES,
+  PARTICULAR_OPACITY_CURVES,
+  PARTICULAR_COLOR_GRADIENTS,
+  PARTICULAR_EMITTER_CONTROLS,
+  PARTICULAR_PARTICLE_CONTROLS,
+  PARTICULAR_PHYSICS_CONTROLS,
+  PARTICULAR_AUX_CONTROLS,
+  defaultParticularForLayer,
+  parseParticular,
 };
 export interface CinematicSettings { style:'beam'|'cone'|'column'|'nova'|'cube'; element:'force'|'fire'|'ice'|'gas'|'radiant'|'lightning'|'acid'|'shadow'; reachFeet:number; widthFeet:number; bloom:number; smoke:number; }
 export interface GameplaySettings { enabled:boolean; move:'none'|'push'|'pull'; feet:number; prone:boolean; impactMs:number; basis:'spell'|'feature'|'homebrew'; }
@@ -168,20 +206,210 @@ export interface FireHitSettings { smokeColor:string; smoke:number; light:number
 export const FIRE_HIT_DEFAULTS:FireHitSettings={smokeColor:'#4a4149',smoke:.7,light:1,shadows:.65,turbulence:.8,embers:1};
 export const FIRE_HIT_CONTROLS:readonly {key:Exclude<keyof FireHitSettings,'smokeColor'>;label:string;min:number;max:number;step:number}[]=[
  {key:'smoke',label:'Smoke density',min:0,max:1,step:.05},{key:'light',label:'Light intensity',min:0,max:2,step:.05},{key:'shadows',label:'Shadow strength',min:0,max:1,step:.05},{key:'turbulence',label:'Flame turbulence',min:0,max:2,step:.05},{key:'embers',label:'Ember brightness',min:0,max:2,step:.05}];
-export function createFireHitEffect():EffectDefinition {const e=createEffect('Inferno Impact','burst');e.spellName='Fireball';e.description='GPU shader fire impact: rolling flame, lit smoke, embers, shockwave and local ground shadow.';Object.assign(e.layers[0],{variant:'fire',color:'#ff651c',secondaryColor:'#fff0b0',size:95,duration:2200,fireHit:{...FIRE_HIT_DEFAULTS}});return e;}
+export function createFireHitEffect():EffectDefinition {
+ const e=createEffect('Inferno Impact','burst');
+ e.spellName='Fireball';
+ e.description='True 3D Inferno Impact: expanding molten fireball core, buoyant Trapcode Particular flame tongues & volumetric smoke plume, supersonic thermal shockwave, and erupting magma slag.';
+ const detonation=e.layers[0];
+ Object.assign(detonation,{
+  variant:'fire',
+  anchor:'target',
+  color:'#ff5a14',
+  secondaryColor:'#fff4c2',
+  size:108,
+  count:92,
+  delay:0,
+  duration:2250,
+  fireHit:{...FIRE_HIT_DEFAULTS,smoke:.78,light:1.35,turbulence:1.15,embers:1.45},
+  particular:{...defaultParticularForLayer('burst','fire','#ff5a14'),velocity:132,particleSize:24,auxEmitRate:2,auxSpriteType:'ember_sparks'}
+ });
+ const shockwave=createLayer('ring');
+ Object.assign(shockwave,{
+  variant:'shockwave',
+  anchor:'target',
+  color:'#ff7b29',
+  secondaryColor:'#fff6d1',
+  size:122,
+  count:64,
+  delay:0,
+  duration:1150,
+  blendMode:'screen'
+ });
+ const magma=createLayer('eruption');
+ Object.assign(magma,{
+  variant:'lava_pillar',
+  anchor:'target',
+  color:'#ff4508',
+  secondaryColor:'#ffe89e',
+  size:94,
+  count:68,
+  delay:40,
+  duration:1950,
+  particular:{
+   ...defaultParticularForLayer('burst','fire','#ff4508'),
+   emitterType:'disc',
+   emitterSizeX:42,
+   emitterSizeY:42,
+   emitterSizeZ:16,
+   spriteType:'molten_slag',
+   particleSize:16,
+   velocity:110,
+   gravity:72,
+   windY:18,
+   floorBounce:0.55,
+   auxEmitRate:1,
+   auxSpriteType:'ember_sparks'
+  }
+ });
+ e.layers=[detonation,shockwave,magma];
+ return e;
+}
 export interface FireMaterialSettings extends FireHitSettings {role:'caster'|'projectile'|'impact';trail:number;arc:number;bloom:number;distortion:number;scorch:number;}
 export const FIRE_MATERIAL_DEFAULTS:FireMaterialSettings={...FIRE_HIT_DEFAULTS,role:'impact',trail:1,arc:-55,bloom:.65,distortion:.45,scorch:.7};
 export const FIRE_MATERIAL_CONTROLS:readonly {key:Exclude<keyof FireMaterialSettings,'role'|'smokeColor'>;label:string;min:number;max:number;step:number}[]=[...FIRE_HIT_CONTROLS,{key:'trail',label:'Trail persistence',min:.2,max:2,step:.05},{key:'arc',label:'Flight arc',min:-180,max:180,step:1},{key:'bloom',label:'Bloom strength',min:0,max:1.5,step:.05},{key:'distortion',label:'Heat shimmer',min:0,max:1,step:.05},{key:'scorch',label:'Scorch / ground mark',min:0,max:1,step:.05}];
 export function createFireballComposition(role?:FireMaterialSettings['role']):EffectDefinition{
- const e=createEffect(role==='caster'?'Furnace Invocation':role==='impact'?'Pyroclasm Impact':'Fireball / Pyroclasm');e.spellName='Fireball';e.description='3D Core Fireball: caster flame vortex, 3D molten projectile core with coiling fire ribbons, and 3D radial impact burst with shockwave.';
- const makeCaster=()=>{const l=createLayer('aura');Object.assign(l,{variant:'flame',anchor:'caster',color:'#ff5b16',secondaryColor:'#fff1bd',size:62,count:64,delay:0,duration:950});return l;};
- const makeProj=()=>{const l=createLayer('projectile');Object.assign(l,{variant:'meteor',anchor:'path',color:'#ff5b16',secondaryColor:'#fff1bd',size:24,count:72,delay:role?0:520,duration:1350,projectileCore:{...PROJECTILE_CORE_DEFAULTS,element:'fire',shape:'comet',arc:-50,coreScale:1.15,coronaSize:1.45,spinSpeed:2.1,orbitCount:3,wakeRibbons:3,wakeLength:1.15}});return l;};
- const makeImpact=()=>{const l=createLayer('burst');Object.assign(l,{variant:'fire',anchor:'target',color:'#ff5b16',secondaryColor:'#fff1bd',size:115,count:85,delay:role?0:1680,duration:2200,cinematic:{style:'nova',element:'fire',reachFeet:20,widthFeet:20,bloom:.95,smoke:.65}});return l;};
- const makeWave=()=>{const l=createLayer('ring');Object.assign(l,{variant:'shockwave',anchor:'target',color:'#ff8438',secondaryColor:'#fff4c8',size:110,count:48,delay:1680,duration:1250});return l;};
- e.layers=role==='caster'?[makeCaster()]:role==='projectile'?[makeProj()]:role==='impact'?[makeImpact()]:[makeCaster(),makeProj(),makeImpact(),makeWave()];return e;
+ const e=createEffect(role==='caster'?'Furnace Invocation':role==='impact'?'Pyroclasm Impact':'Fireball / Pyroclasm');
+ e.spellName='Fireball';
+ e.description='True 3D Pyroclasm: 3D convection fire vortex, 3D molten comet core with coiling fire ribbons, and 3D Trapcode Particular detonation with buoyant flame plumes, lava slag, and shockwave.';
+ const makeCaster=()=>{
+  const l=createLayer('aura');
+  Object.assign(l,{
+   variant:'flame',
+   anchor:'caster',
+   color:'#ff5b16',
+   secondaryColor:'#fff1bd',
+   size:68,
+   count:78,
+   delay:0,
+   duration:1150,
+   particular:{...defaultParticularForLayer('aura','flame','#ff5b16'),velocity:68,particleSize:19,spinAmplitude:3.1,auxEmitRate:1}
+  });
+  return l;
+ };
+ const makeCasterVortex=()=>{
+  const l=createLayer('vortex');
+  Object.assign(l,{
+   variant:'fire_tornado',
+   anchor:'caster',
+   color:'#ff6e24',
+   secondaryColor:'#fff5cc',
+   size:64,
+   count:64,
+   delay:0,
+   duration:1150,
+   blendMode:'screen'
+  });
+  return l;
+ };
+ const makeProj=()=>{
+  const l=createLayer('projectile');
+  Object.assign(l,{
+   variant:'meteor',
+   anchor:'path',
+   color:'#ff5b16',
+   secondaryColor:'#fff1bd',
+   size:26,
+   count:80,
+   delay:role?0:480,
+   duration:1250,
+   projectileCore:{...PROJECTILE_CORE_DEFAULTS,element:'fire',shape:'comet',arc:-52,coreScale:1.22,coronaSize:1.5,spinSpeed:2.4,orbitCount:3,wakeRibbons:3,wakeLength:1.2}
+  });
+  return l;
+ };
+ const impactDelay=role?0:1580;
+ const makeImpact=()=>{
+  const l=createLayer('burst');
+  Object.assign(l,{
+   variant:'fire',
+   anchor:'target',
+   color:'#ff5510',
+   secondaryColor:'#fff4c4',
+   size:118,
+   count:96,
+   delay:impactDelay,
+   duration:2250,
+   fireHit:{...FIRE_HIT_DEFAULTS,smoke:.76,light:1.4,turbulence:1.2,embers:1.5},
+   particular:{
+    ...defaultParticularForLayer('burst','fire','#ff5510'),
+    emitterType:'sphere',
+    emitterSizeX:38,
+    emitterSizeY:38,
+    emitterSizeZ:32,
+    velocity:138,
+    velocityRandom:55,
+    spriteType:'flame_tongues',
+    particleSize:25,
+    sizeOverLife:'sharp_pop',
+    opacityOverLife:'flash_decay',
+    colorOverLife:'fire_gradient',
+    gravity:-48,
+    windY:42,
+    turbulencePosition:46,
+    spinAmplitude:1.6,
+    floorBounce:0.45,
+    auxEmitRate:2,
+    auxSpriteType:'ember_sparks',
+    auxSizeScale:0.3
+   }
+  });
+  return l;
+ };
+ const makeEruption=()=>{
+  const l=createLayer('eruption');
+  Object.assign(l,{
+   variant:'lava_pillar',
+   anchor:'target',
+   color:'#ff4205',
+   secondaryColor:'#ffeb9c',
+   size:98,
+   count:68,
+   delay:impactDelay+35,
+   duration:1950,
+   particular:{
+    ...defaultParticularForLayer('burst','fire','#ff4205'),
+    emitterType:'disc',
+    emitterSizeX:44,
+    emitterSizeY:44,
+    emitterSizeZ:18,
+    spriteType:'molten_slag',
+    particleSize:16,
+    velocity:115,
+    gravity:68,
+    windY:22,
+    floorBounce:0.55,
+    auxEmitRate:1,
+    auxSpriteType:'ember_sparks'
+   }
+  });
+  return l;
+ };
+ const makeWave=()=>{
+  const l=createLayer('ring');
+  Object.assign(l,{
+   variant:'shockwave',
+   anchor:'target',
+   color:'#ff8438',
+   secondaryColor:'#fff4c8',
+   size:124,
+   count:58,
+   delay:impactDelay,
+   duration:1250,
+   blendMode:'screen'
+  });
+  return l;
+ };
+ e.layers=
+  role==='caster'
+   ?[makeCaster(),makeCasterVortex()]
+   :role==='projectile'
+    ?[makeProj()]
+    :role==='impact'
+     ?[makeImpact(),makeEruption(),makeWave()]
+     :[makeCaster(),makeProj(),makeImpact(),makeEruption(),makeWave()];
+ return e;
 }
 export interface EffectLayer {
-  lighting?: LightSettings; id: string; kind: EffectKind; variant: string; projectileCore?:ProjectileCoreSettings; skyProjectile?:SkyProjectileSettings; skyBeam?:SkyBeamSettings; skyLightning?:SkyLightningSettings; cinematic?:CinematicSettings; mageHand?:MageHandSettings; missile?: MagicMissileSettings; fireHit?:FireHitSettings; fireMaterial?:FireMaterialSettings; motion: EffectMotion; whip: WhipSettings; blendMode: EffectBlendMode; opacity: number; easing: Easing; opacityKeyframes: OpacityKeyframe[];
+  lighting?: LightSettings; id: string; kind: EffectKind; variant: string; particular?:ParticularSettings; projectileCore?:ProjectileCoreSettings; skyProjectile?:SkyProjectileSettings; skyBeam?:SkyBeamSettings; skyLightning?:SkyLightningSettings; cinematic?:CinematicSettings; mageHand?:MageHandSettings; missile?: MagicMissileSettings; fireHit?:FireHitSettings; fireMaterial?:FireMaterialSettings; motion: EffectMotion; whip: WhipSettings; blendMode: EffectBlendMode; opacity: number; easing: Easing; opacityKeyframes: OpacityKeyframe[];
   color: string; secondaryColor: string; delay: number; duration: number; size: number;
   offsetX: number; offsetY: number; intensity: number; spread: number; count: number; enabled: boolean; anchor: 'caster' | 'target' | 'path';
 }
@@ -261,6 +489,7 @@ export function parseEffect(value: unknown): EffectDefinition {
     const skyProjectile = kind==='sky_projectile'?parseSkyProjectile(l['skyProjectile'],variant,color(l['color'])):undefined;
     const skyBeam = kind==='sky_beam'?parseSkyBeam(l['skyBeam']):undefined;
     const skyLightning = kind==='sky_lightning'?parseSkyLightning(l['skyLightning']):undefined;
+    const particular = l['particular']!==undefined?parseParticular(l['particular'],kind,variant,color(l['color'])):undefined;
     const rawFrames = l['opacityKeyframes'] ?? [];
     if (!Array.isArray(rawFrames) || rawFrames.length > 32) throw new Error('Use at most 32 opacity keyframes per layer.');
     const opacityKeyframes: OpacityKeyframe[] = rawFrames.map((f: any) => {
@@ -272,7 +501,7 @@ export function parseEffect(value: unknown): EffectDefinition {
     const whip = { ...WHIP_DEFAULTS };
     for (const c of WHIP_CONTROLS) whip[c.key] = bounded(rawWhip[c.key], c.min, c.max, WHIP_DEFAULTS[c.key]);
     whip.thorns = Math.round(whip.thorns); whip.hold = 0;
-    return { lighting: parseLight(l['lighting']), id: typeof l['id'] === 'string' && l['id'] ? l['id'].slice(0, 80) : newId(), kind, variant, ...(projectileCore ? {projectileCore} : {}), ...(skyProjectile ? {skyProjectile} : {}), ...(skyBeam ? {skyBeam} : {}), ...(skyLightning ? {skyLightning} : {}), ...(cinematic ? {cinematic} : {}), ...(mageHand ? {mageHand} : {}), ...(missile ? {missile} : {}), ...(fireHit ? {fireHit} : {}), ...(fireMaterial ? {fireMaterial} : {}), whip, easing: EASINGS.includes(l['easing'] as Easing) ? l['easing'] as Easing : 'linear', opacityKeyframes, blendMode: BLEND_MODES.includes(l['blendMode'] as EffectBlendMode) ? l['blendMode'] as EffectBlendMode : 'normal', opacity: bounded(l['opacity'], 0, 1, 1), offsetX: bounded(l['offsetX'], -200, 200, 0), offsetY: bounded(l['offsetY'], -200, 200, 0),
+    return { lighting: parseLight(l['lighting']), id: typeof l['id'] === 'string' && l['id'] ? l['id'].slice(0, 80) : newId(), kind, variant, ...(particular ? {particular} : {}), ...(projectileCore ? {projectileCore} : {}), ...(skyProjectile ? {skyProjectile} : {}), ...(skyBeam ? {skyBeam} : {}), ...(skyLightning ? {skyLightning} : {}), ...(cinematic ? {cinematic} : {}), ...(mageHand ? {mageHand} : {}), ...(missile ? {missile} : {}), ...(fireHit ? {fireHit} : {}), ...(fireMaterial ? {fireMaterial} : {}), whip, easing: EASINGS.includes(l['easing'] as Easing) ? l['easing'] as Easing : 'linear', opacityKeyframes, blendMode: BLEND_MODES.includes(l['blendMode'] as EffectBlendMode) ? l['blendMode'] as EffectBlendMode : 'normal', opacity: bounded(l['opacity'], 0, 1, 1), offsetX: bounded(l['offsetX'], -200, 200, 0), offsetY: bounded(l['offsetY'], -200, 200, 0),
       motion: { direction: bounded(m['direction'], -180, 180, defaults.direction), cone: bounded(m['cone'], 0, 360, defaults.cone), speed: bounded(m['speed'], 0, 4, defaults.speed),
         twirl: bounded(m['twirl'], -6, 6, defaults.twirl), turbulence: bounded(m['turbulence'], 0, 100, defaults.turbulence), gravity: bounded(m['gravity'], -200, 200, defaults.gravity),
         drag: bounded(m['drag'], 0, 1, defaults.drag), lifetime: bounded(m['lifetime'], 0.1, 1, defaults.lifetime), trail: bounded(m['trail'], 0, 1, defaults.trail), seed: Math.round(bounded(m['seed'], 1, 9999, 42)) },

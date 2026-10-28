@@ -1,4 +1,4 @@
-import { createEffect,createLayer,createFireballComposition,createMagicMissileEffect,makePresets,EffectDefinition,EffectKind,EffectLayer,CinematicSettings,GAMEPLAY_DEFAULTS,TELEPORT_DEFAULTS,PROJECTILE_CORE_DEFAULTS,ProjectileElement,ProjectileCoreShape } from './effect-definition';
+import { createEffect,createLayer,createFireballComposition,createMagicMissileEffect,makePresets,EffectDefinition,EffectKind,EffectLayer,CinematicSettings,GAMEPLAY_DEFAULTS,TELEPORT_DEFAULTS,PROJECTILE_CORE_DEFAULTS,ProjectileElement,ProjectileCoreShape,defaultParticularForLayer } from './effect-definition';
 const layer=(kind:EffectKind,variant:string,color:string,anchor:EffectLayer['anchor'],delay:number,duration:number,size:number):EffectLayer=>({...createLayer(kind),variant,color,secondaryColor:'#eaffff',anchor,delay,duration,size,count:70,blendMode:'screen'});
 function proj3d(element:ProjectileElement,shape:ProjectileCoreShape,color:string,secondaryColor='#eaffff',delay=160,duration=720,size=18,arc=-20):EffectLayer{
  const variant=shape==='lance'?'shard':shape==='comet'?'meteor':'orb';
@@ -7,7 +7,10 @@ function proj3d(element:ProjectileElement,shape:ProjectileCoreShape,color:string
 function volume(style:CinematicSettings['style'],element:CinematicSettings['element'],color:string,anchor:EffectLayer['anchor'],delay=200,duration=1100,reach=15,width=15):EffectLayer{const kind=style==='beam'?'beam':style==='cone'?'cone':'burst';return {...layer(kind,style==='beam'?'straight':style==='cone'?(element==='ice'?'frost':element==='gas'?'poison':'flame'):'radial',color,anchor,delay,duration,style==='beam'?7:55),motion:{...createLayer(kind).motion,direction:0},cinematic:{style,element,reachFeet:reach,widthFeet:width,bloom:.9,smoke:.6}};}
 function spell(name:string,description:string,layers:EffectLayer[]):EffectDefinition{const e=createEffect(name);e.spellName=name;e.id='premium-'+name.toLowerCase().replace(/[^a-z0-9]/g,'');e.description=description;e.layers=layers;return e;}
 const charge=(color:string)=>layer('aura','vortex',color,'caster',0,450,32);
-const hit=(color:string,element:CinematicSettings['element']='force',delay=650)=>volume('nova',element,color,'target',delay,1100,10,10);
+const hit=(color:string,element:CinematicSettings['element']='force',delay=650)=>({
+ ...volume('nova',element,color,'target',delay,1100,10,10),
+ particular:defaultParticularForLayer('burst',element==='ice'?'shards':element==='lightning'?'arc':element==='fire'?'fire':'radial',color)
+});
 const bolt=(name:string,color:string,element:CinematicSettings['element'],description:string)=>{
  const pElem:ProjectileElement=element==='force'?'eldritch':element==='ice'?'ice':element==='fire'?'fire':element==='radiant'?'radiant':element==='lightning'?'lightning':element==='acid'?'acid':'shadow';
  const pShape:ProjectileCoreShape=pElem==='ice'?'lance':pElem==='fire'?'comet':pElem==='radiant'?'star':'prism';

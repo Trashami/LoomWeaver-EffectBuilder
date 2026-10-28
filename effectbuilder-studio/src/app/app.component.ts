@@ -23,7 +23,7 @@ import { adaptEffectForCampaign, downloadStandaloneEffectFile, parseStandaloneEf
 import { EffectPreviewComponent } from './shared/effect-preview.component';
 import { TimelineComponent, ClipChange } from './shared/timeline/timeline.component';
 import { EffectApiService, EffectListing } from './effect-api.service';
-import { CINEMATIC_DEFAULTS,CinematicSettings,GameplaySettings,GAMEPLAY_DEFAULTS,createMageHandEffect, MageHandSettings, createFireballComposition, FireMaterialSettings, FIRE_MATERIAL_CONTROLS, createFireHitEffect, FIRE_HIT_CONTROLS, FireHitSettings, MISSILE_CONTROLS, MagicMissileSettings, PreviewScene, defaultScene, WHIP_CONTROLS, WHIP_DEFAULTS, WhipSettings, BLEND_MODES, EFFECT_KINDS, VARIANTS, EffectDefinition, EffectKind, EffectLayer, EffectMotion, EffectAssignment, createEffect, createLayer, defaultMotion, effectDuration, makePresets, newId, parseEffect, PROJECTILE_ELEMENTS, PROJECTILE_SHAPES, PROJECTILE_CORE_CONTROLS, ProjectileCoreSettings, ProjectileElement, ProjectileCoreShape, defaultProjectileCoreForVariant, parseProjectileCore, SkyProjectileSettings, SkyBeamSettings, SkyLightningSettings, SKY_ORIGIN_CONTROLS, SKY_BEAM_CONTROLS, SKY_LIGHTNING_CONTROLS, parseSkyProjectile, parseSkyBeam, parseSkyLightning } from './effects/effect-definition';
+import { CINEMATIC_DEFAULTS,CinematicSettings,GameplaySettings,GAMEPLAY_DEFAULTS,createMageHandEffect, MageHandSettings, createFireballComposition, FireMaterialSettings, FIRE_MATERIAL_CONTROLS, createFireHitEffect, FIRE_HIT_CONTROLS, FireHitSettings, MISSILE_CONTROLS, MagicMissileSettings, PreviewScene, defaultScene, WHIP_CONTROLS, WHIP_DEFAULTS, WhipSettings, BLEND_MODES, EFFECT_KINDS, VARIANTS, EffectDefinition, EffectKind, EffectLayer, EffectMotion, EffectAssignment, createEffect, createLayer, defaultMotion, effectDuration, makePresets, newId, parseEffect, PROJECTILE_ELEMENTS, PROJECTILE_SHAPES, PROJECTILE_CORE_CONTROLS, ProjectileCoreSettings, ProjectileElement, ProjectileCoreShape, defaultProjectileCoreForVariant, parseProjectileCore, SkyProjectileSettings, SkyBeamSettings, SkyLightningSettings, SKY_ORIGIN_CONTROLS, SKY_BEAM_CONTROLS, SKY_LIGHTNING_CONTROLS, parseSkyProjectile, parseSkyBeam, parseSkyLightning, ParticularSettings, PARTICULAR_SPRITE_TYPES, PARTICULAR_EMITTER_TYPES, PARTICULAR_SIZE_CURVES, PARTICULAR_OPACITY_CURVES, PARTICULAR_COLOR_GRADIENTS, PARTICULAR_EMITTER_CONTROLS, PARTICULAR_PARTICLE_CONTROLS, PARTICULAR_PHYSICS_CONTROLS, PARTICULAR_AUX_CONTROLS, defaultParticularForLayer, parseParticular } from './effects/effect-definition';
 @Component({ selector: 'mw-root', standalone: true, imports: [OptionGridComponent, UserMenuComponent, SplitterComponent, FormsModule, SpellPickerComponent, ButtonComponent, IconComponent, ModalComponent, AuthModalComponent, EffectPreviewComponent, TimelineComponent], templateUrl: './app.component.html', styleUrl: './app.component.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class AppComponent {
   private readonly http=inject(HttpClient);private readonly destroyRef=inject(DestroyRef);
@@ -76,9 +76,36 @@ export class AppComponent {
   readonly skyOriginControls = SKY_ORIGIN_CONTROLS;
   readonly skyBeamControls = SKY_BEAM_CONTROLS;
   readonly skyLightningControls = SKY_LIGHTNING_CONTROLS;
+  readonly particularSpriteTypes = PARTICULAR_SPRITE_TYPES;
+  readonly particularEmitterTypes = PARTICULAR_EMITTER_TYPES;
+  readonly particularSizeCurves = PARTICULAR_SIZE_CURVES;
+  readonly particularOpacityCurves = PARTICULAR_OPACITY_CURVES;
+  readonly particularColorGradients = PARTICULAR_COLOR_GRADIENTS;
+  readonly particularEmitterControls = PARTICULAR_EMITTER_CONTROLS;
+  readonly particularParticleControls = PARTICULAR_PARTICLE_CONTROLS;
+  readonly particularPhysicsControls = PARTICULAR_PHYSICS_CONTROLS;
+  readonly particularAuxControls = PARTICULAR_AUX_CONTROLS;
   readonly fullscreenPreview = signal(false);
   @HostListener('window:keydown.escape') onEscapeKey(): void {
     if (this.fullscreenPreview()) this.fullscreenPreview.set(false);
+  }
+  particularSettings(layer: EffectLayer): ParticularSettings {
+    if (layer.particular) {
+      return parseParticular(layer.particular, layer.kind, layer.variant, layer.color) ?? defaultParticularForLayer(layer.kind, layer.variant, layer.color);
+    }
+    return {
+      ...defaultParticularForLayer(layer.kind, layer.variant, layer.color),
+      enabled: false,
+    };
+  }
+  particular<K extends keyof ParticularSettings>(key: K, value: ParticularSettings[K]): void {
+    const l = this.selected();
+    if (!l) return;
+    const base = l.particular
+      ? (parseParticular(l.particular, l.kind, l.variant, l.color) ?? defaultParticularForLayer(l.kind, l.variant, l.color))
+      : { ...defaultParticularForLayer(l.kind, l.variant, l.color), enabled: true };
+    const next = parseParticular({ ...base, [key]: value }, l.kind, l.variant, l.color);
+    this.updateLayer({ particular: next });
   }
   skyProjectileSettings(layer: EffectLayer): SkyProjectileSettings {
     return parseSkyProjectile(layer.skyProjectile, layer.variant, layer.color);
@@ -255,12 +282,21 @@ export class AppComponent {
     try {
       const raw = localStorage.getItem('mw-effectbuilder-draft-v1');
       if (raw) {
-        const draft = parseEffect(JSON.parse(raw));
+        let draft = parseEffect(JSON.parse(raw));
         if (
           draft.layers.some((l) => l.kind === 'projectile') &&
           draft.layers.some((l) => l.cinematic?.style === 'beam')
         ) {
           draft.layers = draft.layers.filter((l) => l.cinematic?.style !== 'beam');
+        }
+        if (draft.name === 'Inferno Impact' && draft.layers.length < 3) {
+          draft = createFireHitEffect();
+        } else if (draft.name === 'Furnace Invocation' && draft.layers.length < 2) {
+          draft = createFireballComposition('caster');
+        } else if (draft.name === 'Pyroclasm Impact' && draft.layers.length < 3) {
+          draft = createFireballComposition('impact');
+        } else if ((draft.name === 'Fireball / Pyroclasm' || draft.name === 'Fireball') && draft.layers.length < 5) {
+          draft = createFireballComposition();
         }
         this.open(draft);
       }
